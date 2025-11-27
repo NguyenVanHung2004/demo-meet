@@ -8,6 +8,7 @@ import {
   FileText, Copy, Check, Info, Keyboard, Youtube, ArrowRight 
 } from "lucide-react";
 import TranscriptRow from "./TranscriptRow";
+import ReactMarkdown from 'react-markdown';
 
 export default function EditorState({ audioSrc }: { audioSrc: string }) {
   
@@ -382,11 +383,23 @@ export default function EditorState({ audioSrc }: { audioSrc: string }) {
               </div>
               <button onClick={() => setShowSummary(false)} className="p-2 hover:bg-white/50 rounded-full"><X className="w-5 h-5 text-indigo-900"/></button>
             </div>
-            <div className="p-8 overflow-y-auto prose prose-indigo max-w-none">
-              <pre className="whitespace-pre-wrap font-sans text-slate-700 leading-relaxed">
-                {summaryContent}
-              </pre>
-            </div>
+           {/* [PHẦN SỬA ĐỔI] Nội dung Markdown render đẹp */}
+          <div className="p-8 overflow-y-auto bg-white">
+            <ReactMarkdown
+              components={{
+                // Tùy chỉnh style cho từng thẻ Markdown
+                h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-indigo-700 mb-4 border-b pb-2" {...props} />,
+                h2: ({node, ...props}) => <h2 className="text-xl font-bold text-slate-800 mt-6 mb-3 flex items-center gap-2" {...props} />,
+                h3: ({node, ...props}) => <h3 className="text-lg font-semibold text-slate-700 mt-4 mb-2" {...props} />,
+                ul: ({node, ...props}) => <ul className="list-disc pl-5 space-y-2 mb-4 text-slate-600" {...props} />,
+                li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
+                strong: ({node, ...props}) => <strong className="font-bold text-slate-900" {...props} />,
+                p: ({node, ...props}) => <p className="mb-3 text-slate-600 leading-relaxed" {...props} />,
+              }}
+            >
+              {summaryContent}
+            </ReactMarkdown>
+          </div>
             <div className="p-4 border-t bg-white flex justify-end gap-2">
               <button onClick={() => setShowSummary(false)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">Đóng</button>
               <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 hover:bg-indigo-700">

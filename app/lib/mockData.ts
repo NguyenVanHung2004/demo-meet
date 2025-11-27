@@ -44,9 +44,51 @@ export const RAW_TRANSCRIPT_FILE = `
 
 // 👉 Mở file 'summary.txt', copy toàn bộ và paste vào đây
 export const RAW_SUMMARY_FILE = `
-# TÓM TẮT CUỘC HỌP DEMO
-## 1. Ý kiến của SPEAKER_00
-- Nội dung demo...
+# BIÊN BẢN TÓM TẮT CUỘC HỌP
+
+## 1. TỔNG QUAN
+Cuộc họp tập trung vào việc phân tích xu hướng và thách thức trong lĩnh vực xuất bản sách nói hiện nay. Các diễn giả đều nhấn mạnh sự cần thiết và khả năng của việc tái chế tạo và cập nhật nội dung sách nói nhằm thích nghi với xu hướng kỹ thuật và thay đổi của độc giả trẻ.
+
+## 2. NỘI Dung
+### 🗣️ Hoàng Nam Tiến
+* **Quan điểm chính:** Cuối cùng, mục tiêu là tạo ra những cuốn sách nói phong phú và đa dạng hơn.
+* **Chi tiết:**
+  - Tổng kết quá trình phát triển của ngành xuất bản sách nói ở Việt Nam.
+  - Giới thiệu dự án "Think Again" của ông, mô hình tương tác giữa tác giả và độc giả.
+  
+### 🗣️ Nam Minh
+* **Quan điểm chính:** Sự thay đổi trong việc đọc sách và làm sách nói.
+* **Chi tiết:**
+  - Gợi ý về việc chuyển ngữ các tác phẩm Việt Nam sang ngoại ngữ.
+  - Khắc phục tình trạng sách nói chưa phổ biến bằng việc chuyển đổi hình thức.
+
+### 🗣️Lê Thạch
+* **Quan điểm chính:** Xu hướng phát triển của sách nói ở Việt Nam.
+* **Chi tiết:**
+  - Thị trường sách nói phát triển nhanh kể từ cuối năm 2018.
+  - So sánh xu hướng phát triển với các nước phát triển khác.
+
+### 🗣️Hải Ngọc
+* **Quan điểm chính:** Cần định nghĩa lại sách nói.
+* **Chi tiết:**
+  - Phát hiện cuốn sách kín đáo không còn phù hợp với lứa tuổi từ 0-6.
+  - Sản phẩm mới: sách tương tác thông minh.
+
+### 🗣️Nguyễn Xuân Minh
+* **Quan điểm chính:** Công nghệ đóng vai trò quan trọng yếu trong việc thu hút chú độc giả.
+* **Chi tiết:**
+  - Sử dụng công nghệ để tạo tiện lợi cho người dùng.
+  - Áp dụng thuật toán thông minh để gợi ý sách phù hợp sở thích của độc giả.
+
+## 3.KẾT LUẬN
+Bên dưới là những luận điểm chính và đề xuất cụ thể về việc cải tiến và phát triển trong lĩnh vực sách nói:
+
+- Cần tăng cường sự sáng tạo và cập nhật nội dung sách nói.
+- Sử dụng công nghệ để tối ưu hoá trải nghiệm đọc sách.
+- Định nghĩa lại sách nói như một phương tiện để trải nghiệm toàn diện.
+- Cần nâng cao chất lượng và sự lựa chọn cho độc giả trẻ. 
+
+Trở thành một cuốn sách nói phong phú và đa dạng hơn, đáp ứng nhu cầu của độc giả hiện đại.
 `;
 
 // ==========================================================
