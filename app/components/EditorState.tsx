@@ -162,7 +162,7 @@ export default function EditorState({ audioSrc }: { audioSrc: string }) {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-green-800">Xử lý hoàn tất!</h2>
-                <p className="text-green-700 text-sm">AI đã tách người nói và gỡ băng thành công.
+                <p className="text-green-700 text-sm">AI đã tách người nói và ghi biên bản.
                 </p>
                 <p className="text-green-700 text-sm">
                   Note: Vì đây là chỉ là mock UI nên không gọi model thật, nhưng data mock là data thật đã chạy bởi model.
