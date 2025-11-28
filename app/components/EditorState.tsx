@@ -5,21 +5,64 @@ import { parseTranscriptFile } from "../lib/parser";
 import { RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "../lib/mockData";
 import { 
   Play, Pause, Wand2, ChevronLeft, Save, Sparkles, X, 
-  FileText, Copy, Check, Info, Keyboard, Youtube, ArrowRight 
+  FileText, Copy, Check, Info, Keyboard, Youtube, ArrowRight, 
+  Plus,
+  Trash2
 } from "lucide-react";
 import TranscriptRow from "./TranscriptRow";
 import ReactMarkdown from 'react-markdown';
+import { Meeting } from "../lib/db";
 
-export default function EditorState({ audioSrc }: { audioSrc: string }) {
-  
+// [MỚI] Thêm prop onBack vào đây
+export default function EditorState({ 
+  audioSrc, 
+  initialData, // [SỬA] Nhận object Meeting thay vì string text
+  onBack 
+}: { 
+  audioSrc: string, 
+  initialData: Meeting, // Type Meeting
+  onBack: () => void 
+}) {
   // --- STATE ---
   // [MỚI] Modal Hướng dẫn ban đầu (Mặc định là true để hiện lên ngay)
   const [showIntroModal, setShowIntroModal] = useState(true);
 
-  // Parse dữ liệu
-  const initialData = useMemo(() => {
-    return parseTranscriptFile(RAW_TRANSCRIPT_FILE);
-  }, []);
+  // // Parse dữ liệu
+  // // Parse dữ liệu (Logic thông minh hơn)
+  // const initialData = useMemo(() => {
+  //   // TRƯỜNG HỢP 1: Có dữ liệu ghi âm trực tiếp
+  //   if (initialText && initialText.trim().length > 0) {
+  //     // Tách câu dựa trên dấu chấm (đơn giản hóa)
+  //     // Trong thực tế speech-to-text đôi khi không có dấu chấm, ta có thể tách mỗi 15-20 từ
+  //     const words = initialText.split(" ");
+  //     const chunkSize = 20; // 20 từ một dòng
+  //     const newSegments = [];
+  //     let currentTime = 0;
+
+  //     for (let i = 0; i < words.length; i += chunkSize) {
+  //       const chunkText = words.slice(i, i + chunkSize).join(" ");
+  //       // Giả lập thời gian: mỗi từ khoảng 0.3s
+  //       const duration = chunkText.length * 0.05; 
+        
+  //       newSegments.push({
+  //         id: i.toString(),
+  //         speakerId: "SPEAKER_00", // Mặc định là người dùng
+  //         start: currentTime,
+  //         end: currentTime + duration,
+  //         text: chunkText
+  //       });
+  //       currentTime += duration;
+  //     }
+
+  //     return {
+  //       segments: newSegments,
+  //       speakers: [{ id: "SPEAKER_00", name: "Tôi (Ghi âm)", color: "bg-blue-50 text-blue-700 border-blue-200" }]
+  //     };
+  //   }
+
+  //   // TRƯỜNG HỢP 2: Dùng file Demo có sẵn (Logic cũ)
+  //   return parseTranscriptFile(RAW_TRANSCRIPT_FILE);
+  // }, [initialText]); // Phụ thuộc vào initialText
 
   const [segments, setSegments] = useState(initialData.segments);
   const [speakers, setSpeakers] = useState(initialData.speakers);
@@ -61,6 +104,53 @@ export default function EditorState({ audioSrc }: { audioSrc: string }) {
     }
   };
 
+  // [MỚI] Hàm thêm Speaker
+  const handleAddSpeaker = () => {
+    let nextIndex = speakers.length;
+    let newId = `SPEAKER_${String(nextIndex).padStart(2, '0')}`;
+    while (speakers.some(s => s.id === newId)) {
+      nextIndex++;
+      newId = `SPEAKER_${String(nextIndex).padStart(2, '0')}`;
+    }
+    const colors = [
+      "bg-orange-50 text-orange-700 border-orange-200",
+      "bg-teal-50 text-teal-700 border-teal-200",
+      "bg-cyan-50 text-cyan-700 border-cyan-200",
+      "bg-rose-50 text-rose-700 border-rose-200"
+    ];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    
+    setSpeakers([...speakers, {
+      id: newId,
+      name: `Người mới ${nextIndex}`,
+      color: randomColor
+    }]);
+  };
+
+  // [MỚI] Hàm xóa Speaker
+  const handleDeleteSpeaker = (idToDelete: string) => {
+    if (speakers.length <= 1) {
+      alert("Phải có ít nhất 1 người nói!");
+      return;
+    }
+
+    if (confirm("Bạn chắc chắn xóa người này? Các đoạn hội thoại của họ sẽ được gán cho người đầu tiên.")) {
+      // 1. Tìm người thay thế (người đầu tiên không phải người bị xóa)
+      const fallbackSpeaker = speakers.find(s => s.id !== idToDelete) || speakers[0];
+
+      // 2. Cập nhật các đoạn hội thoại: gán ID cũ -> ID người thay thế
+      const updatedSegments = segments.map(seg => {
+        if (seg.speakerId === idToDelete) {
+          return { ...seg, speakerId: fallbackSpeaker.id };
+        }
+        return seg;
+      });
+      setSegments(updatedSegments);
+
+      // 3. Xóa khỏi danh sách speaker
+      setSpeakers(speakers.filter(s => s.id !== idToDelete));
+    }
+  }
   const handleUpdateSpeakerName = (id: string, newName: string) => {
     setSpeakers(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s));
   };
@@ -262,29 +352,58 @@ export default function EditorState({ audioSrc }: { audioSrc: string }) {
       {/* 1. LEFT SIDEBAR */}
       <div className="w-80 border-r bg-slate-50 flex flex-col z-20 shadow-lg">
         <div className="p-4 border-b bg-white">
-          <button className="flex items-center text-slate-500 text-sm hover:text-slate-800 mb-4">
+          <button className="flex items-center text-slate-500 text-sm hover:text-slate-800 mb-4"
+            onClick={onBack}
+          >
             <ChevronLeft className="w-4 h-4 mr-1" /> Quay lại
           </button>
-          <h2 className="font-bold text-slate-800 text-lg">Quản lý người nói</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="font-bold text-slate-800 text-lg">Người tham gia</h2>
+            {/* [MỚI] Nút thêm Speaker */}
+            <button 
+              onClick={handleAddSpeaker}
+              className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition"
+              title="Thêm người nói"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
           <p className="text-xs text-slate-400 mt-1">Đổi tên tại đây để cập nhật toàn bộ biên bản.</p>
         </div>
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
-          {speakers.map(spk => (
-            <div key={spk.id} className="bg-white p-3 rounded-lg border shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${spk.color.split(" ")[0]}`}>
-                  {spk.name.charAt(0)}
-                </div>
-                <span className="text-xs font-mono text-slate-400">{spk.id}</span>
+         {speakers.map(spk => (
+          <div key={spk.id} className="bg-white p-3 rounded-lg border shadow-sm group relative transition-all hover:shadow-md">
+            <div className="flex items-center gap-2 mb-2">
+              
+              {/* Avatar */}
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${spk.color.split(" ")[0]}`}>
+                {spk.name.charAt(0)}
               </div>
-              <input 
-                className="w-full text-sm font-medium border-b border-transparent focus:border-indigo-500 outline-none bg-transparent"
-                value={spk.name}
-                onChange={(e) => handleUpdateSpeakerName(spk.id, e.target.value)}
-                placeholder="Nhập tên thật..."
-              />
+              
+              {/* [SỬA 1] Thêm 'flex-1' để đẩy nút xóa sang tận cùng bên phải */}
+              <span className="text-xs font-mono text-slate-400 flex-1 truncate" title={spk.id}>
+                {spk.id}
+              </span>
+              
+              {/* [SỬA 2] Nút xóa: Thêm padding (p-1) và đổi màu đậm hơn để dễ nhìn */}
+              <button 
+                onClick={() => handleDeleteSpeaker(spk.id)}
+                className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all"
+                title="Xóa người này"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+
             </div>
-          ))}
+            
+            <input 
+              className="w-full text-sm font-medium border-b border-transparent focus:border-indigo-500 outline-none bg-transparent pb-1"
+              value={spk.name}
+              onChange={(e) => handleUpdateSpeakerName(spk.id, e.target.value)}
+              placeholder="Nhập tên thật..."
+            />
+          </div>
+))}
         </div>
         <div className="p-4 border-t bg-white space-y-3">
           <button 
