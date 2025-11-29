@@ -1,17 +1,17 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { parseTranscriptFile } from "../lib/parser"; 
-import { RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "../lib/mockData";
 import { 
-  Play, Pause, Wand2, ChevronLeft, Save, Sparkles, X, 
+  Play, Pause, ChevronLeft, Save, Sparkles, X, 
   FileText, Copy, Check, Info, Keyboard, Youtube, ArrowRight, 
   Plus,
   Trash2
 } from "lucide-react";
 import TranscriptRow from "./TranscriptRow";
 import ReactMarkdown from 'react-markdown';
-import { Meeting } from "../lib/db";
+import { Meeting, saveMeeting, updateMeetingProcess } from "../lib/db"; // [THÊM] saveMeeting
+import { requestSummary } from "../lib/api"; // [MỚI] Import API
+import { useGlobalUI } from "../context/GlobalUIProvider";
 
 // [MỚI] Thêm prop onBack vào đây
 export default function EditorState({ 
@@ -26,43 +26,6 @@ export default function EditorState({
   // --- STATE ---
   // [MỚI] Modal Hướng dẫn ban đầu (Mặc định là true để hiện lên ngay)
   const [showIntroModal, setShowIntroModal] = useState(true);
-
-  // // Parse dữ liệu
-  // // Parse dữ liệu (Logic thông minh hơn)
-  // const initialData = useMemo(() => {
-  //   // TRƯỜNG HỢP 1: Có dữ liệu ghi âm trực tiếp
-  //   if (initialText && initialText.trim().length > 0) {
-  //     // Tách câu dựa trên dấu chấm (đơn giản hóa)
-  //     // Trong thực tế speech-to-text đôi khi không có dấu chấm, ta có thể tách mỗi 15-20 từ
-  //     const words = initialText.split(" ");
-  //     const chunkSize = 20; // 20 từ một dòng
-  //     const newSegments = [];
-  //     let currentTime = 0;
-
-  //     for (let i = 0; i < words.length; i += chunkSize) {
-  //       const chunkText = words.slice(i, i + chunkSize).join(" ");
-  //       // Giả lập thời gian: mỗi từ khoảng 0.3s
-  //       const duration = chunkText.length * 0.05; 
-        
-  //       newSegments.push({
-  //         id: i.toString(),
-  //         speakerId: "SPEAKER_00", // Mặc định là người dùng
-  //         start: currentTime,
-  //         end: currentTime + duration,
-  //         text: chunkText
-  //       });
-  //       currentTime += duration;
-  //     }
-
-  //     return {
-  //       segments: newSegments,
-  //       speakers: [{ id: "SPEAKER_00", name: "Tôi (Ghi âm)", color: "bg-blue-50 text-blue-700 border-blue-200" }]
-  //     };
-  //   }
-
-  //   // TRƯỜNG HỢP 2: Dùng file Demo có sẵn (Logic cũ)
-  //   return parseTranscriptFile(RAW_TRANSCRIPT_FILE);
-  // }, [initialText]); // Phụ thuộc vào initialText
 
   const [segments, setSegments] = useState(initialData.segments);
   const [speakers, setSpeakers] = useState(initialData.speakers);
@@ -81,6 +44,7 @@ export default function EditorState({
   const [exportContent, setExportContent] = useState("");
   const [isCopied, setIsCopied] = useState(false);
 
+  const { toast, confirm } = useGlobalUI(); // [MỚI]const { toast, confirm } = useGlobalUI(); // [MỚI]
   // --- ACTIONS (Giữ nguyên logic cũ) ---
   const formatTime = (time: number) => {
     if (!time || isNaN(time)) return "00:00";
@@ -126,15 +90,40 @@ export default function EditorState({
       color: randomColor
     }]);
   };
+   const handleSaveSummary = async () => {
+    try {
+      // 1. Tạo object mới với summary đã cập nhật
+      const updatedMeeting: Meeting = {
+        ...initialData,
+        segments: segments, // Lưu luôn cả transcript nếu có sửa đổi
+        speakers: speakers, // Lưu cả tên người nói nếu có đổi
+        summary: summaryContent // Lưu nội dung tóm tắt mới
+      };
+
+      // 2. Ghi đè vào DB
+      await saveMeeting(updatedMeeting);
+      
+      // 3. Thông báo & Đóng Modal
+      toast.success("Đã lưu biên bản thành công!");
+      setShowSummary(false);
+      
+    } catch (e) {
+      toast.error("Lỗi khi lưu: " + e);
+    }
+  };
 
   // [MỚI] Hàm xóa Speaker
-  const handleDeleteSpeaker = (idToDelete: string) => {
+  const handleDeleteSpeaker = async (idToDelete: string) => {
     if (speakers.length <= 1) {
-      alert("Phải có ít nhất 1 người nói!");
+      toast.warning("Phải có ít nhất 1 người nói!");
       return;
     }
-
-    if (confirm("Bạn chắc chắn xóa người này? Các đoạn hội thoại của họ sẽ được gán cho người đầu tiên.")) {
+    const isConfirmed = await confirm({
+        title: "Xóa người nói?",
+        message: "Hành động này sẽ gán lại lời thoại của họ cho người đầu tiên.",
+        type: "danger"
+    });
+    if (isConfirmed) {
       // 1. Tìm người thay thế (người đầu tiên không phải người bị xóa)
       const fallbackSpeaker = speakers.find(s => s.id !== idToDelete) || speakers[0];
 
@@ -149,6 +138,7 @@ export default function EditorState({
 
       // 3. Xóa khỏi danh sách speaker
       setSpeakers(speakers.filter(s => s.id !== idToDelete));
+      toast.success("Đã xóa người nói.");
     }
   }
   const handleUpdateSpeakerName = (id: string, newName: string) => {
@@ -205,20 +195,37 @@ export default function EditorState({
     setSegments(newSegments);
   };
 
-  const handleSummarize = () => {
-    setIsSummarizing(true);
-    setTimeout(() => {
-      setIsSummarizing(false);
-      let dynamicSummary = RAW_SUMMARY_FILE;
-      speakers.forEach(spk => {
-        const regex = new RegExp(spk.id, 'g');
-        dynamicSummary = dynamicSummary.replace(regex, spk.name);
-      });
-      setSummaryContent(dynamicSummary);
-      setShowSummary(true);
-    }, 1500);
-  };
+  const handleSummarize = async () => {
+    if (initialData.status === 'summarizing') {
+      toast.info("Đang tóm tắt rồi, vui lòng đợi...");
+      return;
+    }
 
+    try {
+      // 1. Chuẩn bị text
+      const fullTranscript = segments.map(seg => {
+        const spkName = speakers.find(s => s.id === seg.speakerId)?.name || seg.speakerId;
+        return `[${spkName}]: ${seg.text}`;
+      }).join("\n");
+
+      // 2. Gửi API lấy JobID
+      const jobId = await requestSummary(fullTranscript);
+
+      // 3. Cập nhật DB -> Chuyển trạng thái sang 'summarizing'
+      // Để PollingManager bên ngoài lo việc còn lại
+      await updateMeetingProcess(initialData.id, {
+        status: 'summarizing',
+        jobId: jobId
+      });
+
+      toast.info("Đã gửi yêu cầu tóm tắt! Hệ thống sẽ xử lý ngầm.");
+      onBack(); // [QUAN TRỌNG] Quay về Dashboard để thấy trạng thái mới
+
+    } catch (error) {
+      toast.error("Lỗi khi gửi tóm tắt: " + error);
+    }
+  };
+  
   const handleViewTranscript = () => {
     const fmt = (s: number) => new Date(s * 1000).toISOString().substr(14, 5);
     const fullText = segments.map(seg => {
@@ -415,7 +422,7 @@ export default function EditorState({
           </button>
           <button 
             onClick={handleSummarize}
-            disabled={isSummarizing}
+            disabled={initialData.status === 'summarizing'}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-200"
           >
             {isSummarizing ? (
@@ -423,7 +430,7 @@ export default function EditorState({
             ) : (
               <Sparkles className="w-5 h-5" />
             )}
-            {isSummarizing ? "Đang tóm tắt..." : "Gửi tóm tắt AI"}
+            {initialData.status === 'summarizing' ? "Đang xử lý ngầm..." : "Gửi tóm tắt AI"}
           </button>
         </div>
       </div>
@@ -432,9 +439,13 @@ export default function EditorState({
       <div className="flex-1 flex flex-col relative">
         <div className="h-16 border-b flex items-center justify-between px-8 bg-white/90 backdrop-blur z-10 sticky top-0">
           <h1 className="font-bold text-slate-700">Transcript Editor</h1>
-          <div className="text-sm text-slate-400 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500"></span> Đã lưu
-          </div>
+          {/* [SỬA] Thay text tĩnh bằng nút Lưu thủ công */}
+            <button 
+              onClick={handleSaveSummary} // Tái sử dụng hàm lưu ở trên (nó lưu cả transcript + summary)
+              className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-2 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition"
+            >
+              <Save className="w-4 h-4" /> Lưu thay đổi
+            </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 pb-32 scroll-smooth">
@@ -521,7 +532,10 @@ export default function EditorState({
           </div>
             <div className="p-4 border-t bg-white flex justify-end gap-2">
               <button onClick={() => setShowSummary(false)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">Đóng</button>
-              <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 hover:bg-indigo-700">
+              <button 
+                onClick={handleSaveSummary}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 hover:bg-indigo-700"
+              >
                 <Save className="w-4 h-4" /> Lưu biên bản
               </button>
             </div>

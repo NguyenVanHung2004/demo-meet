@@ -9,14 +9,17 @@ import MeetingDetailState from "./components/MeetingDetailState";
 import { saveMeeting, getAllMeetings, seedInitialData, Meeting } from "./lib/db";
 import { parseTranscriptFile } from "./lib/parser";
 import { RAW_TRANSCRIPT_FILE } from "./lib/mockData";
-
+import { uploadAudioFile, pollJobResult } from "./lib/api"; // [MỚI] Import API
+import PollingManager from "./components/PollingManager";
+import { useGlobalUI } from "./context/GlobalUIProvider";
 export type AppState = 'DASHBOARD' | 'PROCESSING' | 'EDITOR' | 'LIVE_RECORDING' | 'MEETING_DETAIL';
 
 export default function Page() {
+  const { toast } = useGlobalUI(); // [MỚI]
   const [currentState, setCurrentState] = useState<AppState>('DASHBOARD');
   const [currentMeeting, setCurrentMeeting] = useState<Meeting | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-
+  const [refreshSignal, setRefreshSignal] = useState(0); // [MỚI] Tín hiệu reload
   // Khởi tạo data mẫu
   useEffect(() => {
     seedInitialData();
@@ -61,30 +64,51 @@ export default function Page() {
       handleBackToDashboard();
   };
 
+  const triggerRefresh = () => setRefreshSignal(prev => prev + 1);
   // ==========================================
   // 2. LOGIC XỬ LÝ DỮ LIỆU
   // ==========================================
 
  // Flow 1: Upload File Thật (Thủ công)
-  const handleFileUpload = async (file: File) => {
-    // ... (Code cũ tạo segment trống) ...
-    setCurrentState('PROCESSING');
-    setTimeout(async () => {
+const handleFileUpload = async (file: File) => {
+    // Không set currentState('PROCESSING') ở đây nữa, hoặc chỉ set trong tích tắc
+    // Để người dùng thấy phản hồi ngay lập tức
+
+    try {
+      // 1. Gửi file lên Python (Chỉ mất 1-2 giây)
+      console.log("--> Uploading to Python...");
+      const jobId = await uploadAudioFile(file);
+      
+      // 2. KHÔNG CHỜ KẾT QUẢ NỮA (Bỏ dòng pollJobResult đi)
+      // Tạo ngay một bản ghi Meeting với trạng thái 'transcribing'
+      
       const newMeeting: Meeting = {
-        id: `upload-${Date.now()}`,
+        id: `job-${jobId}`,
+        jobId: jobId, // Lưu JobID để PollingManager tự check sau
         title: file.name.replace(/\.[^/.]+$/, ""),
         createdAt: Date.now(),
-        duration: 0,
+        duration: 0, // Chưa có thời gian, AI làm xong sẽ tự update
         audioBlob: file,
-        segments: [
-          { id: "1", speakerId: "SPEAKER_00", start: 0, end: 10, text: "Audio đã tải lên. Bấm vào để ghi biên bản..." }
-        ],
-        speakers: [{ id: "SPEAKER_00", name: "Speaker A", color: "bg-blue-50 text-blue-700 border-blue-200" }],
-        status: 'active'
+        segments: [], // Chưa có nội dung
+        speakers: [],
+        
+        status: 'transcribing', // [QUAN TRỌNG] Đánh dấu là đang ghi
+        isDeleted: false
       };
+
+      // 3. Lưu vào DB
       await saveMeeting(newMeeting);
-      handleDirectEdit(newMeeting);
-    }, 1000);
+      
+      // 4. Thông báo và Reload Dashboard ngay lập tức
+      toast.success("Đã tải lên! Hệ thống sẽ xử lý ngầm.Bạn có thể quay lại sau");
+      triggerRefresh(); // Báo Dashboard load lại list
+      setCurrentState('DASHBOARD'); // Quay về màn hình chính ngay
+
+    } catch (error) {
+      console.error("Lỗi xử lý:", error);
+      toast.error("Lỗi khi upload: " + error);
+      setCurrentState('DASHBOARD');
+    }
   };
 
   // [MỚI] Flow 1.5: Dùng File Demo (Có AI)
@@ -110,7 +134,8 @@ export default function Page() {
         // Dữ liệu xịn
         segments: parsed.segments,
         speakers: parsed.speakers,
-        status: 'active'
+        status: 'transcribing',
+        isDeleted: false
       };
       
       // 4. Lưu và mở Edit
@@ -150,7 +175,8 @@ export default function Page() {
       audioBlob: blob,
       segments: newSegments,
       speakers: [{ id: "SPEAKER_00", name: "Tôi (Ghi âm)", color: "bg-blue-50 text-blue-700 border-blue-200" }],
-      status: 'active'
+      status: 'transcribing',
+      isDeleted: false,
     };
 
     await saveMeeting(newMeeting);
@@ -160,9 +186,10 @@ export default function Page() {
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
-      
+      <PollingManager onUpdate={triggerRefresh} />
       {currentState === 'DASHBOARD' && (
         <DashboardState 
+          refreshSignal={refreshSignal}
           onImport={handleFileUpload} 
           onUseSample={handleStartDemo} // [MỚI] Truyền hàm này vào
           onLive={() => setCurrentState('LIVE_RECORDING')}

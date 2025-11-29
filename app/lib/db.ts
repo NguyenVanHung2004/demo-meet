@@ -2,33 +2,51 @@
 
 import { Segment, Speaker, RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "./mockData";
 import { parseTranscriptFile } from "./parser"; // [MỚI] Import parser
-export type MeetingStatus = 'active' | 'archived' | 'trash';
+// [CẬP NHẬT] Định nghĩa trạng thái chi tiết
+export type MeetingStatus = 
+  | 'transcribing'  // Đang ghi biên bản (Audio -> Text)
+  | 'transcribed'   // Đã ghi xong (Chờ người dùng Edit & Tóm tắt)
+  | 'summarizing'   // Đang tóm tắt (Text -> Summary)
+  | 'completed'     // Hoàn tất (Có cả Text & Summary)
+  | 'failed';       // Lỗi
 // Định nghĩa cấu trúc 1 cuộc họp
 export interface Meeting {
   id: string;
+  jobId?: string; // ID của Job đang chạy (nếu có)
   title: string;
-  createdAt: number; // Timestamp
-  duration: number; // Giây
-  audioBlob: Blob; // File âm thanh thực
+  createdAt: number;
+  duration: number;
+  audioBlob: Blob;
   segments: Segment[];
   speakers: Speaker[];
-  summary?: string; // [MỚI] Trường chứa nội dung tóm tắt
-  status: MeetingStatus; // [MỚI]
+  summary?: string;
+  
+  status: MeetingStatus; 
+  isDeleted: boolean;    
+  errorMessage?: string; 
 }
 
 const DB_NAME = "MeetingNotesDB";
 const STORE_NAME = "meetings";
 // [MỚI] Hàm cập nhật trạng thái (Chuyển vào thùng rác / Lưu trữ)
-export const updateMeetingStatus = async (id: string, newStatus: MeetingStatus) => {
+export const updateMeetingProcess = async (id: string, updates: Partial<Meeting>) => {
   const db = await openDB();
   const meeting = await getMeetingById(id);
   if (meeting) {
-    meeting.status = newStatus;
-    await saveMeeting(meeting);
+    const updated = { ...meeting, ...updates };
+    await saveMeeting(updated);
   }
 };
 
 // [MỚI] Hàm xóa vĩnh viễn
+export const toggleTrashMeeting = async (id: string, isDeleted: boolean) => {
+  const db = await openDB();
+  const meeting = await getMeetingById(id);
+  if (meeting) {
+    meeting.isDeleted = isDeleted;
+    await saveMeeting(meeting);
+  }
+};
 export const deleteMeetingPermanent = async (id: string) => {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -39,6 +57,7 @@ export const deleteMeetingPermanent = async (id: string) => {
     request.onerror = () => reject(request.error);
   });
 };
+
 // 1. Mở kết nối DB
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -78,8 +97,8 @@ export const getAllMeetings = async (): Promise<Meeting[]> => {
     const request = store.getAll();
 
     request.onsuccess = () => {
-      // Sắp xếp mới nhất lên đầu
       const results = request.result as Meeting[];
+      // Sắp xếp mới nhất lên đầu
       results.sort((a, b) => b.createdAt - a.createdAt);
       resolve(results);
     };
@@ -124,12 +143,14 @@ export const seedInitialData = async () => {
         createdAt: Date.now(), // Thời gian hiện tại
         duration: 480, // Khoảng 8 phút (ước lượng theo transcript)
         audioBlob: blob,
-        
+
         // Dữ liệu xịn lấy từ Parser
         segments: parsedData.segments,
         speakers: parsedData.speakers,
         summary: RAW_SUMMARY_FILE,
-        status: 'active' // [MỚI] Mặc định là active
+        status: 'completed' // [MỚI] Mặc định là active
+        ,
+        isDeleted: false
       };
       
       // 4. Lưu vào DB

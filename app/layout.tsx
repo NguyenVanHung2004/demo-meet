@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono,Inter } from "next/font/google";
 import "./globals.css";
+import GlobalUIProvider from "./context/GlobalUIProvider";
 
 // [QUAN TRỌNG] Thêm "vietnamese" vào đây
 const inter = Inter({ subsets: ["latin", "vietnamese"] });
@@ -31,7 +32,9 @@ export default function RootLayout({
         suppressHydrationWarning={true}
         className={inter.className}
       >
-        {children}
+        <GlobalUIProvider>
+          {children}
+        </GlobalUIProvider>
       </body>
     </html>
   );
