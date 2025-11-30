@@ -1,72 +1,145 @@
-// app/lib/api.ts
-
-const API_URL = "http://localhost:8000/api/v1";
-
-export interface JobStatus {
-  job_id: string;
-  status: "queued" | "processing" | "done" | "failed";
-  result?: string;
-  error?: string;
-}
-
-// 1. Gửi file Audio lên Server
+// src/lib/api.ts
+import { put, upload } from '@vercel/blob/client'; // [SỬA] Import thêm 'upload'
+// 1. Lấy thông tin từ biến môi trường
+const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
+const RUNPOD_ENDPOINT_ID = process.env.NEXT_PUBLIC_RUNPOD_ENDPOINT_ID;
+const RUNPOD_URL = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/runsync`;
+const BLOB_TOKEN_SERVER = process.env.BLOB_READ_WRITE_TOKEN;
+// --- HÀM 1: GỠ BĂNG (Upload Audio -> RunPod) ---
+// (Giữ nguyên như cũ vì đã chuẩn)
 export const uploadAudioFile = async (file: File): Promise<string> => {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  const res = await fetch(`${API_URL}/transcribe`, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!res.ok) throw new Error("Upload failed");
-  const data = await res.json();
-  return data.job_id;
-};
-
-// 2. Gửi Text lên để Tóm tắt
-export const requestSummary = async (text: string): Promise<string> => {
-  const res = await fetch(`${API_URL}/summarize`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transcript_text: text }),
-  });
-
-  if (!res.ok) throw new Error("Summary request failed");
-  const data = await res.json();
-  return data.job_id;
-};
-
-// 3. Hàm Polling (Hỏi liên tục xem xong chưa)
-export const pollJobResult = async (jobId: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`${API_URL}/jobs/${jobId}`);
-        const data: JobStatus = await res.json();
-
-        console.log(`Job ${jobId}: ${data.status}`);
-
-        if (data.status === "done" && data.result) {
-          clearInterval(interval);
-          resolve(data.result);
-        } else if (data.status === "failed") {
-          clearInterval(interval);
-          reject(data.error || "Unknown error");
-        }
-      } catch (e) {
-        clearInterval(interval);
-        reject(e);
-      }
-    }, 2000); // Hỏi mỗi 2 giây
-  });
-};
-export const checkJobStatusOnce = async (jobId: string): Promise<JobStatus> => {
   try {
-    const res = await fetch(`${API_URL}/jobs/${jobId}`);
-    if (!res.ok) throw new Error("Network error");
-    return await res.json();
+
+    if (!RUNPOD_API_KEY || !RUNPOD_ENDPOINT_ID) {
+      throw new Error("❌ Lỗi: Thiếu cấu hình RunPod trong .env.local");
+    }
+    const payload = { 
+        fileType: file.type,
+        // Truyền token Vercel Blob vào đây
+        blobToken: BLOB_TOKEN_SERVER || process.env.BLOB_READ_WRITE_TOKEN
+    };
+    console.log("🚀 [1/3] Upload file lên Vercel Blob...");
+    const blob = await upload(file.name, file, {
+      handleUploadUrl: '/api/upload', 
+      clientPayload: JSON.stringify(payload),
+      access: 'public'
+    });
+    
+    console.log("✅ [2/3] Upload xong. Gửi RunPod xử lý...", blob.url);
+
+    const response = await fetch(RUNPOD_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RUNPOD_API_KEY}`
+      },
+      body: JSON.stringify({
+        input: {
+          action: "transcribe", // Gọi chức năng gỡ băng
+          audio_url: blob.url
+        }
+      })
+    });
+
+    const data = await response.json();
+    console.log("--> Kết quả Gỡ băng:", data);
+
+    if (data.status === "COMPLETED" && data.output) {
+       return data.output.transcript || "Không có nội dung."; 
+    } else {
+       throw new Error("Lỗi xử lý từ RunPod: " + (data.error || JSON.stringify(data)));
+    }
+
+  } catch (error) {
+    console.error("Lỗi Upload:", error);
+    throw error;
+  }
+};
+
+// --- HÀM 2: TÓM TẮT NHANH (Dùng cho Live Recording) ---
+export const requestSegmentSummary = async (text: string): Promise<string> => {
+  try {
+      const response = await fetch(RUNPOD_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${RUNPOD_API_KEY}`
+          },
+          body: JSON.stringify({
+            input: {
+              action: "summarize-segment", // [QUAN TRỌNG] Action dành cho đoạn ngắn
+              text: text
+            }
+          })
+      });
+      
+      const data = await response.json();
+      if (data.status === "COMPLETED" && data.output) {
+          return data.output.summary || "Lỗi tóm tắt.";
+      }
+      return "Lỗi phản hồi.";
+
   } catch (e) {
-    return { job_id: jobId, status: "failed", error: "Không thể kết nối Server" };
+      console.error("Lỗi Live Summary:", e);
+      return "Lỗi kết nối.";
+  }
+};
+
+// --- HÀM 3: TÓM TẮT TỔNG HỢP (Dùng cho nút "Tóm tắt AI" ở Editor) ---
+// [SỬA] Tách riêng ra để gọi action 'summarize'
+export const requestSummary = async (text: string): Promise<string> => {
+    try {
+        console.log("📝 Gửi yêu cầu tóm tắt toàn bộ...");
+        const response = await fetch(RUNPOD_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${RUNPOD_API_KEY}`
+            },
+            body: JSON.stringify({
+              input: {
+                action: "summarize", // [QUAN TRỌNG] Action dành cho tóm tắt full
+                text: text
+              }
+            })
+        });
+        
+        const data = await response.json();
+        console.log("--> Kết quả Tóm tắt Full:", data);
+
+        if (data.status === "COMPLETED" && data.output) {
+            return data.output.summary || "Không thể tóm tắt.";
+        }
+        return "Lỗi khi tóm tắt.";
+  
+    } catch (e) {
+        console.error("Lỗi Full Summary:", e);
+        throw e;
+    }
+};
+
+// --- HÀM 4: CHECK TRẠNG THÁI JOB (Dùng cho PollingManager) ---
+export const checkJobStatusOnce = async (jobId: string): Promise<any> => {
+  try {
+    // URL API check status của RunPod
+    const statusUrl = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/status/${jobId}`;
+
+    const response = await fetch(statusUrl, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${RUNPOD_API_KEY}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await response.json();
+    
+    // RunPod trả về object kiểu: { id: "...", status: "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED" | "FAILED", output: ... }
+    return data; 
+
+  } catch (error) {
+    console.error("Lỗi khi kiểm tra trạng thái Job:", error);
+    // Trả về null hoặc object lỗi để PollingManager không bị crash
+    return { status: "FAILED", error: "Network error" };
   }
 };

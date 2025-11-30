@@ -165,3 +165,36 @@ export const seedInitialData = async () => {
     }
   }
 };
+
+// 6. Hàm cập nhật tiêu đề (Viết lại chuẩn Native IndexedDB)
+export const updateMeetingTitle = async (id: string, newTitle: string) => {
+  const db = await openDB();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+    
+    // Bước 1: Lấy bản ghi cũ lên
+    const getRequest = store.get(id);
+
+    getRequest.onsuccess = () => {
+      const meeting = getRequest.result as Meeting;
+      
+      if (meeting) {
+        // Bước 2: Sửa tiêu đề
+        meeting.title = newTitle;
+        
+        // Bước 3: Lưu đè lại
+        const putRequest = store.put(meeting);
+        
+        putRequest.onsuccess = () => resolve(putRequest.result);
+        putRequest.onerror = () => reject(putRequest.error);
+      } else {
+        // Không tìm thấy meeting thì thôi, resolve luôn
+        resolve(null);
+      }
+    };
+
+    getRequest.onerror = () => reject(getRequest.error);
+  });
+};
