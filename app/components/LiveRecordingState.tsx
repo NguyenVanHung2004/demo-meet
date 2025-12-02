@@ -49,7 +49,7 @@ export default function LiveRecordingState({
     try {
       // 2. Tạo một Promise Timeout để tránh bị treo mãi mãi
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Timeout")), 20000) // 20 giây timeout
+        setTimeout(() => reject(new Error("Timeout")), 40000) // 20 giây timeout
       );
 
       // 3. Chạy đua: API vs Timeout (cái nào xong trước thì lấy)
