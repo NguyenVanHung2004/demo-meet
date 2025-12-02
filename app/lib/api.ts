@@ -3,31 +3,34 @@ import { put, upload } from '@vercel/blob/client'; // [SỬA] Import thêm 'uplo
 // 1. Lấy thông tin từ biến môi trường
 const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
 const RUNPOD_ENDPOINT_ID = process.env.NEXT_PUBLIC_RUNPOD_ENDPOINT_ID;
+const RUNPOD_URL_ASYNC = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`;
 const RUNPOD_URL = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/runsync`;
 const BLOB_TOKEN_SERVER = process.env.BLOB_READ_WRITE_TOKEN;
 // --- HÀM 1: GỠ BĂNG (Upload Audio -> RunPod) ---
 // (Giữ nguyên như cũ vì đã chuẩn)
 export const uploadAudioFile = async (file: File): Promise<string> => {
   try {
-
     if (!RUNPOD_API_KEY || !RUNPOD_ENDPOINT_ID) {
       throw new Error("❌ Lỗi: Thiếu cấu hình RunPod trong .env.local");
     }
+
+    // 1. Upload lên Vercel Blob
     const payload = { 
         fileType: file.type,
-        // Truyền token Vercel Blob vào đây
         blobToken: BLOB_TOKEN_SERVER || process.env.BLOB_READ_WRITE_TOKEN
     };
     console.log("🚀 [1/3] Upload file lên Vercel Blob...");
+    
     const blob = await upload(file.name, file, {
       handleUploadUrl: '/api/upload', 
       clientPayload: JSON.stringify(payload),
       access: 'public'
     });
     
-    console.log("✅ [2/3] Upload xong. Gửi RunPod xử lý...", blob.url);
+    console.log("✅ [2/3] Upload xong. Gửi RunPod xử lý (Async)...", blob.url);
 
-    const response = await fetch(RUNPOD_URL, {
+    // 2. Gửi request sang RunPod (Dùng URL ASYNC)
+    const response = await fetch(RUNPOD_URL_ASYNC, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -35,19 +38,20 @@ export const uploadAudioFile = async (file: File): Promise<string> => {
       },
       body: JSON.stringify({
         input: {
-          action: "transcribe", // Gọi chức năng gỡ băng
+          action: "transcribe", 
           audio_url: blob.url
         }
       })
     });
 
     const data = await response.json();
-    console.log("--> Kết quả Gỡ băng:", data);
+    console.log("--> RunPod Job Created:", data);
 
-    if (data.status === "COMPLETED" && data.output) {
-       return data.output.transcript || "Không có nội dung."; 
+    // [QUAN TRỌNG] RunPod Async trả về { id: "job-id-..." } ngay lập tức
+    if (data.id) {
+       return data.id; 
     } else {
-       throw new Error("Lỗi xử lý từ RunPod: " + (data.error || JSON.stringify(data)));
+       throw new Error("Không lấy được Job ID từ RunPod: " + JSON.stringify(data));
     }
 
   } catch (error) {
@@ -89,8 +93,8 @@ export const requestSegmentSummary = async (text: string): Promise<string> => {
 // [SỬA] Tách riêng ra để gọi action 'summarize'
 export const requestSummary = async (text: string): Promise<string> => {
     try {
-        console.log("📝 Gửi yêu cầu tóm tắt toàn bộ...");
-        const response = await fetch(RUNPOD_URL, {
+        console.log("📝 Gửi yêu cầu tóm tắt toàn bộ (Async)...");
+        const response = await fetch(RUNPOD_URL_ASYNC, { // <-- Đổi thành ASYNC
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -98,19 +102,20 @@ export const requestSummary = async (text: string): Promise<string> => {
             },
             body: JSON.stringify({
               input: {
-                action: "summarize", // [QUAN TRỌNG] Action dành cho tóm tắt full
+                action: "summarize",
                 text: text
               }
             })
         });
         
         const data = await response.json();
-        console.log("--> Kết quả Tóm tắt Full:", data);
+        console.log("--> RunPod Summary Job Created:", data);
 
-        if (data.status === "COMPLETED" && data.output) {
-            return data.output.summary || "Không thể tóm tắt.";
+        // Trả về Job ID ngay lập tức thay vì chờ kết quả
+        if (data.id) {
+            return data.id; 
         }
-        return "Lỗi khi tóm tắt.";
+        throw new Error("Không lấy được Job ID tóm tắt.");
   
     } catch (e) {
         console.error("Lỗi Full Summary:", e);

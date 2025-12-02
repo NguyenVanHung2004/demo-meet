@@ -28,27 +28,35 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
         const jobData = await checkJobStatusOnce(meeting.jobId);
 
         // 1. Xử lý khi Job Thành Công
-        if (jobData.status === 'done' && jobData.result) {
+        if (jobData.status === 'COMPLETED' && jobData.output) {
           
           // CASE A: Vừa ghi biên bản xong (Audio -> Text)
           if (meeting.status === 'transcribing') {
-             const parsed = parseTranscriptFile(jobData.result);
-             await updateMeetingProcess(meeting.id, {
-                status: 'transcribed', // Chuyển sang trạng thái "Đã ghi xong"
-                segments: parsed.segments,
-                speakers: parsed.speakers,
-                duration: parsed.segments[parsed.segments.length - 1]?.end || 0,
-                jobId: undefined // Xóa JobId để ngừng poll
-             });
+             // [SỬA] Lấy transcript từ jobData.output.transcript
+             const transcriptText = jobData.output.transcript || "";
+             
+             if (transcriptText) {
+                 const parsed = parseTranscriptFile(transcriptText);
+                 await updateMeetingProcess(meeting.id, {
+                    status: 'transcribed', 
+                    segments: parsed.segments,
+                    speakers: parsed.speakers,
+                    duration: parsed.segments[parsed.segments.length - 1]?.end || 0,
+                    jobId: undefined // Xóa JobId để ngừng poll
+                 });
+             } else {
+                 console.error("Không tìm thấy transcript trong output:", jobData.output);
+             }
           }
           
           // CASE B: Vừa tóm tắt xong (Text -> Summary)
           else if (meeting.status === 'summarizing') {
-             await updateMeetingProcess(meeting.id, {
-                status: 'completed', // Chuyển sang trạng thái "Hoàn thành"
-                summary: jobData.result,
-                jobId: undefined
-             });
+            const summaryText = jobData.output.summary || "";
+            await updateMeetingProcess(meeting.id, {
+              status: 'completed', // Chuyển sang trạng thái "Hoàn thành"
+              summary: summaryText,
+              jobId: undefined
+          });
           }
 
           onUpdate(); // Reload UI

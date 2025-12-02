@@ -59,36 +59,69 @@ export default function Page() {
 
   // --- LOGIC ---
 
-  // Flow 1: Upload File (Gửi Server xử lý ngầm)
   const handleFileUpload = async (file: File) => {
-    try {
-      console.log("--> Uploading to Python...");
-      const jobId = await uploadAudioFile(file);
-      
+      // 1. Tạo ID tạm thời
+      const tempId = `job-${Date.now()}`;
+
+      // 2. [QUAN TRỌNG] Tạo object Meeting và hiển thị ngay lập tức
       const newMeeting: Meeting = {
-        id: `job-${jobId}`,
-        jobId: jobId,
-        title: file.name.replace(/\.[^/.]+$/, ""),
+        id: tempId,
+        jobId: undefined, // Chưa có Job ID thật, sẽ update sau
+        title: file.name.replace(/\.[^/.]+$/, ""), // Tên file bỏ đuôi
         createdAt: Date.now(),
         duration: 0, 
         audioBlob: file,
         segments: [],
         speakers: [],
-        status: 'transcribing', // Upload thì phải chờ Server xử lý -> Transcribing
+        status: 'transcribing', // Set trạng thái đang xử lý ngay
         isDeleted: false
       };
 
+      // Lưu vào DB -> UI Dashboard sẽ tự động cập nhật nhờ PollingManager hoặc triggerRefresh
       await saveMeeting(newMeeting);
-      toast.info("Đã tải lên! Hệ thống sẽ xử lý ngầm.");
-      triggerRefresh();
-      setCurrentState('DASHBOARD');
+      triggerRefresh(); 
+      toast.info("Đang tải lên và xử lý...");
 
-    } catch (error) {
-      console.error("Lỗi xử lý:", error);
-      toast.error("Có lỗi khi upload: " + error);
-    }
-  };
+      try {
+        console.log("--> Uploading to Python...");
+        
+        // 3. Gọi API Upload (Hàm này giờ đã trả về Job ID thay vì text)
+        const runpodJobId = await uploadAudioFile(file);
+        
+        console.log("--> Nhận Job ID:", runpodJobId);
 
+        // 4. Update lại meeting trong DB với Job ID thật để PollingManager bắt đầu làm việc
+        // (Lưu ý: PollingManager của bạn sẽ quét các meeting có status='transcribing' và có jobId)
+        const updatedMeeting = { 
+          ...newMeeting, 
+          id: `job-${runpodJobId}`, // [Tùy chọn] Có thể đổi ID meeting theo JobID hoặc giữ ID cũ
+          jobId: runpodJobId 
+        };
+
+        // Xóa bản ghi tạm cũ (nếu bạn đổi ID) hoặc chỉ cần update bản ghi cũ
+        // Ở đây để đơn giản ta update bản ghi cũ:
+        await saveMeeting({ ...newMeeting, jobId: runpodJobId });
+        
+        // Nếu bạn muốn đổi ID meeting thành job-id của runpod thì cần xóa cái cũ đi:
+        // await deleteMeetingPermanent(tempId);
+        // await saveMeeting(updatedMeeting);
+
+        toast.success("Đã gửi yêu cầu xử lý! Bạn có thể làm việc khác.");
+        triggerRefresh();
+
+      } catch (error) {
+        console.error("Lỗi xử lý:", error);
+        toast.error("Có lỗi khi upload: " + error);
+        
+        // Update trạng thái lỗi cho meeting
+        await saveMeeting({ 
+          ...newMeeting, 
+          status: 'failed', 
+          errorMessage: (error as Error).message 
+        });
+        triggerRefresh();
+      }
+    };
   // Flow 2: Demo Data
   const handleStartDemo = async () => {
     setCurrentState('PROCESSING');
