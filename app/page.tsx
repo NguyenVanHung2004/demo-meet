@@ -149,23 +149,28 @@ export default function Page() {
 
   // Flow 3: Live Recording (Xử lý tại trình duyệt)
   const handleFinishLive = async (recordedText: string, recordedAudioUrl: string, finalSummary: string) => {
-    // Giả lập tách đoạn đơn giản cho Live text
-    const words = recordedText.split(" ");
-    const chunkSize = 20;
-    const newSegments = [];
-    let currentTime = 0;
-    for (let i = 0; i < words.length; i += chunkSize) {
-      const chunkText = words.slice(i, i + chunkSize).join(" ");
-      const dur = chunkText.length * 0.05; // Ước lượng thời gian
-      newSegments.push({
-        id: i.toString(),
-        speakerId: "SPEAKER_00",
-        start: currentTime,
-        end: currentTime + dur,
-        text: chunkText
-      });
-      currentTime += dur;
-    }
+    
+    // [SỬA LỖI] Thay vì chia theo số từ (word count), ta chia theo dòng (newline)
+    // Logic này tôn trọng việc bạn ngắt nghỉ lúc ghi âm
+    const lines = recordedText.split("\n").filter(line => line.trim() !== "");
+    
+    const newSegments = lines.map((line, index) => {
+        // Ước lượng thời gian (giả lập): mỗi câu khoảng 3-5 giây
+        // Vì Web Speech API không trả về thời gian thực của từng câu
+        const start = index * 5;
+        const end = start + 5;
+        
+        // Làm sạch text: Xóa dấu gạch đầu dòng "- " nếu có
+        const cleanText = line.trim().replace(/^- /, "");
+
+        return {
+            id: index.toString(),
+            speakerId: "SPEAKER_00", // Mặc định là 1 người
+            start: start,
+            end: end,
+            text: cleanText
+        };
+    });
 
     const res = await fetch(recordedAudioUrl);
     const blob = await res.blob();
@@ -174,15 +179,12 @@ export default function Page() {
       id: `rec-${Date.now()}`,
       title: `Ghi âm trực tiếp ${new Date().toLocaleTimeString()}`,
       createdAt: Date.now(),
-      duration: currentTime,
+      duration: newSegments.length * 5, // Tổng thời gian ước lượng
       audioBlob: blob,
-      segments: newSegments,
+      segments: newSegments, // [QUAN TRỌNG] Dùng segments đã chia theo dòng
       summary: finalSummary,
       speakers: [{ id: "SPEAKER_00", name: "Tôi (Ghi âm)", color: "bg-blue-50 text-blue-700 border-blue-200" }],
       
-      // [SỬA LẠI Ở ĐÂY]
-      // Vì ghi âm trực tiếp đã có text ngay lập tức (từ Web Speech API)
-      // Nên trạng thái là 'transcribed' (Đã có biên bản) luôn.
       status: 'completed', 
       isDeleted: false,
     };
@@ -192,7 +194,7 @@ export default function Page() {
     // Chuyển thẳng vào màn hình Editor để sửa luôn
     handleViewDetail(newMeeting); 
   };
-
+  
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
       <PollingManager onUpdate={triggerRefresh} />

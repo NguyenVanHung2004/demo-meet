@@ -1,32 +1,48 @@
 // src/hooks/useSpeechRecognition.ts
 import { useState, useEffect, useRef } from "react";
 
+const KEYWORD_CORRECTIONS: Record<string, string> = {
+  "ran pót": "RunPod", "run pót": "RunPod", "ran pod": "RunPod",
+  "ai": "AI", "ây ai": "AI",
+  "chat gpt": "ChatGPT", "chát gpt": "ChatGPT",
+  "api": "API", "ây pi ai": "API",
+  "next js": "Next.js", "nếch ji ét": "Next.js",
+  "ri át": "React",
+  "gemini": "Gemini", "gê mi ni": "Gemini"
+};
+
+const normalizeText = (text: string): string => {
+  let normalized = text.toLowerCase();
+  Object.keys(KEYWORD_CORRECTIONS).forEach((key) => {
+    const regex = new RegExp(`\\b${key}\\b`, "gi");
+    normalized = normalized.replace(regex, KEYWORD_CORRECTIONS[key]);
+  });
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
 export default function useSpeechRecognition() {
   const [text, setText] = useState("");
   const [interimText, setInterimText] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [hasSupport, setHasSupport] = useState(true);
 
+  const isListeningRef = useRef(false);
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const onSegmentEndRef = useRef<((segment: string) => void) | null>(null);
-
-  // Ref lưu text mới nhất
   const textRef = useRef("");
-  // [NEW] Ref lưu mốc thời gian lần cuối tóm tắt (hoặc lúc bắt đầu)
-  const lastSummaryTimeRef = useRef<number>(0);
+  const isLineBreakPending = useRef(false);
 
-  useEffect(() => {
-    textRef.current = text;
-  }, [text]);
+  // [MỚI] Bộ đệm để tích trữ các câu ngắn
+  const pendingBufferRef = useRef(""); 
+
+  useEffect(() => { textRef.current = text; }, [text]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        setHasSupport(false);
-        return;
-      }
+      // @ts-ignore
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) { setHasSupport(false); return; }
       setHasSupport(true);
 
       const recognition = new SpeechRecognition();
@@ -36,94 +52,96 @@ export default function useSpeechRecognition() {
 
       recognition.onresult = (event: any) => {
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        isLineBreakPending.current = false; 
 
         let currentInterim = "";
-        
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
-            const finalText = event.results[i][0].transcript.trim();
-            setText((prev) => prev + " " + finalText);
+            const raw = event.results[i][0].transcript.trim();
+            const clean = normalizeText(raw);
+            
+            setText((prev) => {
+                if (prev.endsWith("\n") || prev === "") return prev + "- " + clean;
+                const prefix = prev.trim().length > 0 ? " " : "- "; 
+                return prev + prefix + clean;
+            });
           } else {
             currentInterim += event.results[i][0].transcript;
           }
         }
         setInterimText(currentInterim);
 
-        // Reset timer im lặng (1s)
         silenceTimerRef.current = setTimeout(() => {
            handleSilenceDetected(); 
-        }, 1000); 
+        }, 1500); 
       };
       
       recognition.onerror = (event: any) => { 
-          if (event.error === 'aborted') return;
-          if (event.error === 'no-speech') {
-              console.warn("⚠️ Phát hiện im lặng (no-speech), sẽ tự bật lại...");
-              return; 
+          if (event.error !== 'no-speech' && event.error !== 'aborted') {
+              console.warn("Mic warning:", event.error); 
           }
-          console.error("Speech Recognition Error:", event.error); 
       };
-
+      
       recognition.onend = () => { 
-          setInterimText(""); 
-          setTimeout(() => {
-              if (isListening) {
-                  try {
-                    recognition.start(); 
-                  } catch (e) {
-                    console.log("Re-start error ignored:", e);
-                  }
-              }
-          }, 200); 
+          if (isListeningRef.current) {
+              try { recognition.start(); } catch (e) {}
+          }
       };
 
       recognitionRef.current = recognition;
     }
-  }, [isListening]);
+    
+    return () => {
+        if (recognitionRef.current) recognitionRef.current.abort();
+    };
+  }, []); 
 
-  // [MODIFIED] Logic xử lý im lặng + Check 20s
+  // [LOGIC CẢI TIẾN]
   const handleSilenceDetected = () => {
     const currentText = textRef.current.trim();
-    if (!currentText) return;
+    if (!currentText || isLineBreakPending.current) return;
 
-    // 1. Kiểm tra thời gian trôi qua từ lần tóm tắt cuối
-    const now = Date.now();
-    const timeDiff = now - lastSummaryTimeRef.current;
-    
-    // Nếu chưa đủ 20 giây: Chỉ thêm dấu chấm (nếu chưa có) để câu văn đẹp, NHƯNG KHÔNG CẮT ĐOẠN
-    if (timeDiff < 20000) {
-        setText(prev => {
-            const trimmed = prev.trim();
-            // Nếu đã kết thúc bằng dấu chấm hoặc xuống dòng thì thôi, không thì thêm chấm
-            if (trimmed.endsWith('.') || trimmed.endsWith('\n\n')) return trimmed;
-            return trimmed + "."; 
-        });
-        return; // THOÁT HÀM, chờ lần im lặng tiếp theo
-    }
-
-    // --- Dưới đây là logic khi ĐÃ ĐỦ 20 giây ---
-
-    // 2. Kiểm tra xem đoạn này đã từng xử lý chưa (tránh lặp)
-    if (currentText.endsWith("\n\n")) return;
-
-    // 3. Cắt segment cuối cùng (tính từ dấu xuống dòng gần nhất)
-    const lastNewLineIndex = currentText.lastIndexOf("\n\n");
-    // Lấy toàn bộ text từ lần cắt trước đến nay
-    const newSegment = currentText.substring(lastNewLineIndex + 1).trim();
-
-    // 4. Gọi callback summary
-    if (newSegment.length > 10 && onSegmentEndRef.current) {
-         onSegmentEndRef.current(newSegment);
-         
-         // [NEW] Cập nhật lại mốc thời gian sau khi đã gửi tóm tắt thành công
-         lastSummaryTimeRef.current = Date.now();
-    }
-
-    // 5. Update UI: Thêm xuống dòng để đánh dấu hết 1 đoạn (block)
+    // 1. Cập nhật UI (Chấm câu & Xuống dòng)
     setText(prev => {
-        const trimmed = prev.trim();
-        return trimmed.endsWith('.') ? trimmed + "\n\n" : trimmed + ".\n\n";
+        let trimmed = prev.trim();
+        if (!/[.!?]$/.test(trimmed) && !trimmed.endsWith('\n')) {
+            trimmed += ".";
+        }
+        return trimmed + "\n";
     });
+    isLineBreakPending.current = true;
+
+    // 2. Logic Tóm tắt thông minh (Dùng Buffer)
+    const segments = currentText.split("\n");
+    // Lấy đoạn vừa mới nói xong (chưa có trong buffer)
+    let lastSegment = segments[segments.length - 1]; 
+    
+    // Làm sạch: bỏ dấu gạch đầu dòng
+    lastSegment = lastSegment.replace(/^- /, "").trim();
+
+    if (!lastSegment) return;
+
+    // CỘNG DỒN VÀO BUFFER
+    // Nếu buffer đang có dữ liệu, thêm dấu cách trước khi nối
+    if (pendingBufferRef.current) {
+        pendingBufferRef.current += " " + lastSegment;
+    } else {
+        pendingBufferRef.current = lastSegment;
+    }
+
+    console.log("Current Buffer:", pendingBufferRef.current);
+
+    // 3. Kiểm tra độ dài Buffer
+    // Nếu tổng tích lũy > 50 ký tự thì mới gửi đi tóm tắt
+    if (pendingBufferRef.current.length > 30 && onSegmentEndRef.current) {
+         console.log("🚀 Buffer đủ lớn, gửi đi tóm tắt...");
+         onSegmentEndRef.current(pendingBufferRef.current);
+         
+         // Gửi xong thì Reset buffer sạch sẽ
+         pendingBufferRef.current = "";
+    } else {
+        console.log("⏳ Buffer còn ngắn, chờ câu tiếp theo...");
+    }
   };
 
   const startListening = (onSegmentEnd?: (seg: string) => void) => {
@@ -132,22 +150,36 @@ export default function useSpeechRecognition() {
       setInterimText("");
       if (onSegmentEnd) onSegmentEndRef.current = onSegmentEnd;
       
-      // [NEW] Reset mốc thời gian khi bắt đầu nghe
-      lastSummaryTimeRef.current = Date.now();
+      isListeningRef.current = true;
+      setIsListening(true);
       
       recognitionRef.current.start();
-      setIsListening(true);
     } catch (e) {}
+  };
+
+  // [MỚI] Hàm xóa sạch văn bản thủ công
+  const resetTranscript = () => {
+      setText("");
+      setInterimText("");
+      pendingBufferRef.current = "";
   };
 
   const stopListening = () => {
     if (!recognitionRef.current) return;
     try {
-      recognitionRef.current.stop();
+      isListeningRef.current = false;
       setIsListening(false);
+      
+      // [QUAN TRỌNG] Khi bấm dừng, nếu trong buffer còn sót chữ nào (dù ngắn) cũng gửi nốt
+      if (pendingBufferRef.current && pendingBufferRef.current.length > 0 && onSegmentEndRef.current) {
+          onSegmentEndRef.current(pendingBufferRef.current);
+          pendingBufferRef.current = "";
+      }
+
+      recognitionRef.current.stop();
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     } catch (e) {}
   };
 
-  return { text, interimText, isListening, startListening, stopListening, hasSupport };
+  return { text, interimText, isListening, startListening, stopListening, hasSupport,resetTranscript };
 }
