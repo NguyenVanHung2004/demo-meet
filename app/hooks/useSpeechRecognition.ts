@@ -32,9 +32,10 @@ export default function useSpeechRecognition() {
   const onSegmentEndRef = useRef<((segment: string) => void) | null>(null);
   const textRef = useRef("");
   const isLineBreakPending = useRef(false);
-
-  // [MỚI] Bộ đệm để tích trữ các câu ngắn
   const pendingBufferRef = useRef(""); 
+
+  // [MỚI] Ref này để cứu chữ khi API tự ngắt
+  const finalInterimRef = useRef(""); 
 
   useEffect(() => { textRef.current = text; }, [text]);
 
@@ -65,11 +66,17 @@ export default function useSpeechRecognition() {
                 const prefix = prev.trim().length > 0 ? " " : "- "; 
                 return prev + prefix + clean;
             });
+            
+            // [QUAN TRỌNG] Đã chốt câu thì xóa bộ nhớ tạm
+            finalInterimRef.current = "";
           } else {
             currentInterim += event.results[i][0].transcript;
           }
         }
         setInterimText(currentInterim);
+        
+        // [QUAN TRỌNG] Lưu liên tục để phòng hờ bị ngắt đột ngột
+        finalInterimRef.current = currentInterim;
 
         silenceTimerRef.current = setTimeout(() => {
            handleSilenceDetected(); 
@@ -82,9 +89,25 @@ export default function useSpeechRecognition() {
           }
       };
       
+      // [LOGIC CỨU CHỮ MỚI]
       recognition.onend = () => { 
+          // Nếu còn chữ sót lại trong Ref mà chưa kịp thành Final
+          if (finalInterimRef.current.trim()) {
+              const savedText = normalizeText(finalInterimRef.current);
+              setText((prev) => {
+                  if (prev.endsWith("\n") || prev === "") return prev + "- " + savedText;
+                  // Nối tiếp vào câu đang nói dở
+                  return prev + " " + savedText; 
+              });
+              finalInterimRef.current = ""; 
+              setInterimText("");
+          }
+
           if (isListeningRef.current) {
-              try { recognition.start(); } catch (e) {}
+              try { 
+                  console.log("♻️ Restarting Web Speech API...");
+                  recognition.start(); 
+              } catch (e) {}
           }
       };
 
@@ -96,12 +119,11 @@ export default function useSpeechRecognition() {
     };
   }, []); 
 
-  // [LOGIC CẢI TIẾN]
   const handleSilenceDetected = () => {
+    // ... (Giữ nguyên logic cũ của bạn) ...
     const currentText = textRef.current.trim();
     if (!currentText || isLineBreakPending.current) return;
 
-    // 1. Cập nhật UI (Chấm câu & Xuống dòng)
     setText(prev => {
         let trimmed = prev.trim();
         if (!/[.!?]$/.test(trimmed) && !trimmed.endsWith('\n')) {
@@ -111,36 +133,21 @@ export default function useSpeechRecognition() {
     });
     isLineBreakPending.current = true;
 
-    // 2. Logic Tóm tắt thông minh (Dùng Buffer)
     const segments = currentText.split("\n");
-    // Lấy đoạn vừa mới nói xong (chưa có trong buffer)
     let lastSegment = segments[segments.length - 1]; 
-    
-    // Làm sạch: bỏ dấu gạch đầu dòng
     lastSegment = lastSegment.replace(/^- /, "").trim();
 
     if (!lastSegment) return;
 
-    // CỘNG DỒN VÀO BUFFER
-    // Nếu buffer đang có dữ liệu, thêm dấu cách trước khi nối
     if (pendingBufferRef.current) {
         pendingBufferRef.current += " " + lastSegment;
     } else {
         pendingBufferRef.current = lastSegment;
     }
 
-    console.log("Current Buffer:", pendingBufferRef.current);
-
-    // 3. Kiểm tra độ dài Buffer
-    // Nếu tổng tích lũy > 50 ký tự thì mới gửi đi tóm tắt
     if (pendingBufferRef.current.length > 30 && onSegmentEndRef.current) {
-         console.log("🚀 Buffer đủ lớn, gửi đi tóm tắt...");
          onSegmentEndRef.current(pendingBufferRef.current);
-         
-         // Gửi xong thì Reset buffer sạch sẽ
          pendingBufferRef.current = "";
-    } else {
-        console.log("⏳ Buffer còn ngắn, chờ câu tiếp theo...");
     }
   };
 
@@ -148,6 +155,9 @@ export default function useSpeechRecognition() {
     if (!recognitionRef.current) return;
     try {
       setInterimText("");
+      // [QUAN TRỌNG] Reset biến cứu chữ khi bắt đầu phiên mới
+      finalInterimRef.current = ""; 
+      
       if (onSegmentEnd) onSegmentEndRef.current = onSegmentEnd;
       
       isListeningRef.current = true;
@@ -157,11 +167,11 @@ export default function useSpeechRecognition() {
     } catch (e) {}
   };
 
-  // [MỚI] Hàm xóa sạch văn bản thủ công
   const resetTranscript = () => {
       setText("");
       setInterimText("");
       pendingBufferRef.current = "";
+      finalInterimRef.current = "";
   };
 
   const stopListening = () => {
@@ -170,7 +180,6 @@ export default function useSpeechRecognition() {
       isListeningRef.current = false;
       setIsListening(false);
       
-      // [QUAN TRỌNG] Khi bấm dừng, nếu trong buffer còn sót chữ nào (dù ngắn) cũng gửi nốt
       if (pendingBufferRef.current && pendingBufferRef.current.length > 0 && onSegmentEndRef.current) {
           onSegmentEndRef.current(pendingBufferRef.current);
           pendingBufferRef.current = "";
@@ -181,5 +190,5 @@ export default function useSpeechRecognition() {
     } catch (e) {}
   };
 
-  return { text, interimText, isListening, startListening, stopListening, hasSupport,resetTranscript };
+  return { text, interimText, isListening, startListening, stopListening, hasSupport, resetTranscript };
 }

@@ -29,6 +29,7 @@ export async function POST(req: Request) {
          - Sắp xếp lại trình tự thời gian cho hợp lý.
       
       YÊU CẦU ĐẦU RA BẮT BUỘC:
+      - Phần ngữ cảnh chỉ là để tham khảo để bạn hiểu thêm, không cho vào output.
       - Chỉ ghi ra văn bản được tóm tắt ngắn gọn (1-2 câu).
       - Tuyệt đối KHÔNG có output gì thêm (không in ra các bước tư duy, không giải thích).
       - Giữ nguyên thuật ngữ chuyên ngành (Tiếng Anh, tên riêng).
@@ -42,22 +43,43 @@ export async function POST(req: Request) {
       -----
       `;
     } else {
-      // Prompt cho tóm tắt tổng hợp (Full Summary) - Giữ nguyên
+      // [PROMPT NÂNG CẤP] Cho tóm tắt tổng hợp (Full Summary)
       prompt = `
-      Bạn là Thư Ký Cấp Cao. Hãy tóm tắt biên bản cuộc họp sau đây một cách chuyên nghiệp.
+      Bạn là Thư Ký Cấp Cao chuyên nghiệp. Nhiệm vụ của bạn là tổng hợp biên bản cuộc họp từ văn bản thô (transcript) được cung cấp dưới đây.
       
-      Dữ liệu đầu vào:
+      MỤC TIÊU: Tạo ra một báo cáo súc tích, dễ đọc, tập trung vào kết quả thực tế, loại bỏ hoàn toàn các câu xã giao thừa thãi.
+
+      DỮ LIỆU ĐẦU VÀO:
       "${text}"
 
-      Yêu cầu định dạng Markdown:
+      YÊU CẦU ĐỊNH DẠNG ĐẦU RA (Markdown):
+      
       # BIÊN BẢN TÓM TẮT CUỘC HỌP
+      
       ## 1. TỔNG QUAN
-      (Mục đích và không khí cuộc họp)
-      ## 2. NỘI DUNG CHI TIẾT
-      (Trình bày theo từng người nói hoặc chủ đề. Nêu rõ ai nói gì)
-      ## 3. KẾT LUẬN & HÀNH ĐỘNG
+      - **Mục đích cuộc họp:** (Tóm tắt trong 1 câu)
+      
+      ## 2. CÁC ĐIỂM CHÍNH
+      *(Tóm tắt theo chủ đề, không tường thuật theo trình tự thời gian. Dùng gạch đầu dòng)*
+      - **[Chủ đề A]:** Các ý chính đã thảo luận...
+      - **[Chủ đề B]:** Các ý chính đã thảo luận...
+      
+      ## 3. CHI TIẾT THẢO LUẬN
+      *(Chỉ ghi lại những tranh luận quan trọng hoặc ý kiến đắt giá)*
+      - 🗣️ **[Tên/Vai trò]:** [Quan điểm chính]
+      
+      ## 4. KẾT LUẬN & HÀNH ĐỘNG TIẾP THEO
+       **Các quyết định đã chốt:**
+         - [Quyết định 1]
+         - [Quyết định 2]
+         
+       **Hành động cần làm (Action Items):**
+         - [ ] **Ai làm?** - [Làm việc gì?] - [Deadline nếu có]
 
-      Lưu ý: Sử dụng 100% Tiếng Việt, giữ thuật ngữ chuyên ngành.
+      LƯU Ý QUAN TRỌNG:
+      - Sử dụng 100% Tiếng Việt chuẩn mực báo cáo.
+      - Giữ nguyên thuật ngữ chuyên ngành (Tiếng Anh, tên riêng, mã dự án).
+      - Trình bày thoáng, dễ nhìn (sử dụng Bold, Bullet points).
       `;
     }
 

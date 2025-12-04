@@ -77,28 +77,56 @@ export const requestSegmentSummary = async (text: string, previousSummary: strin
 
 // --- HÀM 3: TÓM TẮT TỔNG HỢP (Text -> Summary) ---
 // [GIỮ NGUYÊN] Dùng RunPod (Qwen) để xử lý tác vụ nặng nền tảng
+// export const requestSummary = async (text: string): Promise<string> => {
+//     try {
+//         console.log("📝 Gửi yêu cầu tóm tắt Full sang RunPod...");
+//         const response = await fetch(RUNPOD_URL_ASYNC, {
+//             method: 'POST',
+//             headers: {
+//               'Content-Type': 'application/json',
+//               'Authorization': `Bearer ${RUNPOD_API_KEY}`
+//             },
+//             body: JSON.stringify({
+//               input: {
+//                 action: "summarize", // Gọi action tóm tắt của Qwen trên RunPod
+//                 text: text
+//               }
+//             })
+//         });
+        
+//         const data = await response.json();
+//         // Trả về Job ID để PollingManager theo dõi
+//         if (data.id) return data.id; 
+        
+//         throw new Error("Không lấy được Job ID tóm tắt.");
+  
+//     } catch (e) {
+//         console.error("Lỗi Full Summary:", e);
+//         throw e;
+//     }
+// };
+
+// ✅ MỚI: Gọi Gemini trả về Text luôn
 export const requestSummary = async (text: string): Promise<string> => {
     try {
-        console.log("📝 Gửi yêu cầu tóm tắt Full sang RunPod...");
-        const response = await fetch(RUNPOD_URL_ASYNC, {
+        console.log("📝 Gửi yêu cầu tóm tắt Full sang Gemini...");
+        
+        const response = await fetch('/api/gemini', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${RUNPOD_API_KEY}`
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              input: {
-                action: "summarize", // Gọi action tóm tắt của Qwen trên RunPod
-                text: text
-              }
+              text: text,
+              mode: "full" // Báo hiệu tóm tắt full
             })
         });
         
         const data = await response.json();
-        // Trả về Job ID để PollingManager theo dõi
-        if (data.id) return data.id; 
         
-        throw new Error("Không lấy được Job ID tóm tắt.");
+        if (data.summary) {
+            return data.summary; // Trả về nội dung tóm tắt ngay
+        }
+        
+        throw new Error("Gemini không trả về kết quả.");
   
     } catch (e) {
         console.error("Lỗi Full Summary:", e);

@@ -12,6 +12,8 @@ import { parseTranscriptFile } from "./lib/parser";
 import { RAW_TRANSCRIPT_FILE } from "./lib/mockData";
 import { uploadAudioFile } from "./lib/api"; 
 import { useGlobalUI } from "./context/GlobalUIProvider";
+import { requestSummary } from "./lib/api"; // Import hàm gọi Gemini
+import { updateMeetingProcess } from "./lib/db"; // Import hàm update DB
 
 export type AppState = 'DASHBOARD' | 'PROCESSING' | 'EDITOR' | 'LIVE_RECORDING' | 'MEETING_DETAIL';
 
@@ -195,6 +197,34 @@ export default function Page() {
     handleViewDetail(newMeeting); 
   };
   
+    // ✅ [MỚI] Hàm xử lý tóm tắt chạy ngầm (Fire-and-Forget)
+  const handleBackgroundSummarize = async (meetingId: string, transcriptText: string) => {
+      // 1. Cập nhật trạng thái "Đang tóm tắt" ngay lập tức để Dashboard hiện icon xoay
+      await updateMeetingProcess(meetingId, { status: 'summarizing' });
+      triggerRefresh(); 
+      
+      // 2. Chạy bất đồng bộ (KHÔNG await ở đây để không chặn UI)
+      requestSummary(transcriptText)
+        .then(async (summary) => {
+            // Khi xong -> Lưu vào DB
+            await updateMeetingProcess(meetingId, {
+                status: 'completed',
+                summary: summary
+            });
+            toast.success(`Đã tóm tắt xong cuộc họp: ${meetingId.split('-')[1] || '...'}`);
+            triggerRefresh(); // Reload Dashboard
+        })
+        .catch(async (error) => {
+            // Nếu lỗi
+            console.error("Background Summary Error:", error);
+            await updateMeetingProcess(meetingId, {
+                status: 'failed',
+                errorMessage: error.message
+            });
+            toast.error("Lỗi tóm tắt ngầm: " + error.message);
+            triggerRefresh();
+        });
+  };
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
       <PollingManager onUpdate={triggerRefresh} />
@@ -237,6 +267,7 @@ export default function Page() {
           audioSrc={audioUrl} 
           initialData={currentMeeting} 
           onBack={handleBackFromEditor}
+          onSummarize={handleBackgroundSummarize}
         />
       )}
     </main>

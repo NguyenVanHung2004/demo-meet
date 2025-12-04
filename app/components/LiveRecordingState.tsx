@@ -243,15 +243,29 @@ export default function LiveRecordingState({
                     <Trash2 className="w-4 h-4" />
                   </button>
                </div>
-               <div className="flex-1 overflow-y-auto p-4 space-y-2 font-mono text-sm leading-relaxed text-slate-700">
-                  {text.split('\n').map((line, idx) => (
-                      <p key={idx} className="min-h-[1.5em]">{line}</p>
-                  ))}
-                  {/* Interim Text */}
-                  <span className="text-indigo-500 italic">{interimText}</span>
-                  {/* Con trỏ nhấp nháy */}
-                  {isListening && <span className="inline-block w-1.5 h-4 bg-indigo-500 ml-1 align-middle animate-pulse"></span>}
-                  <div ref={transcriptEndRef} />
+               <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans text-sm">
+                {/* 1. Hiển thị văn bản chính thức (Màu đen) */}
+                {text.split("\n").map((line, idx) => line.trim() && (
+                    <div key={idx} className="flex gap-3 animate-in fade-in slide-in-from-bottom-2">
+                        <div className="bg-slate-50 p-3 rounded-2xl rounded-tl-none border border-slate-100 max-w-[85%]">
+                            <p className="text-slate-800 leading-relaxed">{line}</p>
+                        </div>
+                    </div>
+                ))}
+
+                {/* 2. Hiển thị chữ xám Interim (Style đẹp như Google) */}
+                {interimText && (
+                    <div className="flex gap-3 opacity-75">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 animate-pulse shrink-0 flex items-center justify-center">
+                            <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                        </div>
+                        <div className="bg-white p-3 rounded-2xl border border-dashed border-slate-300 shadow-sm max-w-[85%]">
+                            <p className="text-slate-500 italic font-medium">
+                              {interimText} ...
+                            </p>
+                        </div>
+                    </div>
+                )}
                </div>
             </div>
         </div>

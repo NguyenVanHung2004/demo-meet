@@ -14,11 +14,13 @@ import { useGlobalUI } from "../context/GlobalUIProvider";
 export default function EditorState({ 
   audioSrc, 
   initialData, 
-  onBack 
+  onBack,
+  onSummarize
 }: { 
   audioSrc: string, 
   initialData: Meeting, 
-  onBack: () => void 
+  onBack: () => void,
+  onSummarize: (id: string, text: string) => void // Type cho prop mới
 }) {
   // --- STATE ---
   const [showIntroModal, setShowIntroModal] = useState(true);
@@ -240,28 +242,22 @@ export default function EditorState({
     });
   };
 
-  // --- LOGIC SUMMARY & EXPORT ---
-  const handleSummarize = async () => {
-    if (initialData.status === 'summarizing') {
-      toast.info("Đang tóm tắt rồi, vui lòng đợi...");
-      return;
-    }
-    try {
-      const fullTranscript = segments.map(seg => {
+  // ✅ [SỬA] Hàm xử lý nút bấm
+  const handleSummarize = () => {
+    // 1. Chuẩn bị dữ liệu Text
+    const fullTranscript = segments.map(seg => {
         const spkName = speakers.find(s => s.id === seg.speakerId)?.name || seg.speakerId;
         return `[${spkName}]: ${seg.text}`;
-      }).join("\n");
+    }).join("\n");
 
-      const jobId = await requestSummary(fullTranscript);
-      await updateMeetingProcess(initialData.id, {
-        status: 'summarizing',
-        jobId: jobId
-      });
-      toast.info("Đã gửi yêu cầu tóm tắt! Hệ thống sẽ xử lý ngầm.");
-      onBack(); 
-    } catch (error) {
-      toast.error("Lỗi khi gửi tóm tắt: " + error);
-    }
+    // 2. Giao việc cho Page chạy ngầm
+    onSummarize(initialData.id, fullTranscript);
+    
+    // 3. Thông báo nhẹ
+    toast.info("Đang xử lý ngầm... Bạn có thể làm việc khác.");
+
+    // 4. THOÁT RA DASHBOARD LUÔN (Không cần chờ)
+    onBack(); 
   };
 
   const handleSaveSummary = async () => {
@@ -400,7 +396,7 @@ export default function EditorState({
             <FileText className="w-5 h-5" /> Xem bản đầy đủ
           </button>
           <button onClick={handleSummarize} disabled={initialData.status === 'summarizing'} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-200">
-            {isSummarizing ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Sparkles className="w-5 h-5" />}
+        <Sparkles className="w-5 h-5" />
             {initialData.status === 'summarizing' ? "Đang xử lý ngầm..." : "Gửi tóm tắt AI"}
           </button>
         </div>
