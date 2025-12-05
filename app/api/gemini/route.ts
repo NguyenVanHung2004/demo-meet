@@ -17,25 +17,26 @@ export async function POST(req: Request) {
 
     let prompt = "";
     
-    if (mode === "segment") {
-      // [PROMPT MỚI CỦA BẠN] + Kết hợp Context
+     if (mode === "segment") {
+      // [PROMPT NÂNG CẤP] Chống lặp ý + Tối ưu cho hội thoại
       prompt = `
-      Bạn là chuyên gia phân tích hội thoại. Hãy thực hiện các bước sau trong tư duy (không in ra):
-      
-      1. Đọc phần "NGỮ CẢNH" (nếu có) để nắm bắt mạch câu chuyện và các đối tượng đã được nhắc đến.
-      2. Phân tích "VĂN BẢN MỚI":
-         - Xác định các thực thể: Ai? Ở đâu? Thời gian nào? Làm gì?
-         - Loại bỏ thông tin nhiễu (than vãn, cười đùa, chi tiết thừa, lặp từ).
-         - Sắp xếp lại trình tự thời gian cho hợp lý.
-      
-      YÊU CẦU ĐẦU RA BẮT BUỘC:
-      - Phần ngữ cảnh chỉ là để tham khảo để bạn hiểu thêm, không cho vào output.
-      - Chỉ ghi ra văn bản được tóm tắt ngắn gọn (1-2 câu).
-      - Tuyệt đối KHÔNG có output gì thêm (không in ra các bước tư duy, không giải thích).
-      - Giữ nguyên thuật ngữ chuyên ngành (Tiếng Anh, tên riêng).
-      
+      Bạn là chuyên gia ghi chép biên bản cuộc họp theo thời gian thực (Live-taker).
+      Nhiệm vụ: Tóm tắt đoạn hội thoại mới nhất ("VĂN BẢN MỚI") để nối tiếp vào biên bản ("NGỮ CẢNH").
+
+      QUY TRÌNH TƯ DUY (Không in ra):
+      1. So sánh "VĂN BẢN MỚI" với "NGỮ CẢNH" xem có thông tin gì thực sự mới không.
+      2. Nếu "VĂN BẢN MỚI" chỉ là lặp lại ý cũ, lời ậm ừ, hoặc các câu đệm vô nghĩa -> Bỏ qua.
+      3. Nếu có ý mới -> Viết lại súc tích, ngắn gọn nhất có thể.
+
+      YÊU CẦU ĐẦU RA (BẮT BUỘC):
+      - Tuyệt đối KHÔNG nhắc lại những gì đã có trong "NGỮ CẢNH".
+      - Chỉ xuất ra thông tin mới (Incremental Update).
+      - Nếu đoạn văn bản vô nghĩa hoặc lặp hoàn toàn -> Trả về rỗng hoặc câu cực ngắn.
+      - Không dùng các từ nối rườm rà như "Tiếp theo", "Sau đó", "Ông ấy nói rằng". Đi thẳng vào nội dung.
+      - Giữ nguyên thuật ngữ chuyên ngành.
+
       -----
-      NGỮ CẢNH (Đã diễn ra trước đó):
+      NGỮ CẢNH (Những gì đã diễn ra trước đó):
       "${previousSummary || "Chưa có thông tin."}"
       
       VĂN BẢN MỚI (Cần xử lý):

@@ -103,7 +103,7 @@ export default function DashboardState({
   return (
     <div className="flex h-full">
       {/* SIDEBAR */}
-      <div className="w-64 bg-slate-900 text-slate-300 p-6 flex flex-col gap-8 hidden md:flex shrink-0">
+      <div className="w-64 bg-slate-900 text-slate-300 p-6 flex flex-col gap-8 md:flex shrink-0">
          <div className="text-2xl font-bold text-white flex items-center gap-2">
           <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">AI</div>
           MeetNote
