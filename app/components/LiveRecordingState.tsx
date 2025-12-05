@@ -101,7 +101,7 @@ export default function LiveRecordingState({
       silenceTimerRef.current = setTimeout(() => {
           console.log("⏳ Im lặng 5s -> Tóm tắt");
           flushBuffer();
-      }, 3000);
+      }, 5000);
   };
 
   // Hook Deepgram (Truyền callback xử lý vào)
