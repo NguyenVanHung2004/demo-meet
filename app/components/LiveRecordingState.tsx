@@ -45,7 +45,7 @@ export default function LiveRecordingState({
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const wordCountRef = useRef(0);
   
-  // [MỚI] Ref theo dõi trạng thái Interim để "Snooze" timer
+  // [MỚI] Ref theo dõi trạng thái Interim để "Snooze" timer 
   const isInterimActiveRef = useRef(false);
 
   // 1. Hàm gọi API tóm tắt
