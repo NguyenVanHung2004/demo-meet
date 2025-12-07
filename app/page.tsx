@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import DashboardState from "./components/DashboardState";
 import EditorState from "./components/EditorState";
-import LiveRecordingState from "./components/LiveRecordingState";
+import LiveModeSwitcher from "./components/LiveModeSwitcher";
 import MeetingDetailState from "./components/MeetingDetailState"; 
 import PollingManager from "./components/PollingManager";
 
@@ -247,7 +247,7 @@ export default function Page() {
       )}
 
       {currentState === 'LIVE_RECORDING' && (
-        <LiveRecordingState 
+        <LiveModeSwitcher 
           onFinish={handleFinishLive} 
           onBack={() => setCurrentState('DASHBOARD')} 
         />
