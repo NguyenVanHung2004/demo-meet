@@ -1,19 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { io, Socket } from "socket.io-client";
 
-// Định nghĩa kiểu dữ liệu từ Server trả về
+// Định nghĩa dữ liệu server trả về
 type TranscriptData = {
   text: string;
   isFinal: boolean;
   speaker: number | string;
 };
 
-// Callback tóm tắt
+// Callback bắn text ra ngoài để tóm tắt
 type OnSegmentEndCallback = (text: string) => void;
 
 export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
-  const [transcript, setTranscript] = useState("");
-  const [interimText, setInterimText] = useState("");
+  const [transcript, setTranscript] = useState(""); // Text hiển thị
+  const [interimText, setInterimText] = useState(""); // Chữ xám
   const [isListening, setIsListening] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -25,73 +25,74 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingBufferRef = useRef(""); 
 
-  // URL Server Socket.IO (Server bạn chạy port 8080)
+  // URL Server Socket (Đổi thành domain Render nếu đã deploy)
+  // Ví dụ: "https://my-socket-server.onrender.com"
   const SERVER_URL = "https://meeting-socket-server.onrender.com"; 
 
-  // Hàm cắt tóm tắt khi im lặng
+  // Hàm xử lý "Cắt đoạn" khi im lặng
   const handleSilenceDetected = () => {
       const buffer = pendingBufferRef.current.trim();
       
-      // Nếu gom đủ dài (> 30 ký tự) thì cắt đi tóm tắt
+      // Chỉ tóm tắt nếu đoạn văn đủ dài (> 30 ký tự ~ 1 câu hoàn chỉnh)
       if (buffer.length > 30 && onSegmentEnd) {
-          console.log("✂️ Google: Cắt tóm tắt đoạn:", buffer);
+          console.log("✂️ Google: Cắt đoạn tóm tắt:", buffer);
           onSegmentEnd(buffer);
-          pendingBufferRef.current = ""; // Xả buffer
+          pendingBufferRef.current = ""; // Xả buffer sau khi gửi
       }
   };
 
   const resetSilenceTimer = () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      // Im lặng 1.5 giây -> Chốt đoạn văn
-      silenceTimerRef.current = setTimeout(handleSilenceDetected, 1500);
+      // Chờ 2 giây im lặng là chốt đơn (Logic phù hợp với Google trả về cả câu)
+      silenceTimerRef.current = setTimeout(handleSilenceDetected, 2000);
   };
 
   const startListening = async (stream: MediaStream) => {
     try {
+      if (isListening) return;
+      
       setIsListening(true);
       streamRef.current = stream;
       pendingBufferRef.current = "";
 
-      // 1. Kết nối Socket.IO
-      const socket = io(SERVER_URL);
+      // 1. Kết nối Socket.IO (Bắt buộc dùng websocket transport để ổn định)
+      const socket = io(SERVER_URL, { 
+          transports: ["websocket"],
+          reconnection: true,
+      });
       socketRef.current = socket;
 
       socket.on("connect", () => {
-        console.log("🟢 Connected to Google Socket.IO");
+        console.log("🟢 Connected to Google Socket");
         setIsConnected(true);
-        // Báo server bắt đầu nhận diện
         socket.emit("start-google-stream");
         
-        // 2. Mở Mic & Gửi Audio
+        // 2. Gửi Audio
         const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
         mediaRecorder.addEventListener("dataavailable", (event) => {
           if (event.data.size > 0 && socket.connected) {
-            socket.emit("audio-chunk", event.data); // Gửi blob
+            socket.emit("audio-chunk", event.data);
           }
         });
-        mediaRecorder.start(100); // Gửi mỗi 100ms
+        mediaRecorder.start(100); // Gửi 100ms/lần
         mediaRecorderRef.current = mediaRecorder;
       });
 
       socket.on("transcript-data", (data: TranscriptData) => {
-        // Reset timer im lặng mỗi khi có chữ mới
+        // Có tín hiệu chữ về -> Reset timer im lặng
         resetSilenceTimer();
 
         if (data.isFinal) {
-            // Chốt câu
             setInterimText("");
+            // Google đôi khi trả về trùng lặp, logic UI sẽ xử lý hiển thị
+            // Ở đây ta gom text thuần túy
             setTranscript(prev => prev + (prev ? " " : "") + data.text);
             
             // Gom vào buffer chờ tóm tắt
             pendingBufferRef.current += (pendingBufferRef.current ? " " : "") + data.text;
         } else {
-            // Đang nói
             setInterimText(data.text);
         }
-      });
-
-      socket.on("google-error", (err) => {
-          console.error("Server Error:", err);
       });
 
       socket.on("disconnect", () => {
@@ -109,7 +110,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
     setIsListening(false);
     setIsConnected(false);
 
-    // Vét nốt buffer cuối cùng
+    // Vét nốt buffer cuối cùng khi tắt mic
     if (pendingBufferRef.current.length > 0) {
         handleSilenceDetected();
     }
@@ -133,5 +134,13 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
       pendingBufferRef.current = "";
   };
 
-  return { transcript, interimText, isListening, isConnected, startListening, stopListening, resetTranscript };
+  return { 
+    transcript, // Toàn bộ văn bản đã lưu
+    interimText, // Chữ đang chạy
+    isListening, 
+    isConnected, 
+    startListening, 
+    stopListening, 
+    resetTranscript 
+  };
 }
