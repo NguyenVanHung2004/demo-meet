@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Meeting } from "../lib/db";
-import ReactMarkdown from 'react-markdown'; // [MỚI] Import để render tóm tắt
+import ReactMarkdown from 'react-markdown'; 
 import { 
   Play, Pause, ChevronLeft, Edit3, Calendar, 
-  Clock, Download, FileText, Sparkles, User
+  Clock, Download, FileText, Sparkles, User, AlignLeft, Share2
 } from "lucide-react";
 
 export default function MeetingDetailState({ 
@@ -20,10 +20,17 @@ export default function MeetingDetailState({
   onEdit: () => void 
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
-  
-  // [MỚI] State quản lý Tab
   const [activeTab, setActiveTab] = useState<'transcript' | 'summary'>('transcript');
+
+  // --- AUDIO CONTROL ---
+  useEffect(() => {
+    if (audioRef.current) {
+        audioRef.current.load();
+    }
+  }, [audioSrc]);
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -33,9 +40,61 @@ export default function MeetingDetailState({
     }
   };
 
+  const handleTimeUpdate = () => {
+    if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) setDuration(audioRef.current.duration);
+  };
+
+  const jumpToTime = (time: number) => {
+      if (audioRef.current) {
+          audioRef.current.currentTime = time;
+          audioRef.current.play();
+          setIsPlaying(true);
+      }
+  };
+
+  // --- LOGIC XUẤT FILE (MỚI) ---
+  const handleExport = () => {
+    try {
+        // 1. Tạo nội dung file
+        let content = `TIÊU ĐỀ: ${meeting.title}\n`;
+        content += `NGÀY: ${new Date(meeting.createdAt).toLocaleString('vi-VN')}\n`;
+        content += `THỜI LƯỢNG: ${formatDuration(meeting.duration)}\n`;
+        content += `------------------------------------------------\n\n`;
+
+        if (meeting.summary) {
+            content += `[TÓM TẮT AI]\n${meeting.summary}\n\n`;
+            content += `------------------------------------------------\n\n`;
+        }
+
+        content += `[NỘI DUNG CHI TIẾT]\n`;
+        meeting.segments.forEach(seg => {
+            const time = formatTimeCode(seg.start);
+            const speaker = seg.speakerId.replace("SPEAKER_", "Speaker ");
+            content += `[${time}] ${speaker}: ${seg.text}\n`;
+        });
+
+        // 2. Tạo Blob và tải về
+        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${meeting.title.replace(/\s+/g, "_")}_transcript.txt`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (e) {
+        alert("Lỗi khi xuất file");
+    }
+  };
+
+  // --- FORMATTERS ---
   const formatDate = (ts: number) => {
     return new Date(ts).toLocaleDateString("vi-VN", { 
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit'
     });
   };
@@ -43,7 +102,7 @@ export default function MeetingDetailState({
   const formatDuration = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
-    return `${m} phút ${s} giây`;
+    return `${m}p ${s}s`;
   };
 
   const formatTimeCode = (s: number) => {
@@ -52,149 +111,200 @@ export default function MeetingDetailState({
     return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
 
+  // Helper chọn màu Speaker
+  const getSpeakerStyle = (speakerId: string) => {
+      const id = parseInt(speakerId.split('_')[1] || '0');
+      const colors = [
+          'bg-indigo-100 text-indigo-700 ring-indigo-200',
+          'bg-emerald-100 text-emerald-700 ring-emerald-200',
+          'bg-orange-100 text-orange-700 ring-orange-200',
+          'bg-pink-100 text-pink-700 ring-pink-200',
+          'bg-cyan-100 text-cyan-700 ring-cyan-200',
+      ];
+      return colors[id % colors.length];
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">
       
-      {/* HEADER */}
-      <div className="bg-white border-b px-8 py-4 flex items-center justify-between shadow-sm z-10">
-        <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition">
-            <ChevronLeft className="w-6 h-6" />
+      {/* 1. HEADER */}
+      <div className="bg-white border-b px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-sm z-20 shrink-0">
+        <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
+          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition shrink-0">
+            <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
           </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">{meeting.title}</h1>
-            <div className="flex items-center gap-4 text-xs text-slate-500 mt-1">
+          <div className="min-w-0">
+            <h1 className="text-base md:text-xl font-bold text-slate-800 truncate pr-2">{meeting.title}</h1>
+            <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
               <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(meeting.createdAt)}</span>
               <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(meeting.duration)}</span>
             </div>
           </div>
         </div>
 
-        <div className="flex gap-3">
-          <button className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 transition">
-            <Download className="w-4 h-4" /> Xuất file
+        <div className="flex gap-2 shrink-0">
+          <button 
+            onClick={handleExport}
+            className="p-2 md:px-4 md:py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 transition"
+            title="Xuất file TXT"
+          >
+            <Download className="w-4 h-4" /> <span className="hidden md:inline">Xuất file</span>
           </button>
           <button 
             onClick={onEdit}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-md shadow-indigo-200 flex items-center gap-2 transition"
+            className="px-3 py-2 md:px-5 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-md shadow-indigo-200 flex items-center gap-2 transition"
           >
-            <Edit3 className="w-4 h-4" /> Chỉnh sửa
+            <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">Sửa</span>
           </button>
         </div>
       </div>
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+      {/* 2. TABS NAVIGATION (Sticky) - Chỉ hiện trên Mobile */}
+      <div className="md:hidden flex bg-white border-b sticky top-0 z-10 shrink-0">
+        <button 
+          onClick={() => setActiveTab('transcript')}
+          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-all border-b-2 
+            ${activeTab === 'transcript' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+        >
+          <AlignLeft className="w-4 h-4" /> Nội dung
+        </button>
+        <button 
+          onClick={() => setActiveTab('summary')}
+          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-all border-b-2
+            ${activeTab === 'summary' ? 'border-orange-500 text-orange-700 bg-orange-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+        >
+          <Sparkles className="w-4 h-4" /> Tóm tắt
+        </button>
+      </div>
+
+      {/* 3. MAIN CONTENT (Có thể cuộn) */}
+      <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
         
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 lg:px-24">
-          <div className="max-w-4xl mx-auto bg-white min-h-full shadow-sm border rounded-xl overflow-hidden flex flex-col">
-            
-            {/* [MỚI] TABS NAVIGATION */}
-            <div className="flex border-b bg-slate-50 sticky top-0 z-10">
-              <button 
-                onClick={() => setActiveTab('transcript')}
-                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-colors border-b-2 
-                  ${activeTab === 'transcript' ? 'border-indigo-600 text-indigo-700 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
-              >
-                <FileText className="w-4 h-4" /> Nội dung chi tiết
-              </button>
-              <button 
-                onClick={() => setActiveTab('summary')}
-                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-colors border-b-2
-                  ${activeTab === 'summary' ? 'border-indigo-600 text-indigo-700 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
-              >
-                <Sparkles className="w-4 h-4" /> Tóm tắt thông minh
-              </button>
-            </div>
-
-            {/* TAB CONTENT */}
-            <div className="p-8 md:p-12">
-              
-              {/* VIEW 1: TRANSCRIPT */}
-              {activeTab === 'transcript' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  {meeting.segments.map((seg) => {
-                    const speakerName = meeting.speakers.find(s => s.id === seg.speakerId)?.name || seg.speakerId;
-                    const speakerColor = meeting.speakers.find(s => s.id === seg.speakerId)?.color || "text-slate-700";
-                    return (
-                      <div key={seg.id} className="flex gap-4 group">
-                        <div className="w-12 pt-1 shrink-0 text-right">
-                          <span className="text-xs font-mono text-slate-400 block group-hover:text-indigo-500 transition-colors">{formatTimeCode(seg.start)}</span>
-                        </div>
-                        <div>
-                          <div className={`text-xs font-bold mb-1 uppercase tracking-wide ${speakerColor.split(' ')[1] || 'text-slate-800'}`}>
-                            {speakerName}
-                          </div>
-                          <p className="text-slate-700 leading-relaxed text-sm">
-                            {seg.text}
-                          </p>
-                        </div>
+        {/* COLUMN 1: TRANSCRIPT */}
+        <div className={`flex-1 overflow-y-auto bg-white md:border-r scroll-smooth ${activeTab === 'transcript' ? 'block' : 'hidden md:block'}`}>
+            <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 pb-32">
+                {meeting.segments.map((seg, idx) => {
+                  const speakerStyle = getSpeakerStyle(seg.speakerId);
+                  return (
+                    <div key={idx} className="flex gap-3 md:gap-4 group">
+                      {/* Avatar / Time */}
+                      <div className="w-10 md:w-14 shrink-0 flex flex-col items-center pt-1 gap-1">
+                         <div 
+                            onClick={() => jumpToTime(seg.start)}
+                            className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs font-bold ring-2 shadow-sm cursor-pointer hover:scale-105 transition-transform select-none ${speakerStyle}`}
+                            title="Nghe từ đoạn này"
+                         >
+                            {seg.speakerId.split('_')[1] || '00'}
+                         </div>
+                         <span className="text-[10px] text-slate-400 font-mono group-hover:text-indigo-600 cursor-pointer" onClick={() => jumpToTime(seg.start)}>
+                            {formatTimeCode(seg.start)}
+                         </span>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
 
-              {/* VIEW 2: SUMMARY */}
-              {activeTab === 'summary' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  {meeting.summary ? (
-                    <div className="prose prose-indigo max-w-none">
-                      <ReactMarkdown
-                        components={{
-                          h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-indigo-700 mb-6 border-b pb-2" {...props} />,
-                          h2: ({node, ...props}) => <h2 className="text-lg font-bold text-slate-800 mt-8 mb-4 flex items-center gap-2 bg-slate-50 p-2 rounded-lg" {...props} />,
-                          h3: ({node, ...props}) => <h3 className="text-md font-semibold text-slate-700 mt-4 mb-2 ml-1" {...props} />,
-                          ul: ({node, ...props}) => <ul className="list-disc pl-5 space-y-2 mb-4 text-slate-600" {...props} />,
-                          li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
-                          strong: ({node, ...props}) => <strong className="font-bold text-slate-900" {...props} />,
-                          p: ({node, ...props}) => <p className="mb-4 text-slate-600 leading-relaxed text-justify" {...props} />,
-                        }}
-                      >
-                        {meeting.summary}
-                      </ReactMarkdown>
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                                Speaker {seg.speakerId.split('_')[1]}
+                            </span>
+                        </div>
+                        <p className="text-slate-800 leading-relaxed text-sm md:text-base hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors cursor-text">
+                          {seg.text}
+                        </p>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                      <Sparkles className="w-16 h-16 mb-4 opacity-20" />
-                      <p className="text-lg font-medium">Chưa có tóm tắt cho cuộc họp này.</p>
-                      <button onClick={onEdit} className="mt-4 text-indigo-600 hover:underline text-sm">
-                        Chuyển sang chế độ chỉnh sửa để tạo tóm tắt
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
+                  );
+                })}
             </div>
-          </div>
         </div>
 
-        {/* FOOTER AUDIO (Giữ nguyên) */}
-        <div className="absolute bottom-0 left-0 right-0 bg-white border-t p-4 flex items-center gap-4 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-           <button 
-             onClick={togglePlay}
-             className="w-12 h-12 bg-slate-900 text-white rounded-full flex items-center justify-center hover:scale-105 transition"
-           >
-             {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
-           </button>
-           <div className="flex-1">
-             <div className="text-xs font-medium text-slate-500 mb-1 flex justify-between">
-                <span>Đang phát lại bản ghi gốc</span>
-                <span>{formatDuration(meeting.duration)}</span>
-             </div>
-             <audio 
-               ref={audioRef} 
-               src={audioSrc} 
-               controls 
-               className="w-full h-8"
-               onPlay={() => setIsPlaying(true)}
-               onPause={() => setIsPlaying(false)}
-             />
-           </div>
+        {/* COLUMN 2: SUMMARY & METADATA */}
+        <div className={`md:w-[400px] bg-slate-50 flex flex-col shrink-0 ${activeTab === 'summary' ? 'flex flex-1' : 'hidden md:flex'}`}>
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 pb-32">
+                
+                {/* Summary Card */}
+                <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-5">
+                    <h3 className="text-sm font-bold text-orange-800 uppercase tracking-wider flex items-center gap-2 mb-4 pb-2 border-b border-orange-50">
+                        <Sparkles className="w-4 h-4" /> AI Tóm tắt
+                    </h3>
+                    {meeting.summary ? (
+                         <div className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none">
+                            <ReactMarkdown>{meeting.summary}</ReactMarkdown>
+                         </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                            <Sparkles className="w-12 h-12 mb-2 opacity-20" />
+                            <p className="text-sm italic">Chưa có tóm tắt nào.</p>
+                            <button onClick={onEdit} className="mt-3 text-xs text-indigo-600 hover:underline font-medium">Tạo ngay trong Edit</button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Metadata (Desktop Only) */}
+                <div className="bg-white rounded-xl shadow-sm border p-5 hidden md:block">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Metadata</h3>
+                    <div className="space-y-3 text-sm">
+                        <div className="flex justify-between border-b border-dashed border-slate-100 pb-2">
+                            <span className="text-slate-500">Duration</span>
+                            <span className="font-mono font-medium text-slate-700">{formatTimeCode(meeting.duration)}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-dashed border-slate-100 pb-2">
+                            <span className="text-slate-500">Segments</span>
+                            <span className="font-mono font-medium text-slate-700">{meeting.segments.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">Format</span>
+                            <span className="font-mono font-medium uppercase text-slate-700">AUDIO</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
 
       </div>
+
+      {/* 4. FOOTER AUDIO PLAYER (Sticky Bottom) */}
+      <div className="bg-white border-t p-3 md:p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30 shrink-0">
+         <div className="max-w-3xl mx-auto flex items-center gap-3 md:gap-4">
+             <button 
+               onClick={togglePlay}
+               className="w-10 h-10 md:w-12 md:h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center hover:bg-indigo-700 active:scale-95 transition shadow-lg shrink-0"
+             >
+               {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 pl-1" />}
+             </button>
+             
+             <div className="flex-1 flex flex-col justify-center gap-1">
+               <div className="flex justify-between text-[10px] md:text-xs font-medium text-slate-500">
+                 <span>{formatTimeCode(currentTime)}</span>
+                 <span>{formatTimeCode(duration)}</span>
+               </div>
+               
+               <input 
+                  type="range"
+                  min={0}
+                  max={duration || 0}
+                  value={currentTime}
+                  onChange={(e) => {
+                      const t = Number(e.target.value);
+                      setCurrentTime(t);
+                      if(audioRef.current) audioRef.current.currentTime = t;
+                  }}
+                  className="w-full h-1.5 md:h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500"
+               />
+             </div>
+
+             <audio 
+               ref={audioRef} 
+               src={audioSrc} 
+               onTimeUpdate={handleTimeUpdate}
+               onLoadedMetadata={handleLoadedMetadata}
+               onEnded={() => setIsPlaying(false)}
+               className="hidden" 
+             />
+         </div>
+      </div>
+
     </div>
   );
 }
