@@ -74,8 +74,17 @@ export default function LiveRecordingState({
 
   const startRecordingSession = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+              echoCancellation: true,      // Khử tiếng vang
+              noiseSuppression: true,      // Khử ồn nền
+              autoGainControl: true,       // Cân bằng âm lượng
+              channelCount: 1,             // Mono (Google thích cái này)
+              sampleRate: 48000            // Tần số lấy mẫu cao
+          } 
+      });
       streamRef.current = stream;
+      
       const mediaRecorder = new MediaRecorder(stream);
       audioChunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };

@@ -130,7 +130,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
 
   const handleSilenceDetected = () => {
       const buffer = pendingBufferRef.current.trim();
-      if (buffer.length > 30 && onSegmentEnd) {
+      if (buffer.length > 20 && onSegmentEnd) {
           onSegmentEnd(buffer);
           pendingBufferRef.current = ""; 
       }
