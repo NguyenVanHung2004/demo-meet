@@ -93,7 +93,31 @@ export default function LiveRecordingState({
 
   const startRecordingSession = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+    audio: {
+        // [QUAN TRỌNG] Bắt buộc phải bật nếu bạn dùng loa ngoài (speaker) 
+        // để AI không nghe thấy tiếng chính nó (Echo).
+        // Nếu đeo tai nghe, có thể tắt luôn để âm thanh mộc nhất.
+        echoCancellation: true,      
+
+        // [TỐI ƯU] Tắt khử ồn của trình duyệt. 
+        // Deepgram Nova-2 xử lý nhiễu tốt hơn Chrome rất nhiều.
+        // Bật cái này thường làm mất các từ ngắn hoặc âm cuối.
+        noiseSuppression: false,      
+
+        // [TỐI ƯU] Tắt tự động cân bằng âm lượng.
+        // Giúp giữ dynamic range của giọng nói, tránh bị "bơm" noise khi im lặng.
+        autoGainControl: false,       
+
+        // Chuẩn, STT chỉ cần Mono. Stereo chỉ tốn băng thông gấp đôi.
+        channelCount: 1,             
+        
+        // Deepgram hỗ trợ tốt nhất ở dải này. 
+        // 16000 là đủ cho giọng nói, nhưng 44100/48000 cho chất lượng cao hơn chút.
+        // Để trình duyệt tự chọn (thường là 44.1k hoặc 48k) sẽ ổn định phần cứng hơn.
+        // sampleRate: 16000, 
+    } 
+});
       streamRef.current = stream;
       const mediaRecorder = new MediaRecorder(stream);
       audioChunksRef.current = [];

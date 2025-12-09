@@ -11,7 +11,6 @@ export type LiveSegment = {
 
 type OnFinalCallback = (data: { speaker: number; content: string }) => void;
 
-// Hàm nối chuỗi thông minh
 const mergeText = (prev: string, next: string) => {
     const p = prev.trim();
     const n = next.trim();
@@ -26,83 +25,91 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
   const [segments, setSegments] = useState<LiveSegment[]>([]);
   const [interimContent, setInterimContent] = useState<string>(""); 
   const [isListening, setIsListening] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false); // Trạng thái đang kết nối
+  const [isConnecting, setIsConnecting] = useState(false);
   
   const deepgramLiveRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const isSessionActive = useRef(false);
   const apiKeyRef = useRef<{ key: string, expires: number } | null>(null);
+  
+  // [QUAN TRỌNG] Dùng Ref để lưu interim mới nhất, giúp event listener truy cập được
+  const interimRef = useRef<string>("");
+  const curSpeakerRef = useRef<number>(0);
 
-  // 1. Hàng đợi âm thanh (Queue)
   const audioQueueRef = useRef<Blob[]>([]); 
-
-  // 2. Biến theo dõi thời gian để cắt đoạn
   const lastSpeechTimeRef = useRef<number>(Date.now());
   const shouldMergeRef = useRef<boolean>(false);
   const isInterimActiveRef = useRef(false);
 
+  // Hàm save segment dùng chung cho cả Transcript Final và UtteranceEnd
+  const finalizeSegment = (text: string, speaker: number, now: number) => {
+      if (!text.trim()) return;
+
+      setSegments(prev => {
+          const lastSeg = prev[prev.length - 1];
+          // Logic nối câu nếu im lặng < 2s
+          if (!isInterimActiveRef.current) {
+               const silenceGap = now - lastSpeechTimeRef.current;
+               shouldMergeRef.current = silenceGap < 2000; 
+          }
+          
+          const isMergeable = shouldMergeRef.current && 
+                            lastSeg && 
+                            lastSeg.speaker === speaker;
+
+          if (isMergeable) {
+              return [
+                  ...prev.slice(0, -1),
+                  {
+                      ...lastSeg,
+                      content: mergeText(lastSeg.content, text),
+                      lastUpdate: now
+                  }
+              ];
+          } else {
+              return [
+                  ...prev,
+                  {
+                      id: now,
+                      speaker: speaker,
+                      content: text,
+                      isFinal: true,
+                      lastUpdate: now
+                  }
+              ];
+          }
+      });
+
+      if (onFinal) onFinal({ speaker, content: text });
+      
+      // Reset state sau khi finalize
+      setInterimContent("");
+      interimRef.current = "";
+      isInterimActiveRef.current = false;
+      lastSpeechTimeRef.current = now;
+  };
+
   const handleTranscript = (data: any) => {
+    // Check an toàn
+    if (!data.channel?.alternatives?.[0]) return;
+
     const received = data.channel.alternatives[0];
     const transcript = received.transcript;
     
-    if (!transcript || transcript.trim().length === 0) return;
+    if (!transcript) return; // Không trim() vội để giữ format nếu cần
 
     const now = Date.now();
-
-    // Logic: Nếu đang im lặng mà có chữ mới -> Check xem đã im lặng bao lâu
-    if (!isInterimActiveRef.current) {
-        const silenceGap = now - lastSpeechTimeRef.current;
-        shouldMergeRef.current = silenceGap < 2000; // Dưới 2s thì nối
-    }
-    lastSpeechTimeRef.current = now;
-
     const isFinal = data.is_final;
     const speakerId = received.words?.[0]?.speaker ?? 0;
 
     if (isFinal) {
-        setInterimContent(""); 
-        isInterimActiveRef.current = false; 
-
-        setSegments(prev => {
-            const lastSeg = prev[prev.length - 1];
-
-            // Điều kiện nối: 
-            // 1. Cờ Merge bật (do nói liền mạch)
-            // 2. Cùng Speaker (Quan trọng với Deepgram)
-            // 3. Có đoạn trước đó
-            const isMergeable = shouldMergeRef.current && 
-                              lastSeg && 
-                              lastSeg.speaker === speakerId;
-
-            if (isMergeable) {
-                return [
-                    ...prev.slice(0, -1),
-                    {
-                        ...lastSeg,
-                        content: mergeText(lastSeg.content, transcript.trim()),
-                        lastUpdate: now
-                    }
-                ];
-            } else {
-                return [
-                    ...prev,
-                    {
-                        id: now,
-                        speaker: speakerId,
-                        content: transcript.trim(),
-                        isFinal: true,
-                        lastUpdate: now
-                    }
-                ];
-            }
-        });
-
-        if (onFinal) {
-            onFinal({ speaker: speakerId, content: transcript.trim() });
-        }
-
+        finalizeSegment(transcript.trim(), speakerId, now);
     } else {
+        // [QUAN TRỌNG] Cập nhật cả State và Ref
         setInterimContent(transcript);
+        interimRef.current = transcript;
+        curSpeakerRef.current = speakerId;
+        
         isInterimActiveRef.current = true;
     }
   };
@@ -126,25 +133,24 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
 
   const startListening = async (stream: MediaStream) => {
     if (isListening || isConnecting) return;
-    
-    setIsConnecting(true); // Báo UI đang kết nối
+    setIsConnecting(true); 
     isSessionActive.current = true;
-    
-    // [QUAN TRỌNG] Bắt đầu thu âm vào Queue ngay lập tức
     audioQueueRef.current = [];
-    const mediaRecorder = new MediaRecorder(stream);
+
+    const mediaRecorder = new MediaRecorder(stream, {
+    mimeType: 'audio/webm;codecs=opus',
+    audioBitsPerSecond: 24000 // Tối ưu băng thông cực mạnh 
+    });
     mediaRecorder.addEventListener("dataavailable", (event) => {
       if (event.data.size > 0) {
-        // Nếu Socket đã mở -> Gửi luôn
         if (deepgramLiveRef.current && deepgramLiveRef.current.getReadyState() === 1) {
             deepgramLiveRef.current.send(event.data);
         } else {
-            // Nếu chưa -> Cất vào kho
             audioQueueRef.current.push(event.data);
         }
       }
     });
-    mediaRecorder.start(100);
+    mediaRecorder.start(200);
     mediaRecorderRef.current = mediaRecorder;
 
     try {
@@ -158,8 +164,8 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
         smart_format: true, 
         diarize: true,      
         interim_results: true,
-        endpointing: 300, 
-        utterance_end_ms: 1000,
+        endpointing: 500,     // Tăng lên 500ms cho chắc
+        utterance_end_ms: 1000, // Im lặng 1s sẽ bắn sự kiện UtteranceEnd
       });
 
       dgSocket.on(LiveTranscriptionEvents.Open, () => {
@@ -169,16 +175,24 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
           
           lastSpeechTimeRef.current = Date.now();
           isInterimActiveRef.current = false;
+          interimRef.current = ""; // Reset ref
 
-          // [XẢ HÀNG] Gửi bù toàn bộ hàng tồn kho
           if (audioQueueRef.current.length > 0) {
-              console.log(`🚀 Sending ${audioQueueRef.current.length} buffered chunks...`);
               audioQueueRef.current.forEach(blob => dgSocket.send(blob));
               audioQueueRef.current = []; 
           }
       });
 
       dgSocket.on(LiveTranscriptionEvents.Transcript, handleTranscript);
+
+      // [FIX CHÍNH] Lắng nghe sự kiện UtteranceEnd để cứu chữ bị treo
+      dgSocket.on(LiveTranscriptionEvents.UtteranceEnd, () => {
+          console.log("🛑 Utterance End Detected");
+          if (interimRef.current && interimRef.current.trim().length > 0) {
+              console.log("💾 Flushing stuck interim:", interimRef.current);
+              finalizeSegment(interimRef.current.trim(), curSpeakerRef.current, Date.now());
+          }
+      });
       
       const handleError = () => {
           setIsListening(false);
@@ -208,7 +222,11 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
     deepgramLiveRef.current = null;
   };
   
-  const resetTranscript = () => { setSegments([]); setInterimContent(""); };
+  const resetTranscript = () => { 
+      setSegments([]); 
+      setInterimContent(""); 
+      interimRef.current = ""; 
+  };
 
   useEffect(() => { return () => stopListening(); }, []);
 
