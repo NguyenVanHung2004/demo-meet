@@ -197,12 +197,14 @@ export default function DashboardState({
                            </thead>
                            <tbody className="divide-y divide-slate-100">
                                {filteredMeetings.map((m) => {
-                                   const isInteractive = ['transcribed', 'summarizing', 'completed'].includes(m.status);
+                                   const isInteractive = ['transcribed', 'summarizing', 'completed','failed'].includes(m.status);
                                    return (
                                        <tr key={m.id} onClick={() => isInteractive && onOpenMeeting(m)} className={`group transition-colors ${isInteractive ? 'hover:bg-indigo-50/50 cursor-pointer' : 'bg-slate-50 opacity-70'}`}>
                                            <td className="px-6 py-4">
                                                <div className="flex items-center gap-3">
-                                                   <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 font-bold text-xs">{m.title.charAt(0).toUpperCase()}</div>
+                                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs ${m.status === 'failed' ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                                       {m.title.charAt(0).toUpperCase()}
+                                                   </div>
                                                    <span className="font-medium text-slate-700 group-hover:text-indigo-700 transition-colors line-clamp-1 max-w-[200px]">{m.title}</span>
                                                </div>
                                            </td>
@@ -231,10 +233,10 @@ export default function DashboardState({
                    {/* 2. MOBILE VIEW: CARDS */}
                    <div className="md:hidden grid grid-cols-1 gap-3">
                        {filteredMeetings.map((m) => {
-                           const isInteractive = ['transcribed', 'summarizing', 'completed'].includes(m.status);
+                           const isInteractive = ['transcribed', 'summarizing', 'completed','failed'].includes(m.status);
                            return (
                                <div key={m.id} onClick={() => isInteractive && onOpenMeeting(m)} className={`bg-white p-4 rounded-xl shadow-sm border border-slate-200 active:scale-[0.98] transition-all flex items-start gap-3 ${!isInteractive && 'opacity-75 bg-slate-50'}`}>
-                                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm ${m.status === 'completed' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
+                                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm ${m.status === 'failed' ? 'bg-red-100 text-red-600' : (m.status === 'completed' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500')}`}>
                                        {m.title.charAt(0).toUpperCase()}
                                    </div>
                                    <div className="flex-1 min-w-0 space-y-1.5">
