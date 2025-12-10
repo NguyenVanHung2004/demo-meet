@@ -180,7 +180,7 @@ export default function DashboardState({
             ) : (
               filteredMeetings.map((m) => {
                 // Chỉ cho phép mở khi đã có Text (transcribed, summarizing, completed)
-                const isInteractive = ['transcribed', 'summarizing', 'completed'].includes(m.status);
+                const isInteractive = ['transcribed', 'summarizing', 'completed','failed'].includes(m.status);
                 // Đang xử lý thì hiện icon xoay
                 const isProcessing = ['transcribing', 'summarizing'].includes(m.status);
 
