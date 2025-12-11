@@ -5,9 +5,11 @@ import { Meeting } from "../lib/db";
 import ReactMarkdown from 'react-markdown'; 
 import { 
   Play, Pause, ChevronLeft, Edit3, Calendar, 
-  Clock, Download, FileText, Sparkles, User, AlignLeft, Share2
+  Clock, Download, FileText, Sparkles, User, AlignLeft, Share2,
+  FileType
 } from "lucide-react";
-
+import { saveAs } from "file-saver";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 export default function MeetingDetailState({ 
   meeting, 
   audioSrc,
@@ -24,6 +26,9 @@ export default function MeetingDetailState({
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [activeTab, setActiveTab] = useState<'transcript' | 'summary'>('transcript');
+
+  // State cho menu xuất file
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // --- AUDIO CONTROL ---
   useEffect(() => {
@@ -90,7 +95,246 @@ export default function MeetingDetailState({
         alert("Lỗi khi xuất file");
     }
   };
+  // 2. Xuất Biên bản (.docx) - Mới
+  const handleExportDocx = async () => {
+    if (!meeting.summary) return alert("Chưa có nội dung tóm tắt để xuất!");
 
+    try {
+        const lines = meeting.summary.split('\n');
+        const children: Paragraph[] = [];
+
+        // --- TITLE ---
+        children.push(
+            new Paragraph({
+                text: meeting.title,
+                heading: HeadingLevel.TITLE,
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 300 } // Cách dưới 1 chút
+            })
+        );
+
+        // --- METADATA ---
+        children.push(
+            new Paragraph({
+                children: [
+                    new TextRun({ text: "Thời gian: ", bold: true }),
+                    new TextRun(new Date(meeting.createdAt).toLocaleString('vi-VN')),
+                ],
+                spacing: { after: 100 }
+            }),
+            new Paragraph({
+                children: [
+                    new TextRun({ text: "Thời lượng: ", bold: true }),
+                    new TextRun(formatDuration(meeting.duration)),
+                ],
+                spacing: { after: 400 } // Cách đoạn dưới xa hơn
+            }),
+            new Paragraph({ 
+                text: "BIÊN BẢN TÓM TẮT", 
+                heading: HeadingLevel.HEADING_1, 
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 300 }
+            })
+        );
+
+        // --- CONTENT PARSER ---
+        lines.forEach(line => {
+            const text = line.trim();
+            if (!text) return; 
+
+            if (text.startsWith('# ')) {
+                // H1
+                children.push(new Paragraph({ 
+                    text: text.replace('# ', ''), 
+                    heading: HeadingLevel.HEADING_1,
+                    spacing: { before: 400, after: 200 }
+                }));
+            } else if (text.startsWith('## ')) {
+                // H2
+                children.push(new Paragraph({ 
+                    text: text.replace('## ', ''), 
+                    heading: HeadingLevel.HEADING_2,
+                    spacing: { before: 300, after: 150 }
+                }));
+            } else if (text.startsWith('### ')) {
+                // H3
+                children.push(new Paragraph({ 
+                    text: text.replace('### ', ''), 
+                    heading: HeadingLevel.HEADING_3,
+                    spacing: { before: 200, after: 100 }
+                }));
+            } else if (text.startsWith('* ') || text.startsWith('- ')) {
+                // [FIX LỖI NHIỀU CHẤM]
+                // 1. Xóa ký tự * hoặc - ở đầu
+                const cleanText = text.replace(/^[*|-]\s+/, '');
+                
+                // 2. Xử lý in đậm (**text**)
+                const parts = cleanText.split('**');
+                const runs = parts.map((part, index) => 
+                    new TextRun({ text: part, bold: index % 2 !== 0 })
+                );
+                
+                // 3. Tạo đoạn văn bình thường nhưng có THỤT LỀ (indent)
+                // Thay vì dùng bullet: { level: 0 }
+                children.push(new Paragraph({ 
+                    children: runs, 
+                    indent: { left: 400 }, // Thụt vào khoảng 0.7cm (400 twips)
+                    spacing: { after: 100 } // Dãn dòng nhẹ
+                }));
+            } else {
+                // Văn bản thường
+                const parts = text.split('**');
+                const runs = parts.map((part, index) => 
+                    new TextRun({ text: part, bold: index % 2 !== 0 })
+                );
+                children.push(new Paragraph({ 
+                    children: runs,
+                    spacing: { after: 200 }
+                }));
+            }
+        });
+
+        // Tạo Document
+        const doc = new Document({
+            sections: [{
+                properties: {},
+                children: children,
+            }],
+        });
+
+        // Xuất file
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, `${meeting.title.replace(/\s+/g, "_")}_summary.docx`);
+        setShowExportMenu(false);
+    } catch (e) {
+        console.error(e);
+        alert("Lỗi khi tạo file DOCX");
+    }
+  };
+
+// --- LOGIC XUẤT PDF (Đã Fix lỗi khoảng trắng lớn) ---
+  const handleExportPdf = async () => {
+    if (!meeting.summary) return alert("Chưa có nội dung tóm tắt để xuất!");
+    
+    try {
+        document.body.style.cursor = 'wait';
+
+        const html2canvas = (await import('html2canvas')).default;
+        const { jsPDF } = await import('jspdf');
+        
+        const element = document.getElementById('export-summary-content');
+        if (!element) {
+            document.body.style.cursor = 'default';
+            return alert("Không tìm thấy nội dung");
+        }
+
+        // 1. Tạo bản sao (Clone)
+        const clone = element.cloneNode(true) as HTMLElement;
+        document.body.appendChild(clone);
+
+        // 2. Thiết lập thông số kỹ thuật (Khổ A4)
+        const A4_WIDTH_PX = 800; 
+        const A4_HEIGHT_PX = 1131; // (297mm / 210mm) * 800px
+
+        clone.style.width = `${A4_WIDTH_PX}px`; 
+        clone.style.position = 'fixed';
+        clone.style.top = '0';
+        clone.style.left = '0'; 
+        clone.style.zIndex = '-9999'; 
+        clone.style.opacity = '1';  
+        clone.style.backgroundColor = '#ffffff'; 
+
+        // 3. THUẬT TOÁN DÀN TRANG (SMART PAGINATION)
+        // [QUAN TRỌNG] Chỉ chọn các thẻ "lá" (leaf nodes) để xử lý cắt trang.
+        // Bỏ 'div', 'ul', 'ol' ra khỏi danh sách để tránh đẩy cả khối lớn đi.
+        const selector = 'h1, h2, h3, h4, h5, h6, p, li, img, blockquote, pre, table';
+        const children = Array.from(clone.querySelectorAll(selector)) as HTMLElement[];
+        
+        // Chờ render
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        for (const child of children) {
+            if (!child.offsetParent) continue;
+
+            // Bỏ qua nếu thẻ này nằm trong một thẻ 'li' hoặc 'table' khác đã được xử lý
+            // (Tránh tính toán 2 lần cho cùng 1 nội dung)
+            if (child.closest('li') !== child && child.closest('li') !== null) continue;
+
+            const childTop = child.offsetTop; 
+            const childHeight = child.offsetHeight; 
+            const childBottom = childTop + childHeight; 
+
+            // Tính trang
+            const startPage = Math.floor(childTop / A4_HEIGHT_PX) + 1;
+            const endPage = Math.floor(childBottom / A4_HEIGHT_PX) + 1;
+
+            // Nếu thẻ bị cắt ngang giữa 2 trang
+            if (endPage > startPage) {
+                // Tính vị trí đường cắt trang
+                const pageBreakLine = startPage * A4_HEIGHT_PX;
+                
+                // Đẩy thẻ xuống trang tiếp theo (+30px lề trên cho đẹp)
+                const pushDown = pageBreakLine - childTop + 30; 
+                
+                child.style.marginTop = `${pushDown}px`;
+                
+                // [Tùy chọn] Nếu là tiêu đề (Hx), có thể đẩy thêm một chút để không sát mép
+                if (/^H\d$/.test(child.tagName)) {
+                     child.style.marginTop = `${pushDown + 10}px`;
+                }
+            }
+        }
+
+        // 4. Chụp ảnh
+        const canvas = await html2canvas(clone, {
+            scale: 2, 
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            width: A4_WIDTH_PX,
+            windowWidth: A4_WIDTH_PX
+        });
+
+        // 5. Dọn dẹp
+        document.body.removeChild(clone);
+
+        // 6. Tạo PDF
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const imgProps = pdf.getImageProperties(imgData);
+        const totalPdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        
+        let heightLeft = totalPdfHeight;
+        let position = 0;
+
+        // Trang 1
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
+        heightLeft -= pdfHeight;
+
+        // Các trang sau
+        while (heightLeft > 0) {
+            position -= pdfHeight; 
+            pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
+            heightLeft -= pdfHeight;
+        }
+
+        pdf.save(`${meeting.title.replace(/\s+/g, "_")}_summary.pdf`);
+        document.body.style.cursor = 'default';
+        setShowExportMenu(false);
+
+    } catch (e) {
+        console.error(e);
+        document.body.style.cursor = 'default';
+        alert("Lỗi khi tạo PDF.");
+    }
+  };
   // --- FORMATTERS ---
   const formatDate = (ts: number) => {
     return new Date(ts).toLocaleDateString("vi-VN", { 
@@ -125,7 +369,98 @@ export default function MeetingDetailState({
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans relative">
+      {/* --- HIDDEN CONTENT FOR PDF EXPORT --- */}
+      <div 
+        id="export-summary-content"
+        className="fixed top-0 left-[-9999px] w-[800px] p-16 -z-50 opacity-0" 
+        style={{ backgroundColor: '#ffffff', color: '#000000', fontFamily: 'Arial, Helvetica, sans-serif' }} 
+      >
+         <div>
+             {/* Header File PDF */}
+             <div style={{ textAlign: 'center', marginBottom: '30px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
+                 <h1 style={{fontSize: '28px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '10px', color: '#000'}}>
+                    {meeting.title}
+                 </h1>
+                 <div style={{ fontSize: '14px', color: '#555', display: 'flex', justifyContent: 'center', gap: '20px' }}>
+                    <span> Thời gian {new Date(meeting.createdAt).toLocaleString('vi-VN')}</span>
+                    <span> Thời lượng {formatDuration(meeting.duration)}</span>
+                 </div>
+             </div>
+
+             {/* Nội dung tóm tắt - Đã bỏ dấu chấm và căn chỉnh đẹp */}
+             <div className="prose prose-lg max-w-none text-justify" style={{color: '#333'}}>
+                <ReactMarkdown
+                    components={{
+                        // Tiêu đề
+                        h1: ({node, ...props}) => <h1 style={{ color: '#111827', marginTop: '24px', marginBottom: '16px', fontSize: '20px', fontWeight: 'bold', pageBreakInside: 'avoid' }} {...props} />,
+                        h2: ({node, ...props}) => <h2 style={{ color: '#4f46e5', marginTop: '20px', marginBottom: '12px', fontSize: '16px', fontWeight: 'bold', pageBreakInside: 'avoid' }} {...props} />,
+                        h3: ({node, ...props}) => <h3 style={{ color: '#374151', marginTop: '16px', marginBottom: '8px', fontSize: '14px', fontWeight: 'bold', pageBreakInside: 'avoid' }} {...props} />,
+                        
+                        // Đoạn văn
+                        p: ({node, ...props}) => {
+                             // @ts-ignore
+                            const isInList = node.parent?.tagName === 'li';
+                            // Nếu nằm trong list thì dùng span để không vỡ layout Flex
+                            if (isInList) {
+                                return <span style={{ fontSize: '14px', lineHeight: '1.6', color: '#374151' }} {...props} />
+                            }
+                            return <p style={{ color: '#374151', lineHeight: '1.6', fontSize: '14px', marginBottom: '10px' }} {...props} />
+                        },
+
+                        // UL: Bỏ chấm mặc định, thêm padding để thụt lề
+                        ul: ({node, ...props}) => (
+                            <ul style={{ padding: 0, margin: 0, paddingLeft: '15px', marginBottom: '10px', listStyle: 'none' }} {...props} />
+                        ),
+                        // OL: Bỏ số mặc định, thêm padding (Số sẽ tự render bằng logic bên dưới)
+                        ol: ({node, ...props}) => (
+                            <ol style={{ padding: 0, margin: 0, paddingLeft: '15px', marginBottom: '10px', listStyle: 'none', counterReset: 'item' }} {...props} />
+                        ),
+
+                        // LI: Xử lý dấu đầu dòng
+                        li: ({node, ...props}) => {
+                             // @ts-ignore
+                            const isOrdered = node.parent?.tagName === 'ol';
+                            
+                            return (
+                                <li style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'flex-start', // Căn dòng chữ thẳng với đầu dòng
+                                    marginBottom: '6px',
+                                    counterIncrement: isOrdered ? 'item' : undefined
+                                }}>
+                                    {/* LOGIC QUAN TRỌNG: 
+                                        - Nếu là OL (có thứ tự) -> Hiện số (1. 2. 3.)
+                                        - Nếu là UL (không thứ tự) -> Ẩn hoàn toàn (không hiện gì cả)
+                                    */}
+                                    {isOrdered && (
+                                        <span style={{ 
+                                            width: '24px', // Cố định chiều rộng cột số
+                                            flexShrink: 0, 
+                                            display: 'inline-block',
+                                            textAlign: 'left',
+                                            fontWeight: 'bold',
+                                            color: '#000',
+                                        }}>
+                                            <span style={{content: 'counter(item) "."'}}></span>
+                                        </span>
+                                    )}
+
+                                    {/* Nội dung chính của dòng */}
+                                    <div style={{ flex: 1, fontSize: '14px', lineHeight: '1.6', color: '#374151' }}>
+                                        {props.children}
+                                    </div>
+                                </li>
+                            );
+                        },
+                        strong: ({node, ...props}) => <strong style={{ color: '#000000', fontWeight: 'bold' }} {...props} />
+                    }}
+                >
+                    {meeting.summary || "Chưa có nội dung tóm tắt."}
+                </ReactMarkdown>
+             </div>
+         </div>
+      </div>
       
       {/* 1. HEADER */}
       <div className="bg-white border-b px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-sm z-20 shrink-0">
@@ -142,14 +477,33 @@ export default function MeetingDetailState({
           </div>
         </div>
 
-        <div className="flex gap-2 shrink-0">
-          <button 
-            onClick={handleExport}
-            className="p-2 md:px-4 md:py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 transition"
-            title="Xuất file TXT"
-          >
-            <Download className="w-4 h-4" /> <span className="hidden md:inline">Xuất file</span>
-          </button>
+        <div className="flex gap-2 shrink-0 relative">
+          {/* EXPORT DROPDOWN */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="p-2 md:px-4 md:py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 transition"
+            >
+              <Download className="w-4 h-4" /> <span className="hidden md:inline">Tải xuống</span>
+            </button>
+            
+            {showExportMenu && (
+                <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)}></div>
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                    <button onClick={handleExport} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700 border-b border-slate-50">
+                        <FileText className="w-4 h-4 text-slate-400" /> Nội dung thô (.txt)
+                    </button>
+                    <button onClick={handleExportDocx} className="w-full text-left px-4 py-3 text-sm hover:bg-indigo-50 flex items-center gap-3 text-indigo-700 font-medium">
+                        <FileType className="w-4 h-4" /> Bản tóm tắt (.docx)
+                    </button>
+                    <button onClick={handleExportPdf} className="w-full text-left px-4 py-3 text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-700 font-medium">
+                        <FileType className="w-4 h-4" /> Bản tóm tắt (.pdf)
+                    </button>
+                </div>
+                </>
+            )}
+          </div>
           <button 
             onClick={onEdit}
             className="px-3 py-2 md:px-5 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-md shadow-indigo-200 flex items-center gap-2 transition"
