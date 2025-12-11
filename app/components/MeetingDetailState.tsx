@@ -161,7 +161,7 @@ export default function MeetingDetailState({
                 children.push(new Paragraph({ 
                     text: text.replace('### ', ''), 
                     heading: HeadingLevel.HEADING_3,
-                    spacing: { before: 200, after: 100 }
+                    spacing: { before: 150, after: 100 }
                 }));
             } else if (text.startsWith('* ') || text.startsWith('- ')) {
                 // [FIX LỖI NHIỀU CHẤM]
