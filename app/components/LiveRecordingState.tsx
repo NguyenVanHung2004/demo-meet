@@ -74,15 +74,7 @@ export default function LiveRecordingState({
 
   const startRecordingSession = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: {
-              echoCancellation: true,      // Khử tiếng vang
-              noiseSuppression: true,      // Khử ồn nền
-              autoGainControl: true,       // Cân bằng âm lượng
-              channelCount: 1,             // Mono (Google thích cái này)
-              sampleRate: 48000            // Tần số lấy mẫu cao
-          } 
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       
       const mediaRecorder = new MediaRecorder(stream);
