@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { 
-  UploadCloud, Mic, FileText, Clock, FileAudio, 
-  Trash2, RotateCcw, FolderOpen, AlertCircle, Loader2, CheckCircle, XCircle, 
-  Sparkles
+  UploadCloud, Mic, FileText, 
+  Trash2, FolderOpen, AlertCircle, Loader2, CheckCircle, 
+  Sparkles, Search, Calendar, Clock, MoreVertical,
+  RotateCcw
 } from "lucide-react";
 import { 
   getAllMeetings, Meeting, 
@@ -12,7 +13,6 @@ import {
 } from "../lib/db";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 
-// Định nghĩa Tab hiển thị
 type DashboardTab = 'all' | 'trash';
 
 export default function DashboardState({ 
@@ -24,7 +24,7 @@ export default function DashboardState({
   onOpenMeeting: (m: Meeting) => void,
   refreshSignal: number 
 }) {
-  const { toast, confirm } = useGlobalUI(); // [MỚI]
+  const { toast, confirm } = useGlobalUI();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [currentTab, setCurrentTab] = useState<DashboardTab>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -35,22 +35,21 @@ export default function DashboardState({
 
   useEffect(() => {
     loadMeetings();
-  }, [refreshSignal]); // Reload khi có tín hiệu từ bên ngoài (Polling)
+  }, [refreshSignal]);
 
   // --- ACTIONS ---
   const handleMoveToTrash = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    // [MỚI] Dùng confirm xịn (có await)
     const isConfirmed = await confirm({
       title: "Xóa cuộc họp?",
-      message: "Bạn có chắc chắn muốn chuyển cuộc họp này vào thùng rác không?",
-      confirmText: "Xóa luôn",
+      message: "Cuộc họp sẽ được chuyển vào thùng rác.",
+      confirmText: "Xóa",
       type: "danger"
     });
 
     if (isConfirmed) {
       await toggleTrashMeeting(id, true);
-      toast.success("Đã chuyển vào thùng rác"); // Toast báo thành công
+      toast.success("Đã chuyển vào thùng rác");
       loadMeetings();
     }
   };
@@ -58,15 +57,16 @@ export default function DashboardState({
   const handleRestore = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     await toggleTrashMeeting(id, false);
+    toast.success("Đã khôi phục cuộc họp");
     loadMeetings();
   };
 
   const handleDeleteForever = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-     const isConfirmed = await confirm({
+    const isConfirmed = await confirm({
       title: "Xóa vĩnh viễn?",
-      message: "Bạn có chắc chắn muốn chuyển cuộc họp này vĩnh viễn k?",
-      confirmText: "Xóa luôn",
+      message: "Hành động này không thể hoàn tác. Bạn chắc chứ?",
+      confirmText: "Xóa vĩnh viễn",
       type: "danger"
     });
     if (isConfirmed) {
@@ -75,23 +75,22 @@ export default function DashboardState({
     }
   };
 
-  // --- RENDER HELPERS (Badge Trạng Thái) ---
+  // --- HELPER: Badge ---
   const getStatusBadge = (m: Meeting) => {
     switch (m.status) {
-      case 'transcribing':
-        return <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-full flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/> Đang ghi biên bản...</span>;
-      case 'transcribed':
-        return <span className="text-xs bg-orange-50 text-orange-600 px-2 py-1 rounded-full flex items-center gap-1"><FileText className="w-3 h-3"/> Đã ghi xong (Chờ tóm tắt)</span>;
-      case 'summarizing':
-        return <span className="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded-full flex items-center gap-1"><Sparkles className="w-3 h-3 animate-pulse"/> Đang tóm tắt...</span>;
-      case 'completed':
-        return <span className="text-xs bg-green-50 text-green-600 px-2 py-1 rounded-full flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Hoàn thành</span>;
-      case 'failed':
-        return <span className="text-xs bg-red-50 text-red-600 px-2 py-1 rounded-full flex items-center gap-1"><AlertCircle className="w-3 h-3"/> Lỗi</span>;
-      default:
-        // Hỗ trợ hiển thị cho data cũ (nếu có)
-        return <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Không xác định</span>;
+      case 'transcribing': return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100"><Loader2 className="w-3 h-3 animate-spin"/> Đang xử lí</span>;
+      case 'transcribed': return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-100"><FileText className="w-3 h-3"/> Đã ghi xong </span>;
+      case 'summarizing': return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-100"><Sparkles className="w-3 h-3 animate-pulse"/> Đang tóm tắt</span>;
+      case 'completed': return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-100"><CheckCircle className="w-3 h-3"/> Hoàn thành</span>;
+      case 'failed': return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 border border-red-100"><AlertCircle className="w-3 h-3"/> Lỗi</span>;
+      default: return null;
     }
+  };
+
+  const formatDuration = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   // --- FILTERING ---
@@ -101,134 +100,200 @@ export default function DashboardState({
   });
 
   return (
-    <div className="flex h-full">
-      {/* SIDEBAR */}
-      <div className="w-64 bg-slate-900 text-slate-300 p-6 flex flex-col gap-8 md:flex shrink-0">
+    <div className="flex h-full bg-slate-50 overflow-hidden relative font-sans">
+      
+      {/* SIDEBAR (Desktop Only) */}
+      <div className="hidden md:flex w-64 bg-slate-900 text-slate-300 p-6 flex-col gap-8 shrink-0">
          <div className="text-2xl font-bold text-white flex items-center gap-2">
-          <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">AI</div>
-          MeetNote
+          <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shadow-lg hover:rotate-12 transition-transform">AI</div>
+          <span className="tracking-tight">MeetNote</span>
         </div>
         
         <nav className="space-y-2">
-          <div 
-            onClick={() => setCurrentTab('all')}
-            className={`px-4 py-2 rounded-md cursor-pointer flex items-center gap-3 transition-colors ${currentTab === 'all' ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-slate-800 hover:text-white'}`}
-          >
-            <FolderOpen className="w-4 h-4" /> Tất cả cuộc họp
+          <div onClick={() => setCurrentTab('all')} className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${currentTab === 'all' ? 'bg-indigo-600 text-white shadow-md transform translate-x-1' : 'hover:bg-slate-800 hover:text-white'}`}>
+            <FolderOpen className="w-5 h-5" /> Tất cả cuộc họp
           </div>
-          <div 
-            onClick={() => setCurrentTab('trash')}
-            className={`px-4 py-2 rounded-md cursor-pointer flex items-center gap-3 transition-colors ${currentTab === 'trash' ? 'bg-red-900/50 text-red-200 border border-red-900' : 'hover:bg-slate-800 hover:text-white'}`}
-          >
-            <Trash2 className="w-4 h-4" /> Thùng rác
+          <div onClick={() => setCurrentTab('trash')} className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${currentTab === 'trash' ? 'bg-red-900/40 text-red-200 border border-red-900/50' : 'hover:bg-slate-800 hover:text-white'}`}>
+            <Trash2 className="w-5 h-5" /> Thùng rác
           </div>
         </nav>
+
+        <div className="mt-auto pt-6 border-t border-slate-800">
+            <div className="text-xs text-slate-500 text-center">© 2024 MeetNote AI</div>
+        </div>
       </div>
 
       {/* MAIN CONTENT */}
-      <div className="flex-1 p-8 overflow-y-auto bg-slate-50">
-        <header className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            {currentTab === 'all' ? "Danh sách cuộc họp" : <span className="text-red-600">Thùng rác</span>}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        
+        {/* HEADER */}
+        <header className="bg-white border-b px-4 py-3 md:px-8 md:py-4 flex justify-between items-center shrink-0 sticky top-0 z-20">
+          <h1 className="text-lg md:text-2xl font-bold text-slate-800 flex items-center gap-2">
+            {currentTab === 'all' ? "Danh sách cuộc họp" : <span className="text-red-600 flex items-center gap-2"><Trash2 className="w-5 h-5"/> Thùng rác</span>}
           </h1>
+          
+          {/* Desktop Actions */}
+          <div className="hidden md:flex gap-2">
+             <button onClick={onUseSample} className="text-sm font-medium text-slate-500 hover:text-indigo-600 px-3 py-2">Mẫu thử</button>
+             <button onClick={onLive} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm shadow-md transition-all active:scale-95">
+                <Mic className="w-4 h-4" /> Ghi âm mới
+             </button>
+          </div>
         </header>
 
-        <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
+        {/* SCROLLABLE AREA */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8"> 
+            <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
 
-        {/* --- [KHÔI PHỤC] KHU VỰC UPLOAD & LIVE --- */}
-        {currentTab === 'all' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[250px] mb-10">
-             
-             {/* Nút 1: Upload File (Có link Demo bên trong) */}
-             <div 
-                onClick={() => fileInputRef.current?.click()} 
-                className="relative border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-3 bg-white hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer transition group shadow-sm"
-             >
-                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-full group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                  <UploadCloud className="w-8 h-8" />
-                </div>
-                <div className="text-center">
-                  <span className="font-semibold text-slate-700 block">Tải lên file ghi âm</span>
-                  <span className="text-xs text-slate-400">Mp3, Wav</span>
-                </div>
-                
-                {/* Link dùng Demo */}
-                <div className="absolute bottom-4 pt-2 border-t border-slate-100 w-1/2 text-center">
-                  <button onClick={(e) => { e.stopPropagation(); onUseSample(); }} className="text-xs font-bold text-indigo-500 hover:underline flex items-center justify-center gap-2 mx-auto">
-                    <FileAudio className="w-3 h-3" /> Dùng file mẫu (Demo)
-                  </button>
-                </div>
-             </div>
-
-             {/* Nút 2: Live Recording (Đã khôi phục) */}
-             <div 
-                onClick={onLive} 
-                className="border-2 border-dashed border-red-200 rounded-2xl flex flex-col items-center justify-center gap-3 bg-white hover:bg-red-50 hover:border-red-300 cursor-pointer transition group shadow-sm"
-             >
-                <div className="p-3 bg-red-50 text-red-600 rounded-full group-hover:bg-red-600 group-hover:text-white transition-colors">
-                  <Mic className="w-8 h-8" />
-                </div>
-                <span className="font-semibold text-slate-700">Ghi âm trực tiếp</span>
-             </div>
-          </div>
-        )}
-
-        {/* DANH SÁCH CUỘC HỌP */}
-        <div className="space-y-3 pb-20">
-            {filteredMeetings.length === 0 ? (
-              <div className="text-center py-10 text-slate-400 italic">Chưa có cuộc họp nào.</div>
-            ) : (
-              filteredMeetings.map((m) => {
-                // Chỉ cho phép mở khi đã có Text (transcribed, summarizing, completed)
-                const isInteractive = ['transcribed', 'summarizing', 'completed','failed'].includes(m.status);
-                // Đang xử lý thì hiện icon xoay
-                const isProcessing = ['transcribing', 'summarizing'].includes(m.status);
-
-                return (
-                  <div 
-                    key={m.id} 
-                    onClick={() => isInteractive && onOpenMeeting(m)}
-                    className={`relative flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl transition-all group
-                      ${isInteractive 
-                        ? 'hover:shadow-lg hover:border-indigo-200 cursor-pointer' 
-                        : 'opacity-70 cursor-not-allowed bg-slate-50'
-                      }
-                    `}
-                  >
-                    {/* Left Info */}
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition-colors 
-                        ${isProcessing ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                        {isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : <FileText className="w-6 h-6" />}
-                      </div>
-                      <div>
-                        <div className="font-bold text-slate-800">{m.title}</div>
-                        <div className="text-xs text-slate-400 mt-1 flex gap-2 items-center">
-                          <span>{new Date(m.createdAt).toLocaleDateString("vi-VN")}</span>
-                          {/* Badge trạng thái */}
-                          {getStatusBadge(m)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right Actions */}
-                    <div className="flex items-center gap-2">
-                      {currentTab === 'all' && (
-                        <button onClick={(e) => handleMoveToTrash(e, m.id)} className="p-2 hover:bg-red-50 text-slate-300 hover:text-red-600 rounded-full transition" title="Xóa">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                      {currentTab === 'trash' && (
-                        <>
-                          <button onClick={(e) => handleRestore(e, m.id)} className="p-2 hover:bg-green-50 text-green-600 rounded-full" title="Khôi phục"><RotateCcw className="w-4 h-4" /></button>
-                          <button onClick={(e) => handleDeleteForever(e, m.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-full" title="Xóa vĩnh viễn"><Trash2 className="w-4 h-4" /></button>
-                        </>
-                      )}
+            {/* ACTION GRID (Chỉ hiện khi ở tab All) */}
+            {currentTab === 'all' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
+                  {/* Upload Card */}
+                  <div onClick={() => fileInputRef.current?.click()} className="group relative border border-dashed border-indigo-200 bg-white hover:border-indigo-400 rounded-xl p-4 md:p-6 flex flex-row md:flex-col items-center justify-start md:justify-center gap-4 cursor-pointer transition-all duration-300 shadow-sm active:scale-[0.98]">
+                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-full group-hover:scale-110 transition-transform"><UploadCloud className="w-6 h-6 md:w-8 md:h-8" /></div>
+                    <div className="text-left md:text-center">
+                      <span className="font-bold text-slate-700 block text-sm md:text-lg">Tải file lên</span>
+                      <span className="text-xs text-slate-400">MP3, WAV (Max 100MB)</span>
                     </div>
                   </div>
-                );
-              })
+
+                  {/* [FIX] Live Card - ĐÃ BỎ class 'md:hidden' để hiện cả trên Desktop & Mobile */}
+                  <div onClick={onLive} className="group border border-dashed border-red-200 bg-white hover:border-red-400 rounded-xl p-4 md:p-6 flex flex-row md:flex-col items-center justify-start md:justify-center gap-4 cursor-pointer transition-all duration-300 shadow-sm active:scale-[0.98]">
+                    <div className="p-3 bg-red-50 text-red-600 rounded-full group-hover:scale-110 transition-transform"><Mic className="w-6 h-6 md:w-8 md:h-8" /></div>
+                    <div className="text-left md:text-center">
+                       <span className="font-bold text-slate-700 block text-sm md:text-lg">Ghi âm trực tiếp</span>
+                       <span className="text-xs text-slate-400">Chuyển giọng nói thành văn bản</span>
+                    </div>
+                  </div>
+              </div>
             )}
+
+            {/* MEETING LIST */}
+            <div className="space-y-3">
+               <div className="flex items-center justify-between mb-2">
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">{filteredMeetings.length} Cuộc họp</h3>
+               </div>
+
+               {filteredMeetings.length === 0 ? (
+                 <div className="text-center py-12 md:py-20 bg-white rounded-2xl border border-dashed border-slate-200">
+                   <div className="w-12 h-12 md:w-16 md:h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-300">
+                        {currentTab === 'all' ? <Calendar className="w-6 h-6 md:w-8 md:h-8"/> : <Trash2 className="w-6 h-6 md:w-8 md:h-8"/>}
+                   </div>
+                   <p className="text-slate-500 font-medium text-sm">Danh sách trống.</p>
+                 </div>
+               ) : (
+                 <>
+                   {/* 1. DESKTOP VIEW: TABLE */}
+                   <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                       <table className="w-full text-left">
+                           <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+                               <tr>
+                                   <th className="px-6 py-4">Tên cuộc họp</th>
+                                   <th className="px-6 py-4">Thời lượng</th>
+                                   <th className="px-6 py-4">Ngày tạo</th>
+                                   <th className="px-6 py-4">Trạng thái</th>
+                                   <th className="px-6 py-4 text-right">Hành động</th>
+                               </tr>
+                           </thead>
+                           <tbody className="divide-y divide-slate-100">
+                               {filteredMeetings.map((m) => {
+                                   const isInteractive = ['transcribed', 'summarizing', 'completed','failed'].includes(m.status);
+                                   return (
+                                       <tr key={m.id} onClick={() => isInteractive && onOpenMeeting(m)} className={`group transition-colors ${isInteractive ? 'hover:bg-indigo-50/50 cursor-pointer' : 'bg-slate-50 opacity-70'}`}>
+                                           <td className="px-6 py-4">
+                                               <div className="flex items-center gap-3">
+                                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs ${m.status === 'failed' ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                                       {m.title.charAt(0).toUpperCase()}
+                                                   </div>
+                                                   <span className="font-medium text-slate-700 group-hover:text-indigo-700 transition-colors line-clamp-1 max-w-[200px]">{m.title}</span>
+                                               </div>
+                                           </td>
+                                           <td className="px-6 py-4 text-slate-500 font-mono text-sm">{formatDuration(m.duration)}</td>
+                                           <td className="px-6 py-4 text-slate-500 text-sm">{new Date(m.createdAt).toLocaleDateString("vi-VN")}</td>
+                                           <td className="px-6 py-4">{getStatusBadge(m)}</td>
+                                           <td className="px-6 py-4 text-right">
+                                               <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                   {currentTab === 'all' ? (
+                                                       <button onClick={(e) => handleMoveToTrash(e, m.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition"><Trash2 className="w-4 h-4" /></button>
+                                                   ) : (
+                                                       <>
+                                                           <button onClick={(e) => handleRestore(e, m.id)} className="p-2 hover:bg-green-50 text-green-600 rounded-full"><RotateCcw className="w-4 h-4" /></button>
+                                                           <button onClick={(e) => handleDeleteForever(e, m.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-full"><Trash2 className="w-4 h-4" /></button>
+                                                       </>
+                                                   )}
+                                               </div>
+                                           </td>
+                                       </tr>
+                                   );
+                               })}
+                           </tbody>
+                       </table>
+                   </div>
+
+                   {/* 2. MOBILE VIEW: CARDS */}
+                   <div className="md:hidden grid grid-cols-1 gap-3">
+                       {filteredMeetings.map((m) => {
+                           const isInteractive = ['transcribed', 'summarizing', 'completed','failed'].includes(m.status);
+                           return (
+                               <div key={m.id} onClick={() => isInteractive && onOpenMeeting(m)} className={`bg-white p-4 rounded-xl shadow-sm border border-slate-200 active:scale-[0.98] transition-all flex items-start gap-3 ${!isInteractive && 'opacity-75 bg-slate-50'}`}>
+                                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm ${m.status === 'failed' ? 'bg-red-100 text-red-600' : (m.status === 'completed' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500')}`}>
+                                       {m.title.charAt(0).toUpperCase()}
+                                   </div>
+                                   <div className="flex-1 min-w-0 space-y-1.5">
+                                       <div className="flex justify-between items-start">
+                                           <h4 className="font-semibold text-slate-800 truncate pr-2 text-sm">{m.title}</h4>
+                                           {currentTab === 'all' && (
+                                               <button onClick={(e) => handleMoveToTrash(e, m.id)} className="p-1 text-slate-300 hover:text-red-500 -mt-1 -mr-2"><MoreVertical className="w-4 h-4" /></button>
+                                           )}
+                                       </div>
+                                       <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                            <span className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded"><Clock className="w-3 h-3"/> {formatDuration(m.duration)}</span>
+                                            <span>{new Date(m.createdAt).toLocaleDateString("vi-VN")}</span>
+                                       </div>
+                                       <div className="flex justify-between items-center pt-1">
+                                           {getStatusBadge(m)}
+                                           {currentTab === 'trash' && (
+                                               <div className="flex gap-2">
+                                                   <button onClick={(e) => handleRestore(e, m.id)} className="p-1 bg-green-50 text-green-600 rounded"><RotateCcw className="w-3 h-3" /></button>
+                                                   <button onClick={(e) => handleDeleteForever(e, m.id)} className="p-1 bg-red-50 text-red-600 rounded"><Trash2 className="w-3 h-3" /></button>
+                                               </div>
+                                           )}
+                                       </div>
+                                   </div>
+                               </div>
+                           )
+                       })}
+                   </div>
+                 </>
+               )}
+            </div>
+        </div>
+
+        {/* --- MOBILE BOTTOM NAVIGATION --- */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t flex items-center justify-around pb-safe pt-2 z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] h-16">
+            <button 
+                onClick={() => setCurrentTab('all')}
+                className={`flex flex-col items-center gap-1 p-2 w-16 transition-colors ${currentTab === 'all' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+                <FolderOpen className={`w-6 h-6 ${currentTab === 'all' && 'fill-current'}`} />
+                <span className="text-[10px] font-medium">Tất cả</span>
+            </button>
+
+            {/* Main Action: Record */}
+            <button 
+                onClick={onLive}
+                className="-mt-8 w-14 h-14 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700 active:scale-95 transition-transform border-4 border-slate-50"
+            >
+                <Mic className="w-6 h-6" />
+            </button>
+
+            <button 
+                onClick={() => setCurrentTab('trash')}
+                className={`flex flex-col items-center gap-1 p-2 w-16 transition-colors ${currentTab === 'trash' ? 'text-red-600' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+                <Trash2 className={`w-6 h-6 ${currentTab === 'trash' && 'fill-current'}`} />
+                <span className="text-[10px] font-medium">Thùng rác</span>
+            </button>
         </div>
       </div>
     </div>
