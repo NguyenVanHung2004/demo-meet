@@ -54,7 +54,26 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
         setIsConnecting(false);
         lastSpeechTimeRef.current = Date.now();
     });
+    socket.on("force-client-restart", () => {
+        console.log("♻️ Server yêu cầu restart (Reset 5 phút)");
+    
+        if (pendingBufferRef.current.trim().length > 0) {
+        handleSilenceDetected(); 
+        }
+        // 1. Dừng recorder hiện tại
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+            mediaRecorderRef.current.stop();
+        }
 
+        // 2. Khởi động lại ngay lập tức (Tạo Header mới)
+        if (streamRef.current) {
+            // Đợi 100ms để đảm bảo stream cũ đã đóng hẳn
+            setTimeout(() => {
+               // Gọi hàm này sẽ kích hoạt lại socket.emit("start-google-stream")
+               startListening(streamRef.current!); 
+            }, 100);
+        }
+    });
     socket.on("disconnect", () => {
         setIsConnected(false);
         setIsConnecting(true); 
