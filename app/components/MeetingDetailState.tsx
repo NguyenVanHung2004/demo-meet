@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import { 
   Play, Pause, ChevronLeft, Edit3, Calendar, 
   Clock, Download, FileText, Sparkles, User, AlignLeft, Share2,
-  FileType
+  FileType,Music
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
@@ -59,6 +59,13 @@ export default function MeetingDetailState({
           audioRef.current.play();
           setIsPlaying(true);
       }
+  };
+
+  // [MỚI] Hàm tải Audio
+  const handleDownloadAudio = () => {
+    // audioSrc là Blob URL, file-saver sẽ tải nó về máy
+    saveAs(audioSrc, `${meeting.title.replace(/\s+/g, "_")}.mp3`);
+    setShowExportMenu(false);
   };
 
   // --- LOGIC XUẤT FILE (MỚI) ---
@@ -491,6 +498,9 @@ export default function MeetingDetailState({
                 <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)}></div>
                 <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                    <button onClick={handleDownloadAudio} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700 font-medium border-b border-slate-50">
+                        <Music className="w-4 h-4 text-pink-500" /> Audio
+                    </button>
                     <button onClick={handleExport} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700 border-b border-slate-50">
                         <FileText className="w-4 h-4 text-slate-400" /> Nội dung thô (.txt)
                     </button>
