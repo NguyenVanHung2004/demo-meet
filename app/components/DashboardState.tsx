@@ -5,7 +5,7 @@ import {
   UploadCloud, Mic, FileText, 
   Trash2, FolderOpen, AlertCircle, Loader2, CheckCircle, 
   Sparkles, Search, Calendar, Clock, MoreVertical,
-  RotateCcw
+  RotateCcw,Wand2
 } from "lucide-react";
 import { 
   getAllMeetings, Meeting, 
@@ -16,12 +16,13 @@ import { useGlobalUI } from "../context/GlobalUIProvider";
 type DashboardTab = 'all' | 'trash';
 
 export default function DashboardState({ 
-  onImport, onLive, onUseSample, onOpenMeeting, refreshSignal 
+  onImport, onLive, onUseSample, onOpenMeeting, refreshSignal,onReprocess
 }: { 
   onImport: (file: File) => void, 
   onLive: () => void,
   onUseSample: () => void,
   onOpenMeeting: (m: Meeting) => void,
+  onReprocess: (m: Meeting) => void
   refreshSignal: number 
 }) {
   const { toast, confirm } = useGlobalUI();
@@ -213,9 +214,24 @@ export default function DashboardState({
                                            <td className="px-6 py-4">{getStatusBadge(m)}</td>
                                            <td className="px-6 py-4 text-right">
                                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                   {currentTab === 'all' ? (
-                                                       <button onClick={(e) => handleMoveToTrash(e, m.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition"><Trash2 className="w-4 h-4" /></button>
-                                                   ) : (
+                                                  {currentTab === 'all' ? (
+                                                  <>
+                                                      {/* ✅ [MỚI] Nút xử lý lại (Chỉ hiện nếu trạng thái là completed/transcribed để tránh spam) */}
+                                                      {['completed', 'transcribed'].includes(m.status) && (
+                                                          <button 
+                                                            onClick={(e) => { e.stopPropagation(); onReprocess(m); }} 
+                                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition"
+                                                            title="Tạo bản Transcript AI chính xác hơn"
+                                                          >
+                                                              <Wand2 className="w-4 h-4" />
+                                                          </button>
+                                                      )}
+
+                                                      <button onClick={(e) => handleMoveToTrash(e, m.id)} className="...">
+                                                          <Trash2 className="w-4 h-4" />
+                                                      </button>
+                                                  </>
+                                              ) : (
                                                        <>
                                                            <button onClick={(e) => handleRestore(e, m.id)} className="p-2 hover:bg-green-50 text-green-600 rounded-full"><RotateCcw className="w-4 h-4" /></button>
                                                            <button onClick={(e) => handleDeleteForever(e, m.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-full"><Trash2 className="w-4 h-4" /></button>
@@ -252,6 +268,18 @@ export default function DashboardState({
                                        </div>
                                        <div className="flex justify-between items-center pt-1">
                                            {getStatusBadge(m)}
+                                           {currentTab === 'all' && (
+                                              <div className="flex gap-2">
+                                                {['completed', 'transcribed'].includes(m.status) && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); onReprocess(m); }} 
+                                                        className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg"
+                                                    >
+                                                        <Wand2 className="w-3 h-3" />
+                                                    </button>
+                                                )}
+                                              </div>
+                                          )}
                                            {currentTab === 'trash' && (
                                                <div className="flex gap-2">
                                                    <button onClick={(e) => handleRestore(e, m.id)} className="p-1 bg-green-50 text-green-600 rounded"><RotateCcw className="w-3 h-3" /></button>
