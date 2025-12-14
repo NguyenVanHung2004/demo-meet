@@ -225,6 +225,32 @@ export default function Page() {
             triggerRefresh();
         });
   };
+  // ✅ [MỚI] Hàm xử lý lại: Lấy audio cũ -> Đẩy vào quy trình Upload xịn
+  const handleReprocess = async (meeting: Meeting) => {
+    if (!meeting.audioBlob) {
+      toast.error("Không tìm thấy file ghi âm gốc.");
+      return;
+    }
+
+    // 1. Hỏi người dùng xác nhận (Optional, nếu muốn)
+    const isConfirmed = await confirm({
+       title: "Xử lý chuyên sâu?",
+       message: "Hệ thống sẽ tạo một bản sao mới và gửi lên Server để gỡ băng chính xác hơn. Bạn muốn tiếp tục?",
+       confirmText: "Tạo bản mới",
+       type: "info"
+    });
+    if (!isConfirmed) return;
+
+    // 2. Tạo File mới từ Blob cũ
+    // Thêm hậu tố (HQ) - High Quality để dễ phân biệt
+    const newFileName = `${meeting.title} (File).mp3`; 
+    const file = new File([meeting.audioBlob], newFileName, { type: 'audio/mp3' });
+
+    // 3. Tái sử dụng hàm Upload có sẵn
+    // Hàm này sẽ tự động: Tạo row mới, Upload Blob, Gọi RunPod, Polling...
+    await handleFileUpload(file);
+  };
+
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
       <PollingManager onUpdate={triggerRefresh} />
@@ -236,6 +262,7 @@ export default function Page() {
           onUseSample={handleStartDemo}
           onLive={() => setCurrentState('LIVE_RECORDING')}
           onOpenMeeting={handleViewDetail}
+          onReprocess={handleReprocess}
         />
       )}
 
