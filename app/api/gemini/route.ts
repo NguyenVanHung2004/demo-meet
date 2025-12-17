@@ -46,44 +46,51 @@ export async function POST(req: Request) {
     } else {
       // [PROMPT NÂNG CẤP] Cho tóm tắt tổng hợp (Full Summary)
       prompt = `
-      Bạn là Thư Ký Cấp Cao chuyên nghiệp. Nhiệm vụ của bạn là tổng hợp biên bản cuộc họp từ văn bản thô (transcript) được cung cấp dưới đây.
-      
-      MỤC TIÊU: Tạo ra một báo cáo súc tích, dễ đọc, tập trung vào kết quả thực tế, loại bỏ hoàn toàn các câu xã giao thừa thãi.
+      Bạn là Thư Ký Cấp Cao chuyên nghiệp. Nhiệm vụ của bạn là tổng hợp biên bản cuộc họp từ văn bản thô (transcript), đảm bảo tính chính xác tuyệt đối của thông tin.
+
+      YÊU CẦU CỐT LÕI (XỬ LÝ DỮ LIỆU):
+      1.  **Bảo toàn nguyên vẹn số liệu:** Mọi dữ kiện định lượng (con số, ngày tháng, thời gian, chi phí, số lượng...) phải được trích xuất chính xác như trong transcript.
+          * *Tuyệt đối không* tự ý làm tròn số (trừ khi được yêu cầu trong văn bản).
+          * *Tuyệt đối không* suy đoán hay tự điền số liệu nếu transcript không nhắc đến.
+      2.  **Tư duy tổng hợp:** Viết tóm tắt súc tích, tập trung vào kết quả và quyết định, nhưng phải lồng ghép chính xác các dữ kiện số liệu vào ngữ cảnh của câu.
 
       DỮ LIỆU ĐẦU VÀO:
       "${text}"
 
       YÊU CẦU ĐỊNH DẠNG ĐẦU RA (Markdown):
-      
-      # BIÊN BẢN TÓM TẮT CUỘC HỌP
-      
-      ## 1. TỔNG QUAN
-      - **Mục đích cuộc họp:** (Tóm tắt trong 1 câu)
-      
-      ## 2. CÁC ĐIỂM CHÍNH
-      *(Tóm tắt theo chủ đề, không tường thuật theo trình tự thời gian. Dùng gạch đầu dòng)*
-      - **[Chủ đề A]:** Các ý chính đã thảo luận...
-      - **[Chủ đề B]:** Các ý chính đã thảo luận...
-      
-      ## 3. CHI TIẾT THẢO LUẬN
-      *(Chỉ ghi lại những tranh luận quan trọng hoặc ý kiến đắt giá)*
-      - 🗣️ **[Tên/Vai trò]:** [Quan điểm chính]
-      
-      ## 4. KẾT LUẬN & HÀNH ĐỘNG TIẾP THEO
-       **Các quyết định đã chốt:**
-         - [Quyết định 1]
-         - [Quyết định 2]
-         
-       **Hành động cần làm (Action Items):**
-         - [ ] **Ai làm?** - [Làm việc gì?] - [Deadline nếu có]
 
-      LƯU Ý QUAN TRỌNG:
-      - Sử dụng 100% Tiếng Việt chuẩn mực báo cáo.
-      - Giữ nguyên thuật ngữ chuyên ngành (Tiếng Anh, tên riêng, mã dự án).
-      - Trình bày thoáng, dễ nhìn (sử dụng Bold, Bullet points).
+      # BIÊN BẢN TÓM TẮT CUỘC HỌP
+
+      ## 1. TỔNG QUAN
+      - **Mục đích:** (Tóm tắt mục tiêu chính của cuộc họp trong 1-2 dòng)
+
+      ## 2. NỘI DUNG CHÍNH & THẢO LUẬN
+      *(Tóm tắt theo chủ đề. Các con số và dữ kiện quan trọng cần được **Bôi đậm** để dễ đối chiếu)*
+
+      - **[Chủ đề 1]:**
+        - Diễn giải ý chính và các kết luận thống nhất...
+        - Các thông số/dữ kiện đi kèm (nếu có)...
+
+      - **[Chủ đề 2]:**
+        - Diễn giải ý chính và các kết luận thống nhất...
+
+      ## 3. TRANH LUẬN & GHI CHÚ QUAN TRỌNG
+      *(Ghi lại các ý kiến trái chiều hoặc các điểm nhấn đặc biệt)*
+      - **[Tên/Vai trò]:** [Nội dung quan điểm]
+
+      ## 4. KẾT LUẬN & KẾ HOẠCH HÀNH ĐỘNG
+      **Các quyết định đã chốt:**
+        - [Quyết định 1]
+
+      **Phân công nhiệm vụ (Action Items):**
+        - [ ] **Ai làm?** - [Nhiệm vụ cụ thể] - [Deadline (ghi chính xác ngày/tháng nếu có)]
+
+      LƯU Ý TRÌNH BÀY:
+      - Văn phong khách quan, chuyên nghiệp.
+      - Nếu transcript có thông tin mâu thuẫn (VD: Lúc đầu nói A, sau sửa thành B), hãy ghi nhận thông tin cuối cùng đã được chốt lại (B).
       `;
     }
-
+    
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const summary = response.text();
@@ -91,7 +98,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ summary });
 
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
+    const errorMessage = error.status === 503 
+        ? "Hệ thống AI đang quá tải, vui lòng thử lại sau." 
+        : (error.message || "Lỗi xử lý AI.");
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
