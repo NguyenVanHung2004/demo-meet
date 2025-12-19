@@ -1,3 +1,5 @@
+// app/hooks/useGoogleCloud.ts
+
 import { useState, useRef, useEffect } from "react";
 import { io, Socket } from "socket.io-client";
 
@@ -33,12 +35,36 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
   const lastSpeechTimeRef = useRef<number>(Date.now());
   const shouldMergeRef = useRef<boolean>(false);
   
-  // [MỚI] Ref để theo dõi trạng thái interim mà không gây re-render useEffect
   const isInterimActiveRef = useRef(false);
+
+  // [FIX 1] Lưu callback mới nhất vào Ref để tránh lỗi Stale Closure trong useEffect []
+  const onSegmentEndRef = useRef(onSegmentEnd);
+  
+  // Cập nhật ref mỗi khi onSegmentEnd thay đổi
+  useEffect(() => {
+    onSegmentEndRef.current = onSegmentEnd;
+  }, [onSegmentEnd]);
 
   const SERVER_URL = "https://meeting-socket-server.onrender.com"; 
 
-  // [FIX QUAN TRỌNG] useEffect này chỉ được chạy 1 lần duy nhất!
+  // Hàm xử lý khi phát hiện im lặng
+  const handleSilenceDetected = () => {
+      const buffer = pendingBufferRef.current.trim();
+      // Gọi thông qua Ref để đảm bảo logic mới nhất
+      if (buffer.length > 20 && onSegmentEndRef.current) {
+          console.log("🤫 Silence detected -> Trigger Summary");
+          onSegmentEndRef.current(buffer);
+          pendingBufferRef.current = ""; 
+      }
+  };
+
+  // Hàm reset đồng hồ đếm ngược
+  const resetSilenceTimer = () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      // Đợi 2 giây im lặng thì gọi xử lý
+      silenceTimerRef.current = setTimeout(handleSilenceDetected, 2000);
+  };
+
   useEffect(() => {
     setIsConnecting(true);
     const socket = io(SERVER_URL, { 
@@ -54,26 +80,25 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
         setIsConnecting(false);
         lastSpeechTimeRef.current = Date.now();
     });
+
     socket.on("force-client-restart", () => {
         console.log("♻️ Server yêu cầu restart (Reset 5 phút)");
     
         if (pendingBufferRef.current.trim().length > 0) {
-        handleSilenceDetected(); 
+           handleSilenceDetected(); 
         }
-        // 1. Dừng recorder hiện tại
+        
         if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
             mediaRecorderRef.current.stop();
         }
 
-        // 2. Khởi động lại ngay lập tức (Tạo Header mới)
         if (streamRef.current) {
-            // Đợi 100ms để đảm bảo stream cũ đã đóng hẳn
             setTimeout(() => {
-               // Gọi hàm này sẽ kích hoạt lại socket.emit("start-google-stream")
                startListening(streamRef.current!); 
             }, 100);
         }
     });
+
     socket.on("disconnect", () => {
         setIsConnected(false);
         setIsConnecting(true); 
@@ -82,26 +107,25 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
     socket.on("connect_error", () => setIsConnecting(true));
 
     socket.on("transcript-data", (data: TranscriptData) => {
-        resetSilenceTimer();
-
+        // [FIX 2] Chỉ reset timer khi có nội dung thực sự
+        // Nếu server gửi gói tin rỗng/keep-alive thì KHÔNG reset timer -> để timer chạy hết và trigger tóm tắt
         if (!data.text || data.text.trim().length === 0) return;
+
+        // Có nội dung -> Reset timer (người dùng đang nói)
+        resetSilenceTimer();
 
         const now = Date.now();
         
-        // [LOGIC MỚI] Dùng Ref để kiểm tra thay vì State
-        // Nếu trước đó chưa có interim (đang im lặng) -> Đây là bắt đầu câu mới
         if (!isInterimActiveRef.current) {
             const silenceGap = now - lastSpeechTimeRef.current;
-            // Nếu nghỉ ít hơn 2s -> Nối
             shouldMergeRef.current = silenceGap < 2000;
         }
         
-        // Cập nhật thời điểm mới nhất có tiếng
         lastSpeechTimeRef.current = now;
 
         if (data.isFinal) {
             setInterimText("");
-            isInterimActiveRef.current = false; // Reset cờ interim
+            isInterimActiveRef.current = false; 
 
             const cleanText = data.text.trim();
             const currentSpeaker = "SPEAKER_00"; 
@@ -109,11 +133,6 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
             if (cleanText) {
                 setSegments(prev => {
                     const lastSeg = prev[prev.length - 1];
-
-                    // Logic nối dòng:
-                    // 1. Cờ Merge bật (do nói nhanh)
-                    // 2. Cùng người nói
-                    // 3. Có đoạn trước đó
                     if (shouldMergeRef.current && lastSeg && lastSeg.speaker === currentSpeaker) {
                         return [
                             ...prev.slice(0, -1),
@@ -136,29 +155,20 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
                         ];
                     }
                 });
+                // Cộng dồn vào buffer chờ tóm tắt
                 pendingBufferRef.current += (pendingBufferRef.current ? " " : "") + cleanText;
             }
         } else {
             setInterimText(data.text);
-            isInterimActiveRef.current = true; // Đánh dấu là đang nói dở
+            isInterimActiveRef.current = true; 
         }
     });
 
-    return () => { if (socket) socket.disconnect(); };
-  }, []); // [QUAN TRỌNG] Dependency rỗng để không bao giờ reset Socket
-
-  const handleSilenceDetected = () => {
-      const buffer = pendingBufferRef.current.trim();
-      if (buffer.length > 20 && onSegmentEnd) {
-          onSegmentEnd(buffer);
-          pendingBufferRef.current = ""; 
-      }
-  };
-
-  const resetSilenceTimer = () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = setTimeout(handleSilenceDetected, 2000);
-  };
+    return () => { 
+        if (socket) socket.disconnect(); 
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    };
+  }, []); 
 
   const startListening = async (stream: MediaStream) => {
     if (!socketRef.current || !socketRef.current.connected) return;
@@ -167,7 +177,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
       streamRef.current = stream;
       pendingBufferRef.current = "";
       lastSpeechTimeRef.current = Date.now();
-      isInterimActiveRef.current = false; // Reset trạng thái
+      isInterimActiveRef.current = false; 
       
       socketRef.current.emit("start-google-stream");
       
@@ -184,7 +194,9 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
 
   const stopListening = () => {
     setIsListening(false);
+    // Gọi tóm tắt lần cuối cho phần còn dư
     if (pendingBufferRef.current.length > 0) handleSilenceDetected();
+    
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
     if (socketRef.current) socketRef.current.emit("stop-google-stream");
