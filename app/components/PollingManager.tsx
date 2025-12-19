@@ -15,7 +15,7 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
       
       // Lọc các meeting đang có job chạy (transcribing HOẶC summarizing)
       const activeJobs = allMeetings.filter(m => 
-        (m.status === 'transcribing' || m.status === 'summarizing') && m.jobId
+        (m.status === 'transcribing') && m.jobId
       );
 
       if (activeJobs.length === 0) return;
@@ -49,15 +49,6 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
              }
           }
           
-          // CASE B: Vừa tóm tắt xong (Text -> Summary)
-          else if (meeting.status === 'summarizing') {
-            const summaryText = jobData.output.summary || "";
-            await updateMeetingProcess(meeting.id, {
-              status: 'completed', // Chuyển sang trạng thái "Hoàn thành"
-              summary: summaryText,
-              jobId: undefined
-          });
-          }
 
           onUpdate(); // Reload UI
         } 
