@@ -25,7 +25,7 @@ const MobileTabBtn = ({ active, onClick, icon: Icon, label }: any) => (
 export default function LiveRecordingState({ 
   onFinish, onBack 
 }: { 
-  onFinish: (text: string, audioUrl: string, finalSummary: string ) => void, 
+  onFinish: (text: string, audioUrl: string, finalSummary: string, segments?: any[]) => void, 
   onBack: () => void 
 }) {
   const [summaries, setSummaries] = useState<SummaryItem[]>([]);
@@ -196,7 +196,15 @@ export default function LiveRecordingState({
         const createdAudioUrl = URL.createObjectURL(audioBlob);
         const fullTranscript = segments.map(s => `Speaker ${s.speaker}: ${s.content}`).join("\n") + (interimContent ? " " + interimContent : "");
         let finalSummary = summaries.filter(s => !s.isLoading).map(item => item.content.trim()).join(" ");
-        onFinish(fullTranscript, createdAudioUrl, finalSummary); 
+        const dbSegments = segments.map(s => ({
+            id: Date.now().toString() + Math.random(),
+            start: s.words?.[0]?.start || 0, // Lấy thời gian từ word đầu tiên
+            end: s.words?.[s.words.length - 1]?.end || 0,
+            text: s.content,
+            speakerId: `SPEAKER_${s.speaker}`,
+            words: s.words || [] // <--- LƯU WORDS VÀO ĐÂY
+        }));
+        onFinish(fullTranscript, createdAudioUrl, finalSummary,dbSegments); 
     }, 500);
   };
 

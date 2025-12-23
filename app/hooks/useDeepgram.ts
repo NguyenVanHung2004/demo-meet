@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
-
+import { Word } from "../lib/mockData";
 export type TranscriptSegment = {
   speaker: number;
   content: string;
   isFinal: boolean;
+  words?: Word[];
 };
 
 type OnFinalCallback = (data: { speaker: number; content: string }) => void;
@@ -83,6 +84,8 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
         setInterimContent(transcript);
     }
 
+    const words = received.words || [];
+
     if (isFinal) {
       let finalContent = transcript;
       let finalSpeaker = received.words?.[0]?.speaker ?? 0;
@@ -114,11 +117,12 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
                 { 
                     ...lastSegment, 
                     // [FIX] Dùng hàm mergeText thay vì smartConcat cũ
-                    content: mergeText(lastSegment.content, finalContent) 
+                    content: mergeText(lastSegment.content, finalContent),
+                    words: (lastSegment.words || []).concat(words)
                 }
             ];
         }
-        return [...prev, { speaker: finalSpeaker, content: finalContent.trim(), isFinal: true }];
+        return [...prev, { speaker: finalSpeaker, content: finalContent.trim(), isFinal: true,words: words }];
       });
     }
   };

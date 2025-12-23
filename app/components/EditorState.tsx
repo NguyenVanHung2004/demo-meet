@@ -143,7 +143,13 @@ export default function EditorState({
   };
 
   // Logic Editor
-  const handleUpdateText = (segId: string, newText: string) => setSegments(prev => prev.map(s => s.id === segId ? { ...s, text: newText } : s));
+  const handleUpdateText = (segId: string, newText: string) => {
+      setSegments(prev => prev.map(s => 
+          s.id === segId 
+             ? { ...s, text: newText, words: [] } // <--- Thêm words: [] vào đây
+             : s
+      ));
+  };
   const handleChangeSpeaker = (segId: string, newId: string) => setSegments(prev => prev.map(s => s.id === segId ? { ...s, speakerId: newId } : s));
   
   const handleSplitSegment = (segId: string, cursorIndex: number) => {
@@ -381,6 +387,7 @@ export default function EditorState({
                                     speaker={currentSpeaker}
                                     allSpeakers={speakers}
                                     isActive={isActive}
+                                    currentTime={currentTime}
                                     isAudioPlaying={isPlaying}
                                     onTogglePlay={togglePlay}
                                     onSeek={seekTo}

@@ -1,6 +1,6 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
-import { ChevronDown, Play, Pause, ArrowUpToLine, Plus } from "lucide-react";
+import { ChevronDown, Play, Pause, ArrowUpToLine, Plus, Edit2 } from "lucide-react";
 
 interface TranscriptRowProps {
   segment: any;
@@ -8,6 +8,7 @@ interface TranscriptRowProps {
   allSpeakers: any[];
   isActive: boolean;
   isAudioPlaying: boolean;
+  currentTime: number;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
   onTextChange: (id: string, text: string) => void;
@@ -20,7 +21,7 @@ interface TranscriptRowProps {
 
 export default function TranscriptRow({ 
   segment, speaker, allSpeakers, isActive, 
-  isAudioPlaying, onTogglePlay, 
+  isAudioPlaying,currentTime, onTogglePlay, 
   onSeek, onTextChange, onSpeakerChange, onSplit, onMerge,
   onAddRow, onTimeChange 
 }: TranscriptRowProps) {
@@ -28,8 +29,46 @@ export default function TranscriptRow({
 
   // State nội bộ để quản lý việc sửa thời gian
   const [timeStr, setTimeStr] = useState("");
-
+  const [isEditing, setIsEditing] = useState(false);
+  // Auto resize textarea (Chỉ chạy khi đang edit)
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
+    }
+  }, [segment.text, isEditing]);
   // Helper: Chuyển giây -> MM:SS
+
+  const renderKaraokeText = () => {
+    // BACKWARD COMPATIBILITY: Nếu dữ liệu cũ không có words -> Hiện text thường
+    if (!segment.words || segment.words.length === 0) {
+        return <p className="text-slate-800 leading-relaxed text-sm md:text-base">{segment.text}</p>;
+    }
+    return (
+      <p className="leading-relaxed text-slate-800 text-sm md:text-base">
+        {segment.words.map((w: any, idx: number) => {
+          // Logic highlight: Thời gian hiện tại nằm trong khoảng bắt đầu và kết thúc của từ
+          // Thêm sai số 0.2s để highlight mượt hơn (giữ màu lâu hơn một chút)
+          const isHighlight = currentTime >= w.start && currentTime <= (w.end + 0.15);
+          
+          return (
+            <span 
+              key={idx}
+              className={`transition-all duration-150 rounded px-0.5 inline-block
+                ${isHighlight 
+                    ? "bg-green-200 text-black font-semibold  shadow-sm ring-1 ring-green-300" 
+                    : "hover:bg-slate-100"
+                }
+              `}
+              title={`${w.start.toFixed(2)}s`}
+            >
+              {w.word}{" "}
+            </span>
+          );
+        })}
+      </p>
+    );
+  };
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
@@ -131,10 +170,21 @@ export default function TranscriptRow({
       </div>
 
       {/* 2. Cột Nội Dung */}
-      <div className={`flex-1 p-4 rounded-xl border transition-all relative group/content ${isActive ? "bg-indigo-50 border-indigo-200 shadow-sm" : "bg-white border-transparent hover:border-slate-200"}`}>
+      <div 
+        className={`flex-1 p-4 rounded-xl border transition-all relative group/content 
+            ${isActive ? "bg-indigo-50 border-indigo-200 shadow-sm" : "bg-white border-transparent hover:border-slate-200"}
+        `}
+        // Double click để vào chế độ sửa nhanh
+        onDoubleClick={() => setIsEditing(true)}
+      >
         
         {/* [MỚI] Action Buttons (Insert & Merge) - Chỉ hiện khi hover vào box nội dung */}
         <div className="absolute right-2 top-2 opacity-0 group-hover/content:opacity-100 transition-opacity flex gap-1 bg-white/90 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 z-10">
+          {!isEditing && (
+              <button onClick={() => setIsEditing(true)} title="Sửa văn bản" className="p-1.5 hover:bg-blue-50 rounded text-slate-400 hover:text-blue-600 transition-colors">
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+          )}
           <button 
             onClick={() => onAddRow(segment.id)}
             title="Chèn dòng mới phía dưới"
@@ -175,16 +225,25 @@ export default function TranscriptRow({
         </div>
 
         {/* Text Area */}
-        <textarea
-          ref={textareaRef}
-          value={segment.text}
-          onChange={(e) => onTextChange(segment.id, e.target.value)}
-          onKeyDown={handleKeyDown}
-          // [QUAN TRỌNG] Đã xóa sự kiện onClick để không nhảy audio khi click sửa
-          rows={1}
-          className="w-full bg-transparent resize-none outline-none text-slate-800 leading-relaxed mt-1 placeholder:text-slate-300 focus:ring-0 border-none p-0"
-          placeholder="Nhập nội dung hội thoại..."
-        />
+        <div className="mt-1 min-h-[24px]">
+            {isEditing ? (
+                <textarea
+                    ref={textareaRef}
+                    value={segment.text}
+                    onChange={(e) => onTextChange(segment.id, e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onBlur={() => setIsEditing(false)} // Blur ra ngoài thì lưu và thoát chế độ sửa
+                    autoFocus
+                    rows={1}
+                    className="w-full bg-transparent resize-none outline-none text-slate-800 leading-relaxed placeholder:text-slate-300 focus:ring-0 border-none p-0"
+                    placeholder="Nhập nội dung hội thoại..."
+                />
+            ) : (
+                <div onClick={() => !isActive && onSeek(segment.start)} className="cursor-text">
+                    {renderKaraokeText()}
+                </div>
+            )}
+        </div>
       </div>
     </div>
   );
