@@ -38,7 +38,7 @@ export default function TranscriptRow({
     }
   }, [segment.text, isEditing]);
   // Helper: Chuyển giây -> MM:SS
-
+  const [showSpeakerMenu, setShowSpeakerMenu] = useState(false);
   const renderKaraokeText = () => {
     // BACKWARD COMPATIBILITY: Nếu dữ liệu cũ không có words -> Hiện text thường
     if (!segment.words || segment.words.length === 0) return segment.text;
@@ -195,25 +195,50 @@ export default function TranscriptRow({
         </div>
 
         {/* Speaker Name */}
-        <div className="group/spk relative inline-block mb-1">
-          <button className={`text-xs font-bold px-2 py-1 rounded border uppercase flex items-center gap-1 transition-colors ${speaker.color}`}>
+        <div className="relative inline-block mb-1">
+          <button 
+            // SỬA: Chuyển sang onClick, bỏ group-hover
+            onClick={(e) => {
+                e.stopPropagation(); // Tránh kích hoạt play audio
+                setShowSpeakerMenu(!showSpeakerMenu);
+            }}
+            className={`text-xs font-bold px-2 py-1 rounded border uppercase flex items-center gap-1 transition-colors ${speaker.color}`}
+          >
             {speaker.name}
             <ChevronDown className="w-3 h-3 opacity-50" />
           </button>
           
-          {/* Dropdown Menu chọn người nói */}
-          <div className="absolute top-full left-0 mt-1 w-48 bg-white border rounded-lg shadow-xl hidden group-hover/spk:block z-50 py-1 max-h-60 overflow-y-auto">
-            {allSpeakers.map((spk: any) => (
-              <div 
-                key={spk.id}
-                onClick={() => onSpeakerChange(segment.id, spk.id)}
-                className="px-3 py-2 text-xs hover:bg-slate-50 cursor-pointer flex items-center gap-2"
-              >
-                <div className={`w-2 h-2 rounded-full ${spk.color.split(" ")[0].replace("bg-", "bg-slate-900")}`}></div> 
-                {spk.name}
-              </div>
-            ))}
-          </div>
+          {/* SỬA: Logic hiển thị dựa trên State thay vì CSS Hover */}
+          {showSpeakerMenu && (
+            <>
+                {/* Lớp màng vô hình: Click ra ngoài để đóng menu */}
+                <div 
+                    className="fixed inset-0 z-40 cursor-default" 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setShowSpeakerMenu(false);
+                    }}
+                />
+
+                {/* Dropdown Menu */}
+                <div className="absolute top-full left-0 mt-1 w-48 bg-white border rounded-lg shadow-xl z-50 py-1 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                    {allSpeakers.map((spk: any) => (
+                    <div 
+                        key={spk.id}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSpeakerChange(segment.id, spk.id);
+                            setShowSpeakerMenu(false); // Chọn xong tự đóng
+                        }}
+                        className="px-3 py-2 text-xs hover:bg-slate-50 cursor-pointer flex items-center gap-2"
+                    >
+                        <div className={`w-2 h-2 rounded-full ${spk.color.split(" ")[0].replace("bg-", "bg-slate-900")}`}></div> 
+                        {spk.name}
+                    </div>
+                    ))}
+                </div>
+            </>
+          )}
         </div>
 
         {/* Text Area */}
