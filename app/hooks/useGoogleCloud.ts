@@ -48,7 +48,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
     onSegmentEndRef.current = onSegmentEnd;
   }, [onSegmentEnd]);
 
-  const SERVER_URL = "localhost:8080"; 
+  const SERVER_URL = "https://meeting-socket-server.onrender.com"; 
 
   // Hàm xử lý khi phát hiện im lặng
   const handleSilenceDetected = () => {
