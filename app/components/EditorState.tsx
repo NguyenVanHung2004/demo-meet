@@ -153,33 +153,74 @@ export default function EditorState({
   const handleChangeSpeaker = (segId: string, newId: string) => setSegments(prev => prev.map(s => s.id === segId ? { ...s, speakerId: newId } : s));
   
   const handleSplitSegment = (segId: string, cursorIndex: number) => {
-    const idx = segments.findIndex(s => s.id === segId);
-    if (idx === -1) return;
-    const original = segments[idx];
-    const duration = original.end - original.start;
-    const splitRatio = original.text.length > 0 ? cursorIndex / original.text.length : 0.5;
-    const newMidTime = original.start + (duration * splitRatio);
+    const idx = segments.findIndex(s => s.id === segId);
+    if (idx === -1) return;
 
-    const newSeg1 = { ...original, text: original.text.slice(0, cursorIndex).trim(), end: newMidTime };
-    const newSeg2 = { id: Date.now().toString(), speakerId: original.speakerId, start: newMidTime, end: original.end, text: original.text.slice(cursorIndex).trim() };
+    const original = segments[idx];
     
-    const newSegments = [...segments];
-    newSegments[idx] = newSeg1;
-    newSegments.splice(idx + 1, 0, newSeg2);
-    setSegments(newSegments);
-  };
+    // 1. Tính toán thời điểm cắt (Split Time)
+    const duration = original.end - original.start;
+    const splitRatio = original.text.length > 0 ? cursorIndex / original.text.length : 0.5;
+    const newMidTime = original.start + (duration * splitRatio);
+
+    // 2. Chia mảng Words (Karaoke) làm 2 phần
+    // Logic: Từ nào có thời gian bắt đầu < thời điểm cắt -> Về dòng 1, ngược lại về dòng 2
+    let words1: any[] = [];
+    let words2: any[] = [];
+    
+    if (original.words && original.words.length > 0) {
+        words1 = original.words.filter((w: any) => w.start < newMidTime);
+        words2 = original.words.filter((w: any) => w.start >= newMidTime);
+    }
+
+    // 3. Tạo Segment 1 (Cập nhật words mới)
+    const newSeg1 = { 
+        ...original, 
+        text: original.text.slice(0, cursorIndex).trim(), 
+        end: newMidTime,
+        words: words1 // <--- QUAN TRỌNG: Cập nhật words đã cắt
+    };
+
+    // 4. Tạo Segment 2 (Cập nhật words mới)
+    const newSeg2 = { 
+        id: Date.now().toString(), 
+        speakerId: original.speakerId, 
+        start: newMidTime, 
+        end: original.end, 
+        text: original.text.slice(cursorIndex).trim(),
+        words: words2 // <--- QUAN TRỌNG: Gán words phần còn lại
+    };
+    
+    const newSegments = [...segments];
+    newSegments[idx] = newSeg1;
+    newSegments.splice(idx + 1, 0, newSeg2);
+    setSegments(newSegments);
+  };
 
   const handleMergeSegment = (currentId: string) => {
-    const index = segments.findIndex(s => s.id === currentId);
-    if (index <= 0) return;
-    const current = segments[index];
-    const prev = segments[index - 1];
-    const merged = { ...prev, text: (prev.text + " " + current.text).trim(), end: current.end };
-    const newSegments = [...segments];
-    newSegments[index - 1] = merged;
-    newSegments.splice(index, 1);
-    setSegments(newSegments);
-  };
+    const index = segments.findIndex(s => s.id === currentId);
+    if (index <= 0) return; // Không thể gộp dòng đầu tiên lên trên
+
+    const current = segments[index];
+    const prev = segments[index - 1];
+
+    // 1. Chuẩn bị mảng words để gộp (đề phòng null/undefined)
+    const prevWords = prev.words || [];
+    const currentWords = current.words || [];
+
+    // 2. Tạo segment gộp
+    const merged = { 
+        ...prev, 
+        text: (prev.text + " " + current.text).trim(), 
+        end: current.end, // Kéo dài thời gian kết thúc
+        words: [...prevWords, ...currentWords] // <--- QUAN TRỌNG: Gộp mảng words nối đuôi nhau
+    };
+
+    const newSegments = [...segments];
+    newSegments[index - 1] = merged; // Thay thế dòng trên bằng dòng đã gộp
+    newSegments.splice(index, 1);    // Xóa dòng hiện tại
+    setSegments(newSegments);
+  };
 
   const handleAddRow = (prevId: string) => {
     const index = segments.findIndex(s => s.id === prevId);

@@ -550,10 +550,16 @@ export default function MeetingDetailState({
             <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 pb-32">
                 {meeting.segments.map((seg, idx) => {
                   // Tạo object speaker chuẩn format cho TranscriptRow
+                  // 1. Tìm speaker tương ứng trong danh sách meeting.speakers
+                  const matchedSpeaker = meeting.speakers.find(s => s.id === seg.speakerId);
+
+                  // 2. Tạo object speaker (Ưu tiên lấy từ DB, nếu không thấy mới fallback về mặc định)
                   const speakerInfo = {
                       id: seg.speakerId,
-                      name: `Speaker ${seg.speakerId.split('_')[1] || '00'}`,
-                      color: getSpeakerStyle(seg.speakerId) // Tái sử dụng hàm style cũ
+                      // Lấy tên từ DB, nếu null/undefined thì mới dùng logic "Speaker 01"
+                      name: matchedSpeaker ? matchedSpeaker.name : `Speaker ${seg.speakerId.split('_')[1] || '00'}`,
+                      // Lấy màu từ DB luôn cho đồng bộ với màn Edit
+                      color: matchedSpeaker ? matchedSpeaker.color : getSpeakerStyle(seg.speakerId) 
                   };
 
                   return (
