@@ -31,28 +31,58 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
         // 1. Xử lý khi Job Thành Công
         if (jobData.status === 'COMPLETED' && jobData.output) {
           
-          // CASE: Vừa ghi biên bản xong (Audio -> Text)
-          // [SỬA] Lấy transcript từ jobData.output.transcript
-          const transcriptText = jobData.output.transcript || "";
-            
-          if (transcriptText) {
-              const parsed = parseTranscriptFile(transcriptText);
-              await updateMeetingProcess(meeting.id, {
-                status: 'transcribed', 
-                segments: parsed.segments,
-                speakers: parsed.speakers,
-                duration: parsed.segments[parsed.segments.length - 1]?.end || 0,
-                jobId: undefined // [QUAN TRỌNG] Xóa JobId để ngừng poll
-              });
-          } else {
-              console.error("Không tìm thấy transcript trong output:", jobData.output);
-              // Có thể xử lý lỗi nhẹ ở đây nếu muốn
-          }
-          
-          // [ĐÃ XÓA] Logic check 'summarizing' cũ
+          let finalSegments: any[] = [];
+          let finalSpeakers: any[] = [];
+          let finalStatus: 'transcribed' | 'completed' = 'completed';
 
-          onUpdate(); // Reload UI
-        } 
+          // [MỚI] Ưu tiên check JSON Segments (Format mới cho Karaoke)
+          // Backend trả về: { segments: [...] }
+          const rawOutput = jobData.output;
+          const jsonSegments = rawOutput.transcript || (Array.isArray(rawOutput) ? rawOutput : null);
+          console.log(jsonSegments);
+          if (jsonSegments && jsonSegments.length > 0) {
+             console.log("✅ Polling: Nhận dữ liệu Karaoke xịn (JSON)");
+             finalSegments = jsonSegments;
+
+             // Tự tạo danh sách Speaker từ ID (vì backend chỉ trả về ID "SPEAKER_00")
+             const uniqueIds = Array.from(new Set(finalSegments.map((s: any) => s.speakerId)));
+             const colors = [
+                "bg-indigo-50 text-indigo-700 border-indigo-200",
+                "bg-emerald-50 text-emerald-700 border-emerald-200", 
+                "bg-orange-50 text-orange-700 border-orange-200", 
+                "bg-pink-50 text-pink-700 border-pink-200"
+             ];
+             
+             finalSpeakers = uniqueIds.map((id: any, index) => ({
+                 id: id,
+                 name: `Người nói ${index + 1}`,
+                 color: colors[index % colors.length]
+             }));
+          } 
+          
+          // [CŨ] Fallback: Nếu không có JSON thì mới thử tìm text (đề phòng chạy job cũ)
+          else if (rawOutput.transcript) {
+             console.log("⚠️ Polling: Dữ liệu cũ (Text thô)");
+             const parsed = parseTranscriptFile(rawOutput.transcript);
+             finalSegments = parsed.segments;
+             finalSpeakers = parsed.speakers;
+             finalStatus = 'transcribed';
+          }
+
+          // Cập nhật DB
+          if (finalSegments.length > 0) {
+              await updateMeetingProcess(meeting.id, {
+                status: finalStatus, 
+                segments: finalSegments, // <--- CÓ WORDS CHO KARAOKE
+                speakers: finalSpeakers,
+                duration: finalSegments[finalSegments.length - 1]?.end || 0,
+                jobId: undefined // Xóa JobId để ngừng poll
+             });
+             onUpdate(); // Reload UI
+          } else {
+             console.error("Job xong nhưng không thấy dữ liệu:", jobData);
+          }
+        }
         
         // 2. Xử lý khi Job Thất Bại
         else if (jobData.status === 'failed') {
