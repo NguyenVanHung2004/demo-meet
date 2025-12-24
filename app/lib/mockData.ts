@@ -1,5 +1,9 @@
 // src/lib/mockData.ts
-
+export type Word = {
+  word: string;
+  start: number;
+  end: number;
+};
 // 1. Định nghĩa kiểu dữ liệu
 export type Segment = {
   id: string;
@@ -7,6 +11,7 @@ export type Segment = {
   start: number;
   end: number;
   text: string;
+  words?: Word[];
 };
 
 export type Speaker = {

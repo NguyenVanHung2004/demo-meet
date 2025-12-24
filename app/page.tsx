@@ -150,50 +150,63 @@ export default function Page() {
   };
 
   // Flow 3: Live Recording (Xử lý tại trình duyệt)
-  const handleFinishLive = async (recordedText: string, recordedAudioUrl: string, finalSummary: string) => {
+  const handleFinishLive = async (
+      recordedText: string, 
+      recordedAudioUrl: string, 
+      finalSummary: string,
+      dbSegments?: any[] // <--- THÊM THAM SỐ NÀY (Dữ liệu Karaoke xịn)
+  ) => {
     
-    // [SỬA LỖI] Thay vì chia theo số từ (word count), ta chia theo dòng (newline)
-    // Logic này tôn trọng việc bạn ngắt nghỉ lúc ghi âm
-    const lines = recordedText.split("\n").filter(line => line.trim() !== "");
-    
-    const newSegments = lines.map((line, index) => {
-        // Ước lượng thời gian (giả lập): mỗi câu khoảng 3-5 giây
-        // Vì Web Speech API không trả về thời gian thực của từng câu
-        const start = index * 5;
-        const end = start + 5;
-        
-        // Làm sạch text: Xóa dấu gạch đầu dòng "- " nếu có
-        const cleanText = line.trim().replace(/^- /, "");
+    let finalSegments: any[] = [];
 
-        return {
-            id: index.toString(),
-            speakerId: "SPEAKER_00", // Mặc định là 1 người
-            start: start,
-            end: end,
-            text: cleanText
-        };
-    });
+    // TRƯỜNG HỢP 1: Có dữ liệu xịn từ Deepgram (Có timestamp từng từ)
+    if (dbSegments && dbSegments.length > 0) {
+        console.log("✅ Đã nhận dữ liệu Karaoke chi tiết từ Deepgram");
+        finalSegments = dbSegments;
+    } 
+    // TRƯỜNG HỢP 2: Fallback (Nếu bị lỗi hoặc dùng WebSpeech API thường)
+    else {
+        console.log("⚠️ Không có timestamp chi tiết, dùng bộ chia dòng thủ công");
+        // Logic cũ: Chia theo dòng (newline)
+        const lines = recordedText.split("\n").filter(line => line.trim() !== "");
+        finalSegments = lines.map((line, index) => {
+            const start = index * 5;
+            const end = start + 5;
+            const cleanText = line.trim().replace(/^- /, "");
+            return {
+                id: index.toString(),
+                speakerId: "SPEAKER_00",
+                start: start,
+                end: end,
+                text: cleanText,
+                words: [] // Không có words
+            };
+        });
+    }
 
     const res = await fetch(recordedAudioUrl);
     const blob = await res.blob();
-
+    console.log("Segment lưu lại ", finalSegments);
     const newMeeting: Meeting = {
       id: `rec-${Date.now()}`,
       title: `Ghi âm trực tiếp ${new Date().toLocaleTimeString()}`,
       createdAt: Date.now(),
-      duration: newSegments.length * 5, // Tổng thời gian ước lượng
+      // Nếu có segments xịn thì lấy thời gian từ segment cuối cùng, không thì ước lượng
+      duration: finalSegments.length > 0 ? (finalSegments[finalSegments.length - 1].end || 0) : 0,
       audioBlob: blob,
-      segments: newSegments, // [QUAN TRỌNG] Dùng segments đã chia theo dòng
+      
+      segments: finalSegments, // <--- LƯU SEGMENTS CHUẨN VÀO ĐÂY
+      
       summary: finalSummary,
       speakers: [{ id: "SPEAKER_00", name: "Tôi (Ghi âm)", color: "bg-blue-50 text-blue-700 border-blue-200" }],
-      
       status: 'completed', 
       isDeleted: false,
     };
 
+    // Lưu vào DB (Lúc này DB sẽ có cả mảng words)
     await saveMeeting(newMeeting);
     
-    // Chuyển thẳng vào màn hình Editor để sửa luôn
+    // Chuyển màn hình
     handleViewDetail(newMeeting); 
   };
   

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { io, Socket } from "socket.io-client";
+import { Word } from "../lib/mockData";
 
 export type LiveSegment = {
   id: number;
@@ -9,12 +10,14 @@ export type LiveSegment = {
   isFinal: boolean;
   speaker: string; 
   lastUpdate: number;
+  words?: Word[];
 };
 
 type TranscriptData = {
   text: string;
   isFinal: boolean;
   speaker: number | string;
+  words?: Word[];
 };
 
 type OnSegmentEndCallback = (text: string) => void;
@@ -45,7 +48,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
     onSegmentEndRef.current = onSegmentEnd;
   }, [onSegmentEnd]);
 
-  const SERVER_URL = "https://meeting-socket-server.onrender.com"; 
+  const SERVER_URL = "localhost:8080"; 
 
   // Hàm xử lý khi phát hiện im lặng
   const handleSilenceDetected = () => {
@@ -107,6 +110,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
     socket.on("connect_error", () => setIsConnecting(true));
 
     socket.on("transcript-data", (data: TranscriptData) => {
+        console.log("🔥 Socket Data trả về:", data);
         // [FIX 2] Chỉ reset timer khi có nội dung thực sự
         // Nếu server gửi gói tin rỗng/keep-alive thì KHÔNG reset timer -> để timer chạy hết và trigger tóm tắt
         if (!data.text || data.text.trim().length === 0) return;
@@ -129,19 +133,21 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
 
             const cleanText = data.text.trim();
             const currentSpeaker = "SPEAKER_00"; 
-
+            const incomingWords = data.words || [];
             if (cleanText) {
                 setSegments(prev => {
                     const lastSeg = prev[prev.length - 1];
                     if (shouldMergeRef.current && lastSeg && lastSeg.speaker === currentSpeaker) {
-                        return [
-                            ...prev.slice(0, -1),
-                            {
-                                ...lastSeg,
-                                text: lastSeg.text + " " + cleanText,
-                                lastUpdate: now 
-                            }
-                        ];
+                       return [
+                        ...prev.slice(0, -1),
+                        {
+                            ...lastSeg,
+                            text: lastSeg.text + " " + cleanText,
+                            // [MỚI] Nối words cũ + mới
+                            words: (lastSeg.words || []).concat(incomingWords), 
+                            lastUpdate: now 
+                        }
+                    ];
                     } else {
                         return [
                             ...prev, 
@@ -150,6 +156,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
                                 text: cleanText, 
                                 isFinal: true,
                                 speaker: currentSpeaker,
+                                words: incomingWords,
                                 lastUpdate: now
                             }
                         ];

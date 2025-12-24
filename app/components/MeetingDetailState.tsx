@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
+import TranscriptRow from "./TranscriptRow";
 export default function MeetingDetailState({ 
   meeting, 
   audioSrc,
@@ -548,37 +549,40 @@ export default function MeetingDetailState({
         <div className={`flex-1 overflow-y-auto bg-white md:border-r scroll-smooth ${activeTab === 'transcript' ? 'block' : 'hidden md:block'}`}>
             <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 pb-32">
                 {meeting.segments.map((seg, idx) => {
-                  const speakerStyle = getSpeakerStyle(seg.speakerId);
+                  // Tạo object speaker chuẩn format cho TranscriptRow
+                  const speakerInfo = {
+                      id: seg.speakerId,
+                      name: `Speaker ${seg.speakerId.split('_')[1] || '00'}`,
+                      color: getSpeakerStyle(seg.speakerId) // Tái sử dụng hàm style cũ
+                  };
+                  console.log('segment đc show nè ', seg)
                   return (
-                    <div key={idx} className="flex gap-3 md:gap-4 group">
-                      {/* Avatar / Time */}
-                      <div className="w-10 md:w-14 shrink-0 flex flex-col items-center pt-1 gap-1">
-                         <div 
-                            onClick={() => jumpToTime(seg.start)}
-                            className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs font-bold ring-2 shadow-sm cursor-pointer hover:scale-105 transition-transform select-none ${speakerStyle}`}
-                            title="Nghe từ đoạn này"
-                         >
-                            {seg.speakerId.split('_')[1] || '00'}
-                         </div>
-                         <span className="text-[10px] text-slate-400 font-mono group-hover:text-indigo-600 cursor-pointer" onClick={() => jumpToTime(seg.start)}>
-                            {formatTimeCode(seg.start)}
-                         </span>
-                      </div>
+                    <TranscriptRow 
+                        key={idx}
+                        segment={seg}
+                        speaker={speakerInfo}
+                        allSpeakers={meeting.speakers} // Truyền danh sách speaker (nếu có)
+                        
+                        // Truyền biến quan trọng để Karaoke hoạt động
+                        isActive={currentTime >= seg.start && currentTime < (seg.end || seg.start + 10)}
+                        isAudioPlaying={isPlaying}
+                        currentTime={currentTime} // <--- QUAN TRỌNG NHẤT
+                        
+                        onTogglePlay={togglePlay}
+                        onSeek={jumpToTime}
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                                Speaker {seg.speakerId.split('_')[1]}
-                            </span>
-                        </div>
-                        <p className="text-slate-800 leading-relaxed text-sm md:text-base hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors cursor-text">
-                          {seg.text}
-                        </p>
-                      </div>
-                    </div>
+                        // Vì đây là trang Xem (Read-only), ta truyền hàm rỗng cho các chức năng sửa
+                        // Nếu muốn sửa, người dùng sẽ bấm nút "Sửa" trên Header để sang trang EditorState
+                        onTextChange={() => {}}
+                        onSpeakerChange={() => {}}
+                        onSplit={() => {}}
+                        onMerge={() => {}}
+                        onAddRow={() => {}}
+                        onTimeChange={() => {}}
+                    />
                   );
                 })}
+
             </div>
         </div>
 
