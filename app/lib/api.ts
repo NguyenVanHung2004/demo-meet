@@ -1,54 +1,39 @@
-// app/lib/api.ts
-import { upload } from '@vercel/blob/client'; 
-
+// app/lib/api.ts 
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "./firebase";
 const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
 const RUNPOD_ENDPOINT_ID = process.env.NEXT_PUBLIC_RUNPOD_ENDPOINT_ID;
 
-// URL RunPod cho tác vụ nặng (Gỡ băng & Tóm tắt Full)
-const RUNPOD_URL_ASYNC = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`;
-
-const BLOB_TOKEN_SERVER = process.env.BLOB_READ_WRITE_TOKEN;
-
 // --- HÀM 1: GỠ BĂNG (Audio -> Text) - Dùng RunPod Async ---
-export const uploadAudioFile = async (file: File): Promise<string> => {
-  try {
-    if (!RUNPOD_API_KEY || !RUNPOD_ENDPOINT_ID) throw new Error("Thiếu config RunPod");
+// 1. Upload file lên Firebase (Thay thế Vercel Blob)
+export const uploadAudioToFirebase = async (file: File, userId: string): Promise<string> => {
+  // Lưu vào folder riêng của user
+  const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+  const storageRef = ref(storage, `users/${userId}/uploads/${fileName}`);
+  
+  await uploadBytes(storageRef, file);
+  return await getDownloadURL(storageRef);
+};
 
-    const payload = { 
-        fileType: file.type,
-        blobToken: BLOB_TOKEN_SERVER || process.env.BLOB_READ_WRITE_TOKEN
-    };
-    
-    console.log("🚀 Uploading to Vercel Blob...");
-    const blob = await upload(file.name, file, {
-      handleUploadUrl: '/api/upload', 
-      clientPayload: JSON.stringify(payload),
-      access: 'public'
-    });
-    
-    console.log("🚀 Gửi yêu cầu Gỡ băng sang RunPod...");
-    const response = await fetch(RUNPOD_URL_ASYNC, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${RUNPOD_API_KEY}`
-      },
-      body: JSON.stringify({
-        input: {
-          action: "transcribe", 
-          audio_url: blob.url
-        }
-      })
-    });
+// 2. Gọi RunPod (Chỉ gửi URL, server ko cần sửa gì cả)
+export const startTranscriptionJob = async (audioUrl: string): Promise<string> => {
+  const response = await fetch(`https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${RUNPOD_API_KEY}`
+    },
+    body: JSON.stringify({
+      input: {
+        action: "transcribe", 
+        audio_url: audioUrl 
+      }
+    })
+  });
 
-    const data = await response.json();
-    if (data.id) return data.id; 
-    throw new Error("Lỗi RunPod: " + JSON.stringify(data));
-
-  } catch (error) {
-    console.error("Lỗi Upload:", error);
-    throw error;
-  }
+  const data = await response.json();
+  if (data.id) return data.id; 
+  throw new Error("RunPod Error: " + JSON.stringify(data));
 };
 
 // --- HÀM 2: TÓM TẮT NHANH (Text -> Summary) ---

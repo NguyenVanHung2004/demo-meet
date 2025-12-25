@@ -1,50 +1,50 @@
-// app/components/PollingManager.tsx
 "use client";
 
 import { useEffect, useRef } from "react";
-import { getAllMeetings, updateMeetingProcess } from "../lib/db";
+import { useAuth } from "../context/AuthContext"; // [MỚI]
+import { getActiveTranscribingMeetings, updateMeetingProcess } from "../lib/db"; // [MỚI] import hàm getActive...
 import { checkJobStatusOnce } from "../lib/api";
 import { parseTranscriptFile } from "../lib/parser";
+import { deleteField } from "firebase/firestore"; // [MỚI]
 
 export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
+  const { user } = useAuth(); // [MỚI] Lấy user hiện tại
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    intervalRef.current = setInterval(async () => {
-      const allMeetings = await getAllMeetings();
-      
-      // [FIX] Chỉ lọc các meeting đang 'transcribing' (Gỡ băng).
-      // Bỏ 'summarizing' vì Gemini xử lý trực tiếp, không cần poll.
-      const activeJobs = allMeetings.filter(m => 
-        m.status === 'transcribing' && m.jobId
-      );
+    // Nếu chưa đăng nhập thì không làm gì cả
+    if (!user) return;
+
+    const pollJobs = async () => {
+      // 1. Chỉ lấy các meeting đang 'transcribing' của User này từ Firestore
+      const activeJobs = await getActiveTranscribingMeetings(user.uid);
 
       if (activeJobs.length === 0) return;
 
-      console.log(`Checking ${activeJobs.length} active transcription jobs...`);
+      console.log(`🔄 Đang kiểm tra ${activeJobs.length} job đang chạy...`);
 
       for (const meeting of activeJobs) {
         if (!meeting.jobId) continue;
 
+        // 2. Hỏi trạng thái từ RunPod
         const jobData = await checkJobStatusOnce(meeting.jobId);
 
-        // 1. Xử lý khi Job Thành Công
+        // --- XỬ LÝ KHI THÀNH CÔNG ---
         if (jobData.status === 'COMPLETED' && jobData.output) {
           
           let finalSegments: any[] = [];
           let finalSpeakers: any[] = [];
-          let finalStatus: 'transcribed' | 'completed' = 'completed';
+          let finalStatus: 'transcribed' | 'completed' = 'transcribed'; // Mặc định là transcribed
 
-          // [MỚI] Ưu tiên check JSON Segments (Format mới cho Karaoke)
-          // Backend trả về: { segments: [...] }
+          // [LOGIC CŨ GIỮ NGUYÊN] Xử lý output JSON (Karaoke) hoặc Text
           const rawOutput = jobData.output;
           const jsonSegments = rawOutput.transcript || (Array.isArray(rawOutput) ? rawOutput : null);
-          console.log(jsonSegments);
+
           if (jsonSegments && jsonSegments.length > 0) {
-             console.log("✅ Polling: Nhận dữ liệu Karaoke xịn (JSON)");
+             console.log("✅ Polling: Nhận dữ liệu Karaoke (JSON)");
              finalSegments = jsonSegments;
 
-             // Tự tạo danh sách Speaker từ ID (vì backend chỉ trả về ID "SPEAKER_00")
+             // Tạo Speaker giả lập từ ID
              const uniqueIds = Array.from(new Set(finalSegments.map((s: any) => s.speakerId)));
              const colors = [
                 "bg-indigo-50 text-indigo-700 border-indigo-200",
@@ -59,47 +59,53 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
                  color: colors[index % colors.length]
              }));
           } 
-          
-          // [CŨ] Fallback: Nếu không có JSON thì mới thử tìm text (đề phòng chạy job cũ)
+          // Fallback: Text thô
           else if (rawOutput.transcript) {
-             console.log("⚠️ Polling: Dữ liệu cũ (Text thô)");
+             console.log("⚠️ Polling: Dữ liệu Text thô");
              const parsed = parseTranscriptFile(rawOutput.transcript);
              finalSegments = parsed.segments;
              finalSpeakers = parsed.speakers;
-             finalStatus = 'transcribed';
           }
 
-          // Cập nhật DB
+          // 3. Cập nhật vào Firestore
           if (finalSegments.length > 0) {
               await updateMeetingProcess(meeting.id, {
                 status: finalStatus, 
-                segments: finalSegments, // <--- CÓ WORDS CHO KARAOKE
+                segments: finalSegments,
                 speakers: finalSpeakers,
                 duration: finalSegments[finalSegments.length - 1]?.end || 0,
-                jobId: undefined // Xóa JobId để ngừng poll
+                jobId: deleteField() as any
              });
-             onUpdate(); // Reload UI
+             
+             // Gọi onUpdate để refresh list ở Dashboard (nếu cần)
+             onUpdate(); 
           } else {
-             console.error("Job xong nhưng không thấy dữ liệu:", jobData);
+             console.error("Job xong nhưng dữ liệu rỗng:", jobData);
           }
         }
         
-        // 2. Xử lý khi Job Thất Bại
-        else if (jobData.status === 'failed') {
+        // --- XỬ LÝ KHI THẤT BẠI ---
+        else if (jobData.status === 'FAILED' || jobData.status === 'failed') {
           await updateMeetingProcess(meeting.id, {
             status: 'failed',
-            errorMessage: jobData.error || "Lỗi không xác định",
-            jobId: undefined
+            errorMessage: jobData.error || "Lỗi RunPod không xác định",
+            jobId: deleteField() as any
           });
           onUpdate();
         }
       }
-    }, 3000); // 3 giây quét 1 lần
+    };
+
+    // Chạy ngay lần đầu
+    pollJobs();
+    
+    // [TỐI ƯU] Tăng lên 5s (5000ms) để đỡ tốn quota Firestore
+    intervalRef.current = setInterval(pollJobs, 5000);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [onUpdate]);
+  }, [user, onUpdate]); // Dependency: user thay đổi thì chạy lại
 
   return null;
 }

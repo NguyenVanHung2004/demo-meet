@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Mic, Pause, ChevronLeft, Save, Sparkles, AlignLeft, Trash2, Cloud, Loader2, User } from "lucide-react";
 import useGoogleCloud from "../hooks/useGoogleCloud"; 
-import { requestSegmentSummary } from "../lib/api";
+import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api"; // [MỚI] Thêm api mới
+import { saveMeeting } from "../lib/db"; // [MỚI]
+import { useAuth } from "../context/AuthContext"; // [MỚI]
 
 type SummaryItem = { id: number; content: string; isLoading: boolean; };
 
@@ -21,14 +23,15 @@ const MobileTabBtn = ({ active, onClick, icon: Icon, label }: any) => (
 export default function LiveRecordingState({ 
   onFinish, onBack 
 }: { 
-  onFinish: (text: string, audioUrl: string, finalSummary: string, segments?: any[]) => void,
+  onFinish:() => void,
   onBack: () => void 
 }) {
+  const { user } = useAuth();
   const [summaries, setSummaries] = useState<SummaryItem[]>([]);
   const [timer, setTimer] = useState(0);
   const [volume, setVolume] = useState(0);
   const [mobileTab, setMobileTab] = useState<'transcript' | 'summary'>('transcript');
-
+  const [isUploading, setIsUploading] = useState(false); // [MỚI] State loading khi upload
   const summariesEndRef = useRef<HTMLDivElement>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -113,23 +116,70 @@ export default function LiveRecordingState({
       isListening ? stopRecordingSession() : startRecordingSession(); 
   };
 
-  const handleSaveAndProcess = () => {
+  const handleSaveAndProcess = async () => {
+    if (!user) return alert("Vui lòng đăng nhập!");
+    
+    // 1. Dừng ghi âm
     stopRecordingSession();
-    setTimeout(() => {
+    setIsUploading(true); 
+
+    try {
+        // Chờ 1 chút để chunks được đẩy hết vào mảng
+        await new Promise(r => setTimeout(r, 500));
+
+        // 2. Tạo File MP3 từ Blob
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' });
-        const createdAudioUrl = URL.createObjectURL(audioBlob);
-        const fullTranscript = segments.map(s => s.text).join(" ") + (interimText ? " " + interimText : "");
-        let finalSummary = summaries.filter(s => !s.isLoading).map(item => item.content.trim()).join(" ");
-        const dbSegments = segments.map(s => ({
+        const fileName = `Live Meeting ${new Date().toLocaleString('vi-VN').replace(/[:/]/g, '-')}.mp3`;
+        const file = new File([audioBlob], fileName, { type: 'audio/mp3' });
+
+        // 3. Upload lên Firebase Storage (Vẫn cần để nghe lại)
+        const audioUrl = await uploadAudioToFirebase(file, user.uid);
+
+        // --- [KHÁC BIỆT Ở ĐÂY] ---
+        // KHÔNG GỌI RUNPOD NỮA. 
+        // Lấy luôn dữ liệu từ biến 'segments' và 'summaries' có sẵn trên màn hình.
+
+        // Chuẩn hóa segments từ Google STT sang format của DB
+        const finalSegments = segments.map(s => ({
             id: s.id.toString(),
             start: s.words?.[0]?.start || 0,
-            end: s.words?.[s.words.length - 1]?.end || 0,
+            end: s.words?.[s.words.length-1]?.end || 0,
             text: s.text,
-            speakerId: s.speaker,
-            words: s.words || [] // <--- QUAN TRỌNG
+            speakerId: "SPEAKER_00", // Google Live web không phân biệt được người nói, mặc định là 1 người
+            words: s.words || []
         }));
-        onFinish(fullTranscript, createdAudioUrl, finalSummary,dbSegments); 
-    }, 500);
+
+        // Ghép tóm tắt lại thành 1 chuỗi
+        const finalSummary = summaries.map(s => s.content).join("\n");
+
+        // 4. Lưu vào Firestore với trạng thái COMPLETED (Xong luôn)
+        await saveMeeting({
+            id: crypto.randomUUID(),
+            userId: user.uid,
+            title: fileName.replace(".mp3", ""),
+            createdAt: Date.now(),
+            duration: timer,
+            audioUrl: audioUrl,
+            
+            // [QUAN TRỌNG] Không có jobId, trạng thái là completed
+            jobId: undefined, 
+            status: 'completed', 
+            
+            segments: finalSegments, // Lưu text live
+            summary: finalSummary,   // Lưu summary live
+            speakers: [{ id: "SPEAKER_00", name: "Người nói (Live)", color: "bg-indigo-50 text-indigo-700" }],
+            isDeleted: false
+        });
+
+        // 5. Xong -> Quay về Dashboard
+        onFinish(); 
+
+    } catch (e) {
+        console.error(e);
+        alert("Lỗi khi lưu: " + (e as Error).message);
+    } finally {
+        setIsUploading(false);
+    }
   };
 
   const handleClearTranscript = () => {
@@ -156,9 +206,24 @@ export default function LiveRecordingState({
                 <span className="text-sm md:text-base font-mono font-bold text-slate-700">{formatTime(timer)}</span>
              </div>
          </div>
-         <button onClick={handleSaveAndProcess} className="px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2 shadow-lg transition-all">
-           <Save className="w-4 h-4" /> <span className="hidden md:inline">Dừng & Lưu</span> <span className="md:hidden">Lưu</span>
-         </button>
+         <button 
+            onClick={handleSaveAndProcess} 
+            disabled={isUploading}
+            className={`px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2 shadow-lg transition-all ${isUploading ? 'opacity-70 cursor-wait' : ''}`}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> 
+                <span>Đang lưu...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" /> 
+                <span className="hidden md:inline">Dừng & Lưu</span> 
+                <span className="md:hidden">Lưu</span>
+              </>
+            )}
+          </button>
       </div>
 
       {/* BODY */}
