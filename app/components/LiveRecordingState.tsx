@@ -137,46 +137,65 @@ export default function LiveRecordingState({
     if (isListening) interval = setInterval(() => setTimer(t => t + 1), 1000);
     return () => clearInterval(interval);
   }, [isListening]);
-
+  const setupVisualizer = (stream: MediaStream) => {
+    const AudioContext = (window.AudioContext || (window as any).webkitAudioContext);
+    const audioCtx = new AudioContext();
+    const analyzer = audioCtx.createAnalyser();
+    const source = audioCtx.createMediaStreamSource(stream);
+    source.connect(analyzer);
+    analyzer.fftSize = 32;
+    const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+    const updateVolume = () => {
+      analyzer.getByteFrequencyData(dataArray);
+      let sum = 0; for(let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+      setVolume(sum / dataArray.length);
+      animationRef.current = requestAnimationFrame(updateVolume);
+    };
+    updateVolume();
+};
   const startRecordingSession = async () => {
     try {
+      // [CASE 1] NẾU ĐANG PAUSE -> RESUME LẠI
+      if (streamRef.current && mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
+          mediaRecorderRef.current.resume(); // Tiếp tục ghi vào file cũ
+          startListening(streamRef.current, timer);
+          setupVisualizer(streamRef.current); // Bật lại sóng nhạc
+          return;
+      }
+
+      // [CASE 2] NẾU LÀ LẦN ĐẦU -> KHỞI TẠO MỚI
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
       const mediaRecorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      // Đảm bảo không xóa audioChunksRef.current ở đây (bạn đã làm ở bước trước)
+      
+      mediaRecorder.ondataavailable = (e) => { 
+          if (e.data.size > 0) audioChunksRef.current.push(e.data); 
+      };
       mediaRecorder.start();
       mediaRecorderRef.current = mediaRecorder;
 
-      const AudioContext = (window.AudioContext || (window as any).webkitAudioContext);
-      const audioCtx = new AudioContext();
-      const analyzer = audioCtx.createAnalyser();
-      const source = audioCtx.createMediaStreamSource(stream);
-      source.connect(analyzer);
-      analyzer.fftSize = 32;
-      const dataArray = new Uint8Array(analyzer.frequencyBinCount);
-      const updateVolume = () => {
-        analyzer.getByteFrequencyData(dataArray);
-        let sum = 0; for(let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        setVolume(sum / dataArray.length);
-        animationRef.current = requestAnimationFrame(updateVolume);
-      };
-      updateVolume();
-
-      startListening(stream);
+      setupVisualizer(stream); // Gọi hàm visualizer đã tách
+      startListening(stream, timer);
     } catch (err) { alert("Lỗi Micro: " + err); }
-  };
+};
 
   const stopRecordingSession = () => {
-    stopListening();
-    if (bufferTextRef.current.length > 0) flushBuffer(true);
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    stopListening(); // Tắt Deepgram để tiết kiệm tiền/băng thông
+
+    // CHỈ PAUSE RECORDER, KHÔNG STOP HẲN
+    if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.pause();
+    }
+    
+    // Tắt visualizer
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
-    streamRef.current?.getTracks().forEach(track => track.stop());
     setVolume(0);
-  };
+
+    // QUAN TRỌNG: KHÔNG ĐƯỢC GỌI track.stop() Ở ĐÂY
+    // Nếu gọi track.stop(), luồng mic sẽ chết và không resume được.
+};
 
   const handleToggleRecord = () => { isListening ? stopRecordingSession() : startRecordingSession(); };
   
@@ -191,6 +210,9 @@ export default function LiveRecordingState({
 
   const handleSaveAndProcess = () => {
     stopRecordingSession();
+    // 2. Dừng hẳn Recorder và Stream để chốt file
+    if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
+    streamRef.current?.getTracks().forEach(track => track.stop()); // Tắt mic thật sự
     setTimeout(() => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' });
         const createdAudioUrl = URL.createObjectURL(audioBlob);
@@ -219,7 +241,7 @@ export default function LiveRecordingState({
       {/* HEADER */}
       <div className="h-14 md:h-16 bg-white border-b flex items-center justify-between px-4 md:px-6 shadow-sm z-20 shrink-0">
          <div className="flex items-center gap-3">
-             <button onClick={() => { stopRecordingSession(); onBack(); }} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ChevronLeft className="w-5 h-5" /></button>
+             <button onClick={() => { streamRef.current?.getTracks().forEach(track => track.stop()); stopRecordingSession(); onBack(); }} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ChevronLeft className="w-5 h-5" /></button>
              <div className="flex flex-col">
                 <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Thời gian</span>
                 <span className="text-sm md:text-base font-mono font-bold text-slate-700">{formatTime(timer)}</span>

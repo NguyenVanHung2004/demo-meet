@@ -70,7 +70,7 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
   };
 
   useEffect(() => { fetchNewKey(); return () => stopListening(); }, []);
-
+  const offsetTimeRef = useRef(0);
   const handleTranscript = (data: any) => {
     const received = data.channel.alternatives[0];
     const transcript = received.transcript;
@@ -84,7 +84,11 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
         setInterimContent(transcript);
     }
 
-    const words = received.words || [];
+    const words = (received.words || []).map((w: any) => ({
+        ...w,
+        start: w.start + offsetTimeRef.current, // Cộng thời gian cũ vào
+        end: w.end + offsetTimeRef.current
+    }));
 
     if (isFinal) {
       let finalContent = transcript;
@@ -127,7 +131,8 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
     }
   };
 
-  const startListening = async (stream: MediaStream) => {
+  const startListening = async (stream: MediaStream,startTimeOffset: number = 0) => {
+    offsetTimeRef.current = startTimeOffset;
     isSessionActive.current = true;
     setIsListening(true);
     audioQueueRef.current = []; 
