@@ -37,7 +37,7 @@ export default function LiveRecordingState({
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const animationRef = useRef<number>(0);
-
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   // --- LOGIC TÓM TẮT ---
   const handleSegmentEnd = async (segmentText: string) => {
     if (!segmentText || segmentText.length < 20) return;
@@ -75,16 +75,8 @@ export default function LiveRecordingState({
     return () => clearInterval(interval);
   }, [isListening]);
 
-  const startRecordingSession = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      
-      const mediaRecorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      mediaRecorder.start();
-      
+  // 1. TÁCH VISUALIZER RA HÀM RIÊNG (để gọi lại được khi Resume)
+  const setupVisualizer = (stream: MediaStream) => {
       const AudioContext = (window.AudioContext || (window as any).webkitAudioContext);
       const audioCtx = new AudioContext();
       const analyzer = audioCtx.createAnalyser();
@@ -99,15 +91,52 @@ export default function LiveRecordingState({
         animationRef.current = requestAnimationFrame(updateVolume);
       };
       updateVolume();
+  };
 
-      startListening(stream);
+  const startRecordingSession = async () => {
+    try {
+      // 2. LOGIC RESUME (NẾU ĐANG TẠM DỪNG)
+      if (streamRef.current && mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
+          mediaRecorderRef.current.resume(); // Tiếp tục ghi vào file cũ
+          setupVisualizer(streamRef.current);
+          
+          // Truyền thời gian hiện tại vào để làm offset
+          startListening(streamRef.current, timer); 
+          return;
+      }
+
+      // 3. LOGIC START NEW (MỚI TINH)
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      
+      const mediaRecorder = new MediaRecorder(stream);
+      
+      // 🔴 QUAN TRỌNG: BỎ DÒNG NÀY ĐI
+      // audioChunksRef.current = []; 
+      
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mediaRecorder.start();
+      mediaRecorderRef.current = mediaRecorder; // Lưu ref
+
+      setupVisualizer(stream);
+      
+      // Bắt đầu với offset = 0 (hoặc timer hiện tại)
+      startListening(stream, timer);
     } catch (err) { alert("Lỗi Micro: " + err); }
   };
 
   const stopRecordingSession = () => {
-    stopListening();
+    stopListening(); // Tắt kết nối Google
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    streamRef.current?.getTracks().forEach(track => track.stop());
+    
+    // 4. CHỈ PAUSE RECORDER, KHÔNG STOP HẲN
+    if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.pause();
+    }
+    
+    // 🔴 BỎ DÒNG NÀY (Không tắt mic ở đây, để còn resume được)
+    // streamRef.current?.getTracks().forEach(track => track.stop());
+    
     setVolume(0);
   };
 
@@ -121,6 +150,9 @@ export default function LiveRecordingState({
     
     // 1. Dừng ghi âm
     stopRecordingSession();
+    // Tắt hẳn mọi thứ tại đây
+    if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
+    streamRef.current?.getTracks().forEach(track => track.stop());
     setIsUploading(true); 
 
     try {
@@ -182,9 +214,15 @@ export default function LiveRecordingState({
     }
   };
 
+  // 5. CẬP NHẬT HÀM XÓA ĐỂ CLEAR DATA CŨ
   const handleClearTranscript = () => {
-      if (confirm("Xóa toàn bộ nội dung?")) { resetTranscript(); setSummaries([]); }
-  };
+      if (confirm("Xóa toàn bộ nội dung?")) { 
+          resetTranscript(); 
+          setSummaries([]); 
+          audioChunksRef.current = []; // Reset file ghi âm tại đây
+          setTimer(0);
+      }
+  }
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -198,7 +236,7 @@ export default function LiveRecordingState({
       {/* HEADER */}
       <div className="h-14 md:h-16 bg-white border-b flex items-center justify-between px-4 md:px-6 shadow-sm z-20 shrink-0">
          <div className="flex items-center gap-3">
-             <button onClick={() => { stopRecordingSession(); onBack(); }} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ChevronLeft className="w-5 h-5" /></button>
+             <button onClick={() => { stopRecordingSession(); onBack(); streamRef.current?.getTracks().forEach(track => track.stop())}} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ChevronLeft className="w-5 h-5" /></button>
              <div className="flex flex-col">
                 <span className="text-xs text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1">
                     {isConnecting ? <Loader2 className="w-3 h-3 animate-spin"/> : <Cloud className="w-3 h-3"/>} Google Mode

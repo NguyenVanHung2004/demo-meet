@@ -49,7 +49,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
   }, [onSegmentEnd]);
 
   const SERVER_URL = "https://meeting-socket-server.onrender.com"; 
-
+  const offsetTimeRef = useRef(0);
   // Hàm xử lý khi phát hiện im lặng
   const handleSilenceDetected = () => {
       const buffer = pendingBufferRef.current.trim();
@@ -133,7 +133,11 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
 
             const cleanText = data.text.trim();
             const currentSpeaker = "SPEAKER_00"; 
-            const incomingWords = data.words || [];
+            const incomingWords = (data.words || []).map((w: any) => ({
+                ...w,
+                start: (w.start || 1) + offsetTimeRef.current,
+                end: (w.end || 1 ) + offsetTimeRef.current
+            }));
             if (cleanText) {
                 setSegments(prev => {
                     const lastSeg = prev[prev.length - 1];
@@ -177,11 +181,12 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
     };
   }, []); 
 
-  const startListening = async (stream: MediaStream) => {
+  const startListening = async (stream: MediaStream, startTimeOffset: number = 0) => {
     if (!socketRef.current || !socketRef.current.connected) return;
     try {
       setIsListening(true);
       streamRef.current = stream;
+      offsetTimeRef.current = startTimeOffset;
       pendingBufferRef.current = "";
       lastSpeechTimeRef.current = Date.now();
       isInterimActiveRef.current = false; 
