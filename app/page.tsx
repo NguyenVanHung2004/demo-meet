@@ -4,300 +4,258 @@ import React, { useState, useEffect } from "react";
 import DashboardState from "./components/DashboardState";
 import EditorState from "./components/EditorState";
 import LiveRecordingState from "./components/LiveRecordingState";
-import MeetingDetailState from "./components/MeetingDetailState"; 
+import MeetingDetailState from "./components/MeetingDetailState";
 import PollingManager from "./components/PollingManager";
-
-import { saveMeeting, seedInitialData, Meeting } from "./lib/db";
-import { parseTranscriptFile } from "./lib/parser";
-import { RAW_TRANSCRIPT_FILE } from "./lib/mockData";
-import { uploadAudioFile } from "./lib/api"; 
+import { deleteField } from "firebase/firestore"; // [MỚI]
+import {
+  saveMeeting,
+  seedInitialData,
+  Meeting,
+  updateMeetingProcess,
+} from "./lib/db";
+import {
+  uploadAudioToFirebase,
+  startTranscriptionJob,
+  requestSummary,
+} from "./lib/api";
 import { useGlobalUI } from "./context/GlobalUIProvider";
-import { requestSummary } from "./lib/api"; // Import hàm gọi Gemini
-import { updateMeetingProcess } from "./lib/db"; // Import hàm update DB
-
-export type AppState = 'DASHBOARD' | 'PROCESSING' | 'EDITOR' | 'LIVE_RECORDING' | 'MEETING_DETAIL';
+import { useAuth } from "./context/AuthContext";
+import LoginState from "./components/LoginState";
+export type AppState =
+  | "DASHBOARD"
+  | "PROCESSING"
+  | "EDITOR"
+  | "LIVE_RECORDING"
+  | "MEETING_DETAIL";
 
 export default function Page() {
-  const [currentState, setCurrentState] = useState<AppState>('DASHBOARD');
+  const { user, loading } = useAuth();
+  const [currentState, setCurrentState] = useState<AppState>("DASHBOARD");
   const [currentMeeting, setCurrentMeeting] = useState<Meeting | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
   const { toast, confirm } = useGlobalUI(); // [MỚI]
   useEffect(() => {
-    seedInitialData();
-  }, []);
-
+    const initData = async () => {
+      if (user) {
+        // Hàm seed giờ trả về true/false
+        const added = await seedInitialData(user.uid);
+        // Nếu có thêm mới data thì mới refresh UI
+        if (added) {
+          triggerRefresh();
+          toast.success("Đã tạo dữ liệu mẫu!");
+        }
+      }
+    };
+    initData();
+  }, [user]);
+  if (loading) {
+     return (
+        <div className="h-screen w-screen flex items-center justify-center bg-white">
+           <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+     );
+  }
+   if (!user) {
+     return <LoginState />;
+  }
   // --- NAVIGATION ---
   const handleDirectEdit = (meeting: Meeting) => {
-    const url = URL.createObjectURL(meeting.audioBlob);
-    setAudioUrl(url);
+    setAudioUrl(meeting.audioUrl);
     setCurrentMeeting(meeting);
-    setCurrentState('EDITOR');
+    setCurrentState("EDITOR");
   };
 
   const handleViewDetail = (meeting: Meeting) => {
-    const url = URL.createObjectURL(meeting.audioBlob);
-    setAudioUrl(url);
+    setAudioUrl(meeting.audioUrl);
     setCurrentMeeting(meeting);
-    setCurrentState('MEETING_DETAIL');
+    setCurrentState("MEETING_DETAIL");
   };
 
   const handleSwitchToEdit = () => {
-    setCurrentState('EDITOR');
+    setCurrentState("EDITOR");
   };
 
   const handleBackToDashboard = () => {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
     setCurrentMeeting(null);
-    setCurrentState('DASHBOARD');
+    setCurrentState("DASHBOARD");
   };
 
   const handleBackFromEditor = () => {
-      handleBackToDashboard();
+    handleBackToDashboard();
   };
 
-  const triggerRefresh = () => setRefreshSignal(prev => prev + 1);
+  const triggerRefresh = () => setRefreshSignal((prev) => prev + 1);
 
   // --- LOGIC ---
 
   const handleFileUpload = async (file: File) => {
-      // 1. Tạo ID tạm thời
-      const tempId = `job-${Date.now()}`;
+    if (!user) return toast.error("Vui lòng đăng nhập!");
 
-      // 2. [QUAN TRỌNG] Tạo object Meeting và hiển thị ngay lập tức
-      const newMeeting: Meeting = {
+    const tempId = crypto.randomUUID();
+    toast.info("Đang tải lên server...");
+try {
+    // 1. Upload lên Firebase Storage
+    const url = await uploadAudioToFirebase(file, user.uid);
+
+    // 2. Trigger RunPod để lấy Job ID
+    const jobId = await startTranscriptionJob(url);
+
+    // 3. Lưu Meeting vào Firestore
+    // PollingManager sẽ tự quét job này dựa trên status 'transcribing'
+    const newMeeting: Meeting = {
         id: tempId,
-        jobId: undefined, // Chưa có Job ID thật, sẽ update sau
-        title: file.name.replace(/\.[^/.]+$/, ""), // Tên file bỏ đuôi
+        userId: user.uid,
+        jobId: jobId,
+        title: file.name.replace(/\.[^/.]+$/, ""),
         createdAt: Date.now(),
-        duration: 0, 
-        audioBlob: file,
+        duration: 0,
+        audioUrl: url,    // URL string
         segments: [],
         speakers: [],
-        status: 'transcribing', // Set trạng thái đang xử lý ngay
+        status: 'transcribing',
         isDeleted: false
-      };
-
-      // Lưu vào DB -> UI Dashboard sẽ tự động cập nhật nhờ PollingManager hoặc triggerRefresh
-      await saveMeeting(newMeeting);
-      triggerRefresh(); 
-      toast.info("Đang tải lên và xử lý...");
-
-      try {
-        console.log("--> Uploading to Python...");
-        
-        // 3. Gọi API Upload (Hàm này giờ đã trả về Job ID thay vì text)
-        const runpodJobId = await uploadAudioFile(file);
-        
-        console.log("--> Nhận Job ID:", runpodJobId);
-
-        // 4. Update lại meeting trong DB với Job ID thật để PollingManager bắt đầu làm việc
-        // (Lưu ý: PollingManager của bạn sẽ quét các meeting có status='transcribing' và có jobId)
-        const updatedMeeting = { 
-          ...newMeeting, 
-          id: `job-${runpodJobId}`, // [Tùy chọn] Có thể đổi ID meeting theo JobID hoặc giữ ID cũ
-          jobId: runpodJobId 
-        };
-
-        // Xóa bản ghi tạm cũ (nếu bạn đổi ID) hoặc chỉ cần update bản ghi cũ
-        // Ở đây để đơn giản ta update bản ghi cũ:
-        await saveMeeting({ ...newMeeting, jobId: runpodJobId });
-        
-        // Nếu bạn muốn đổi ID meeting thành job-id của runpod thì cần xóa cái cũ đi:
-        // await deleteMeetingPermanent(tempId);
-        // await saveMeeting(updatedMeeting);
-
-        toast.success("Đã gửi yêu cầu xử lý! Bạn có thể làm việc khác.");
-        triggerRefresh();
-
-      } catch (error) {
-        console.error("Lỗi xử lý:", error);
-        toast.error("Có lỗi khi upload: " + error);
-        
-        // Update trạng thái lỗi cho meeting
-        await saveMeeting({ 
-          ...newMeeting, 
-          status: 'failed', 
-          errorMessage: (error as Error).message 
-        });
-        triggerRefresh();
-      }
     };
+
+    await saveMeeting(newMeeting);
+
+    toast.success("Đã gửi yêu cầu xử lý! Hệ thống sẽ tự động cập nhật.");
+    triggerRefresh();
+
+  } catch (error) {
+    console.error("Lỗi upload:", error);
+    toast.error("Có lỗi xảy ra: " + (error as Error).message);
+  }
+};
   // Flow 2: Demo Data
   const handleStartDemo = async () => {
-    setCurrentState('PROCESSING');
-    setTimeout(async () => {
-      const res = await fetch("/demo.mp3");
-      const blob = await res.blob();
-      const parsed = parseTranscriptFile(RAW_TRANSCRIPT_FILE);
-      
-      const demoMeeting: Meeting = {
-        id: `demo-${Date.now()}`,
-        title: "Talkshow: Tương lai ngành xuất bản (AI Processed)",
-        createdAt: Date.now(),
-        duration: 480,
-        audioBlob: blob,
-        segments: parsed.segments,
-        speakers: parsed.speakers,
-        status: 'transcribed', // Demo coi như đã xử lý xong
-        isDeleted: false
-      };
-      
-      await saveMeeting(demoMeeting);
-      handleDirectEdit(demoMeeting); 
-    }, 1500);
+    if (!user) return toast.error("Vui lòng đăng nhập!");
+    await seedInitialData(user.uid);
+    triggerRefresh();
+    toast.success("Đã tạo dữ liệu mẫu!");
   };
-
   // Flow 3: Live Recording (Xử lý tại trình duyệt)
-  // ... imports
-
   // [CẬP NHẬT] Nhận thêm tham số dbSegments từ component con gửi lên
-  const handleFinishLive = async (
-      recordedText: string, 
-      recordedAudioUrl: string, 
-      finalSummary: string,
-      dbSegments?: any[] // <--- THÊM THAM SỐ NÀY (Dữ liệu Karaoke xịn)
-  ) => {
-    
-    let finalSegments: any[] = [];
-
-    // TRƯỜNG HỢP 1: Có dữ liệu xịn từ Deepgram (Có timestamp từng từ)
-    if (dbSegments && dbSegments.length > 0) {
-        console.log("✅ Đã nhận dữ liệu Karaoke chi tiết từ Deepgram");
-        finalSegments = dbSegments;
-    } 
-    // TRƯỜNG HỢP 2: Fallback (Nếu bị lỗi hoặc dùng WebSpeech API thường)
-    else {
-        console.log("⚠️ Không có timestamp chi tiết, dùng bộ chia dòng thủ công");
-        // Logic cũ: Chia theo dòng (newline)
-        const lines = recordedText.split("\n").filter(line => line.trim() !== "");
-        finalSegments = lines.map((line, index) => {
-            const start = index * 5;
-            const end = start + 5;
-            const cleanText = line.trim().replace(/^- /, "");
-            return {
-                id: index.toString(),
-                speakerId: "SPEAKER_00",
-                start: start,
-                end: end,
-                text: cleanText,
-                words: [] // Không có words
-            };
-        });
-    }
-
-    const res = await fetch(recordedAudioUrl);
-    const blob = await res.blob();
-
-    const newMeeting: Meeting = {
-      id: `rec-${Date.now()}`,
-      title: `Ghi âm trực tiếp ${new Date().toLocaleTimeString()}`,
-      createdAt: Date.now(),
-      // Nếu có segments xịn thì lấy thời gian từ segment cuối cùng, không thì ước lượng
-      duration: finalSegments.length > 0 ? (finalSegments[finalSegments.length - 1].end || 0) : 0,
-      audioBlob: blob,
-      
-      segments: finalSegments, // <--- LƯU SEGMENTS CHUẨN VÀO ĐÂY
-      
-      summary: finalSummary,
-      speakers: [{ id: "SPEAKER_00", name: "Tôi (Ghi âm)", color: "bg-blue-50 text-blue-700 border-blue-200" }],
-      status: 'completed', 
-      isDeleted: false,
-    };
-
-    // Lưu vào DB (Lúc này DB sẽ có cả mảng words)
-    await saveMeeting(newMeeting);
-    
-    // Chuyển màn hình
-    handleViewDetail(newMeeting); 
+  const handleFinishLive = () => {
+    toast.success("Đã lưu ghi âm!");
+    setCurrentState('DASHBOARD');
+    triggerRefresh();
   };
-  
-    // ✅ [MỚI] Hàm xử lý tóm tắt chạy ngầm (Fire-and-Forget)
-  const handleBackgroundSummarize = async (meetingId: string, transcriptText: string) => {
-      // 1. Cập nhật trạng thái "Đang tóm tắt" ngay lập tức để Dashboard hiện icon xoay
-      await updateMeetingProcess(meetingId, { status: 'summarizing' });
-      triggerRefresh(); 
-      
-      // 2. Chạy bất đồng bộ (KHÔNG await ở đây để không chặn UI)
-      requestSummary(transcriptText)
-        .then(async (summary) => {
-            // Khi xong -> Lưu vào DB
-            await updateMeetingProcess(meetingId, {
-                status: 'completed',
-                summary: summary
-            });
-            toast.success(`Đã tóm tắt xong cuộc họp: ${meetingId.split('-')[1] || '...'}`);
-            triggerRefresh(); // Reload Dashboard
-        })
-        .catch(async (error) => {
-            // Nếu lỗi
-            console.error("Background Summary Error:", error);
-            await updateMeetingProcess(meetingId, {
-                status: 'failed',
-                errorMessage: error.message
-            });
-            toast.error("Lỗi tóm tắt ngầm: " + error.message);
-            triggerRefresh();
+
+  // ✅ [MỚI] Hàm xử lý tóm tắt chạy ngầm (Fire-and-Forget)
+  const handleBackgroundSummarize = async (
+    meetingId: string,
+    transcriptText: string
+  ) => {
+    // 1. Cập nhật trạng thái "Đang tóm tắt" ngay lập tức để Dashboard hiện icon xoay
+    await updateMeetingProcess(meetingId, { status: "summarizing" });
+    triggerRefresh();
+
+    // 2. Chạy bất đồng bộ (KHÔNG await ở đây để không chặn UI)
+    requestSummary(transcriptText)
+      .then(async (summary) => {
+        // Khi xong -> Lưu vào DB
+        await updateMeetingProcess(meetingId, {
+          status: "completed",
+          summary: summary,
         });
+        toast.success(
+          `Đã tóm tắt xong cuộc họp: ${meetingId.split("-")[1] || "..."}`
+        );
+        triggerRefresh(); // Reload Dashboard
+      })
+      .catch(async (error) => {
+        // Nếu lỗi
+        console.error("Background Summary Error:", error);
+        await updateMeetingProcess(meetingId, {
+          status: "failed",
+          errorMessage: error.message,
+        });
+        toast.error("Lỗi tóm tắt ngầm: " + error.message);
+        triggerRefresh();
+      });
   };
   // ✅ [MỚI] Hàm xử lý lại: Lấy audio cũ -> Đẩy vào quy trình Upload xịn
+ // --- LOGIC 5: XỬ LÝ LẠI (REPROCESS) ---
   const handleReprocess = async (meeting: Meeting) => {
-    if (!meeting.audioBlob) {
-      toast.error("Không tìm thấy file ghi âm gốc.");
+    // 1. Check quyền
+    if (!user) return toast.error("Vui lòng đăng nhập!");
+
+    // [FIX] Kiểm tra audioUrl thay vì audioBlob
+    if (!meeting.audioUrl) {
+      toast.error("Không tìm thấy file ghi âm gốc (URL).");
       return;
     }
 
-    // 1. Hỏi người dùng xác nhận (Optional, nếu muốn)
+    // 2. Hỏi xác nhận
     const isConfirmed = await confirm({
-       title: "Xử lý chuyên sâu?",
-       message: "Hệ thống sẽ tạo một bản sao mới và gửi lên Server để gỡ băng chính xác hơn. Bạn muốn tiếp tục?",
-       confirmText: "Tạo bản mới",
+       title: "Xử lý lại?",
+       message: "Hệ thống sẽ chạy lại AI cho file này. Dữ liệu cũ (Segments/Summary) sẽ bị ghi đè. Bạn có chắc chắn?",
+       confirmText: "Chạy lại",
        type: "info"
     });
+    
     if (!isConfirmed) return;
 
-    // 2. Tạo File mới từ Blob cũ
-    // Thêm hậu tố (HQ) - High Quality để dễ phân biệt
-    const newFileName = `${meeting.title} (File).mp3`; 
-    const file = new File([meeting.audioBlob], newFileName, { type: 'audio/mp3' });
+    try {
+        toast.info("Đang gửi lệnh xử lý lại...");
 
-    // 3. Tái sử dụng hàm Upload có sẵn
-    // Hàm này sẽ tự động: Tạo row mới, Upload Blob, Gọi RunPod, Polling...
-    await handleFileUpload(file);
+        // 3. [TỐI ƯU] Tái sử dụng URL cũ, KHÔNG CẦN UPLOAD LẠI
+        // Chỉ việc gọi RunPod với url đang có sẵn trên Firebase
+        const newJobId = await startTranscriptionJob(meeting.audioUrl);
+
+        // 4. Cập nhật lại bản ghi cũ trong Firestore
+        // Đưa về trạng thái 'transcribing' để PollingManager bắt đầu làm việc
+        await updateMeetingProcess(meeting.id, {
+            status: 'transcribing',
+            jobId: newJobId,      // Gắn Job ID mới
+            segments: [],         // Xóa dữ liệu cũ đi cho sạch
+            summary: deleteField() as any,
+            errorMessage: deleteField() as any
+        });
+
+        triggerRefresh();
+        toast.success("Đã bắt đầu xử lý lại!");
+
+    } catch (e) {
+        console.error(e);
+        toast.error("Lỗi khi xử lý lại: " + (e as Error).message);
+    }
   };
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
       <PollingManager onUpdate={triggerRefresh} />
-      
-      {currentState === 'DASHBOARD' && (
-        <DashboardState 
+
+      {currentState === "DASHBOARD" && (
+        <DashboardState
           refreshSignal={refreshSignal}
-          onImport={handleFileUpload} 
+          onImport={handleFileUpload}
           onUseSample={handleStartDemo}
-          onLive={() => setCurrentState('LIVE_RECORDING')}
+          onLive={() => setCurrentState("LIVE_RECORDING")}
           onOpenMeeting={handleViewDetail}
           onReprocess={handleReprocess}
         />
       )}
 
-      {currentState === 'PROCESSING' && (
-         <div className="flex flex-col items-center justify-center h-full space-y-6">
-            <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-600 font-medium">Đang xử lý dữ liệu...</p>
-         </div>
+      {currentState === "PROCESSING" && (
+        <div className="flex flex-col items-center justify-center h-full space-y-6">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600 font-medium">Đang xử lý dữ liệu...</p>
+        </div>
       )}
 
-      {currentState === 'LIVE_RECORDING' && (
-        <LiveRecordingState 
-          onFinish={handleFinishLive} 
-          onBack={() => setCurrentState('DASHBOARD')} 
+      {currentState === "LIVE_RECORDING" && (
+        <LiveRecordingState
+          onFinish={handleFinishLive}
+          onBack={() => setCurrentState("DASHBOARD")}
         />
       )}
 
-      {currentState === 'MEETING_DETAIL' && currentMeeting && audioUrl && (
-        <MeetingDetailState 
+      {currentState === "MEETING_DETAIL" && currentMeeting && audioUrl && (
+        <MeetingDetailState
           meeting={currentMeeting}
           audioSrc={audioUrl}
           onBack={handleBackToDashboard}
@@ -305,10 +263,10 @@ export default function Page() {
         />
       )}
 
-      {currentState === 'EDITOR' && currentMeeting && audioUrl && (
-        <EditorState 
-          audioSrc={audioUrl} 
-          initialData={currentMeeting} 
+      {currentState === "EDITOR" && currentMeeting && audioUrl && (
+        <EditorState
+          audioSrc={audioUrl}
+          initialData={currentMeeting}
           onBack={handleBackFromEditor}
           onSummarize={handleBackgroundSummarize}
         />

@@ -5,13 +5,14 @@ import {
   UploadCloud, Mic, FileText, 
   Trash2, FolderOpen, AlertCircle, Loader2, CheckCircle, 
   Sparkles, Search, Calendar, Clock, MoreVertical,
-  RotateCcw,Wand2
+  RotateCcw,Wand2,LogOut
 } from "lucide-react";
 import { 
   getAllMeetings, Meeting, 
   toggleTrashMeeting, deleteMeetingPermanent 
 } from "../lib/db";
 import { useGlobalUI } from "../context/GlobalUIProvider";
+import { useAuth } from "../context/AuthContext";
 
 type DashboardTab = 'all' | 'trash';
 
@@ -25,18 +26,24 @@ export default function DashboardState({
   refreshSignal: number,
   onReprocess: (m: Meeting) => void
 }) {
+  const { user, login, logout } = useAuth(); // [MỚI] Lấy thêm logout
   const { toast, confirm } = useGlobalUI();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [currentTab, setCurrentTab] = useState<DashboardTab>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadMeetings = () => {
-    getAllMeetings().then(setMeetings);
+    if (user) {
+        // Truyền user.uid vào để chỉ lấy cuộc họp của người này
+        getAllMeetings(user.uid).then(setMeetings); 
+    } else {
+        setMeetings([]); // Chưa đăng nhập thì list rỗng
+    }
   };
 
   useEffect(() => {
     loadMeetings();
-  }, [refreshSignal]);
+  }, [refreshSignal, user]);
 
   // --- ACTIONS ---
   const handleMoveToTrash = async (e: React.MouseEvent, id: string) => {
@@ -119,7 +126,16 @@ export default function DashboardState({
           </div>
         </nav>
 
-        <div className="mt-auto pt-6 border-t border-slate-800">
+         <div className="mt-auto pt-6 border-t border-slate-800 space-y-4">
+             
+             {/* [MỚI] Nút Đăng xuất Desktop */}
+             <button 
+                 onClick={() => logout()} 
+                 className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors group"
+             >
+                 <LogOut className="w-4 h-4 group-hover:text-red-400 transition-colors" /> 
+                 <span className="group-hover:text-red-100">Đăng xuất</span>
+             </button>
             <div className="text-xs text-slate-500 text-center">© 2024 MeetNote AI</div>
         </div>
       </div>
@@ -132,6 +148,17 @@ export default function DashboardState({
           <h1 className="text-lg md:text-2xl font-bold text-slate-800 flex items-center gap-2">
             {currentTab === 'all' ? "Danh sách cuộc họp" : <span className="text-red-600 flex items-center gap-2"><Trash2 className="w-5 h-5"/> Thùng rác</span>}
           </h1>
+          <div className="flex items-center gap-2 md:gap-4">
+              
+              {/* [MỚI] Nút Đăng xuất Mobile (Chỉ hiện trên màn hình nhỏ) */}
+              <button 
+                  onClick={() => logout()} 
+                  className="md:hidden p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                  title="Đăng xuất"
+              >
+                  <LogOut className="w-5 h-5" />
+              </button>
+          </div>
           
           {/* Desktop Actions */}
           <div className="hidden md:flex gap-2">
