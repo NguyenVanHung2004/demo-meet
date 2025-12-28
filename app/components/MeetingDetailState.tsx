@@ -86,8 +86,9 @@ export default function MeetingDetailState({
         content += `[NỘI DUNG CHI TIẾT]\n`;
         meeting.segments.forEach(seg => {
             const time = formatTimeCode(seg.start);
-            const speaker = seg.speakerId.replace("SPEAKER_", "Speaker ");
-            content += `[${time}] ${speaker}: ${seg.text}\n`;
+            // const speaker = seg.speakerId.replace("SPEAKER_", "Speaker ");
+            const matchedSpeaker = meeting.speakers.find(s => s.id === seg.speakerId);
+            content += `[${time}] ${matchedSpeaker?.name}: ${seg.text}\n`;
         });
 
         // 2. Tạo Blob và tải về

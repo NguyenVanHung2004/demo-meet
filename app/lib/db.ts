@@ -9,7 +9,15 @@ import { parseTranscriptFile } from "./parser";
 
 // Định nghĩa trạng thái
 export type MeetingStatus = 'transcribing' | 'transcribed' | 'summarizing' | 'completed' | 'failed';
-
+export type ActionItemStatus = 'pending' | 'draft' | 'sent';
+// Thêm interface TaskItem
+export interface TaskItem {
+    id: number;
+    task: string;
+    assigneeName: string; // Tên AI gợi ý
+    email: string;        // Email người nhận thực tế
+    deadline: string;
+}
 // Định nghĩa Interface (Đã đổi audioBlob -> audioUrl)
 export interface Meeting {
   id: string;
@@ -25,6 +33,8 @@ export interface Meeting {
   status: MeetingStatus;
   isDeleted: boolean;
   errorMessage?: string;
+  actionItems?: TaskItem[];
+  actionStatus?: ActionItemStatus;
 }
 
 const COLLECTION_NAME = "meetings";
@@ -151,4 +161,36 @@ export const seedInitialData = async (userId: string) => {
     }
     return false;
   }
+};
+// --- PHẦN MỚI: QUẢN LÝ MEMBER ---
+
+export interface Member {
+  id: string;
+  name: string;
+  email: string;
+}
+
+// Lưu danh sách member vào LocalStorage (cho đơn giản, thay vì tạo collection mới trên Firebase)
+// Nếu muốn dùng Firebase thật, bạn có thể tạo collection "members" tương tự "meetings"
+export const getMembers = (): Member[] => {
+  if (typeof window === "undefined") return [];
+  const data = localStorage.getItem("app_members");
+  return data ? JSON.parse(data) : [];
+};
+
+export const saveMember = (member: Member) => {
+  const members = getMembers();
+  // Nếu trùng email thì update, chưa có thì thêm mới
+  const index = members.findIndex(m => m.email === member.email);
+  if (index >= 0) {
+    members[index] = member;
+  } else {
+    members.push(member);
+  }
+  localStorage.setItem("app_members", JSON.stringify(members));
+};
+
+export const deleteMember = (email: string) => {
+  const members = getMembers().filter(m => m.email !== email);
+  localStorage.setItem("app_members", JSON.stringify(members));
 };

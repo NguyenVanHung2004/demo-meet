@@ -6,7 +6,7 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
-    const { text, mode, previousSummary } = await req.json();
+    const { text, mode, dateContext, previousSummary } = await req.json();
 
     if (!text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
@@ -17,7 +17,34 @@ export async function POST(req: Request) {
 
     let prompt = "";
     
-     if (mode === "segment") {
+     if (mode === "extract_json") {
+      prompt = `
+      Bạn là trợ lý AI chuyên trích xuất công việc (Action Item) từ biên bản cuộc họp.
+      THÔNG TIN NGỮ CẢNH:
+    - Thời gian diễn ra cuộc họp: ${dateContext || "Hôm nay"} (Hãy dùng ngày này làm mốc để tính toán các từ chỉ thời gian như 'ngày mai', 'thứ 6 tới').
+      
+      NHIỆM VỤ:
+      NHIỆM VỤ: Phân tích đoạn hội thoại (Transcript) dưới đây và trích xuất danh sách các nhiệm vụ/công việc cần thực hiện (Action Items).
+      
+      VĂN BẢN ĐẦU VÀO:
+      "${text}"
+
+      YÊU CẦU XỬ LÝ:
+        1. Tìm các câu mệnh lệnh, lời hứa, hoặc kế hoạch cụ thể (Ví dụ: "Tôi sẽ gửi...", "Bạn hãy làm...", "Tuần sau phải xong...").
+        2. Bỏ qua các câu chào hỏi, giới thiệu, hoặc chia sẻ cảm xúc chung chung.
+        3. Nếu ngữ cảnh không rõ người được giao, hãy để assignee là "Team" hoặc "Chưa rõ".
+        4. Nếu không tìm thấy bất kỳ nhiệm vụ cụ thể nào, hãy trả về mảng rỗng [].
+      
+      CẤU TRÚC JSON:
+      [
+        {
+          "task": "Mô tả công việc ngắn gọn",
+          "assignee": "Tên người được giao (Nếu không rõ ghi 'Chưa rõ')",
+          "deadline": "YYYY-MM-DDTHH:mm (Hãy quy đổi các cụm từ như 'chiều nay 5h', 'thứ 2 tuần sau' thành định dạng ngày giờ cụ thể dựa trên mốc thời gian trên. Nếu không xác định được giờ thì để cuối ngày. Nếu không có deadline thì ghi 'Chưa rõ')"
+        }
+      ]
+      `;
+    } else if (mode === "segment") {
       // [PROMPT NÂNG CẤP] Chống lặp ý + Tối ưu cho hội thoại
       prompt = `
       Bạn là chuyên gia ghi chép biên bản cuộc họp theo thời gian thực (Live-taker).
