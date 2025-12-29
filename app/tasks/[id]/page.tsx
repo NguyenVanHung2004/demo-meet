@@ -1,0 +1,471 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation"; // Lấy ID từ URL
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Save,
+  Send,
+  Trash2,
+  Plus,
+  Calendar,
+  User,
+  Clock,
+  CheckCircle,
+} from "lucide-react";
+import {
+  getMeetingById,
+  updateMeetingProcess,
+  getMembers,
+  Member,
+  TaskItem,
+} from "@/app/lib/db"; // Import đúng đường dẫn
+import { useAuth } from "@/app/context/AuthContext";
+import { Loader2 } from "lucide-react";
+import { useGlobalUI } from "@/app/context/GlobalUIProvider";
+export default function ActionItemPage() {
+  const { id } = useParams(); // Lấy ID meeting
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [meetingTitle, setMeetingTitle] = useState("");
+  const [isSendingMail, setIsSendingMail] = useState(false);
+  const { toast, confirm } = useGlobalUI();
+  useEffect(() => {
+    // Nếu check auth xong (authLoading = false) mà không có user -> Về trang chủ
+    if (!authLoading && !user) {
+      router.push("/");
+    }
+  }, [user, authLoading, router]);
+  // 1. Load dữ liệu từ DB
+  useEffect(() => {
+    if (!id || authLoading || !user) return;
+    
+    // A. Lấy Member từ LocalStorage (Sync)
+    setMembers(getMembers());
+
+    // B. Lấy Meeting từ Firebase (Async)
+    getMeetingById(id as string).then((meeting) => {
+      if (meeting) {
+        setMeetingTitle(meeting.title);
+        
+        // 🟢 FIX LỖI Ở ĐÂY: CHUẨN HÓA DỮ LIỆU
+        const rawTasks = meeting.actionItems || [];
+        
+        const normalizedTasks = rawTasks.map((t: any) => {
+            // Logic: Kiểm tra xem t.email đang là chuỗi hay mảng?
+            let standardizedEmail: string[] = [];
+
+            if (Array.isArray(t.email)) {
+                // Nếu đã là mảng -> Ngon, giữ nguyên
+                standardizedEmail = t.email;
+            } else if (typeof t.email === 'string' && t.email) {
+                // Nếu là chuỗi (dữ liệu cũ) -> Đóng gói vào mảng
+                standardizedEmail = [t.email];
+            } 
+            // Nếu null/undefined -> Mảng rỗng []
+
+            return {
+                ...t,
+                email: standardizedEmail // Gán lại vào biến tên là 'email'
+            };
+        });
+
+        setTasks(normalizedTasks);
+      }
+      setLoading(false);
+    });
+  }, [id, authLoading, user]);
+
+  // 2. Hàm Lưu lại (Save Draft)
+  const handleSave = async () => {
+    await updateMeetingProcess(id as string, { actionItems: tasks });
+    alert("Đã lưu nháp thành công!");
+  };
+
+  // 3. Hàm Gửi Mail
+  const handleSendMail = async () => {
+    // 🟢 SỬA LẠI: Chỉ cần check mảng có phần tử (length > 0)
+    // (Vì dữ liệu trong mảng lấy từ Member đã chuẩn email rồi)
+    const validTasks = tasks.filter((t) => t.email && t.email.length > 0);
+
+    if (validTasks.length === 0) {
+      return toast.error("Chưa giao nhiệm vụ cho ai cả (vui lòng chọn người nhận)!");
+    }
+
+    // Đếm tổng số người nhận (Unique)
+    const allRecipients = new Set<string>();
+    // Dùng flatMap hoặc forEach lồng nhau để lấy hết email
+    validTasks.forEach(t => t.email.forEach(e => allRecipients.add(e)));
+
+    // Xác nhận trước khi gửi
+    const confirmSend = await confirm({
+      title: "Gửi Email",
+      message: `Bạn chuẩn bị gửi thông báo cho ${allRecipients.size} người với tổng cộng ${validTasks.length} nhiệm vụ. Tiếp tục?`,
+      confirmText: "Gửi ngay",
+      type: "info",
+    });
+
+    if (!confirmSend) return;
+
+    setIsSendingMail(true);
+
+    try {
+      // Gọi API Backend
+      const response = await fetch("/api/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tasks: validTasks,
+          meetingTitle: meetingTitle,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(`Đã gửi thành công cho ${data.count} người!`);
+
+        // Cập nhật trạng thái 'sent' vào DB
+        await updateMeetingProcess(id as string, { actionStatus: "sent" });
+
+        router.push("/tasks");
+      } else {
+        throw new Error("API Error");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Gửi mail thất bại. Vui lòng kiểm tra lại cấu hình server.");
+    } finally {
+      setIsSendingMail(false);
+    }
+  };
+  if (loading)
+    return <div className="p-10 text-center">Đang tải dữ liệu...</div>;
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* HEADER HEADER STICKY */}
+      <div className="bg-white border-b sticky top-0 z-20 px-4 py-4 md:px-8 shadow-sm flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/tasks"
+            className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800 line-clamp-1">
+              Phân công: {meetingTitle}
+            </h1>
+            <p className="text-xs text-slate-500 hidden md:block">
+              Hãy rà soát kỹ trước khi gửi email.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 text-slate-600 bg-white border border-slate-300 font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2"
+          >
+            <Save className="w-4 h-4" />{" "}
+            <span className="hidden sm:inline">Lưu nháp</span>
+          </button>
+          <button
+            onClick={handleSendMail}
+            disabled={isSendingMail} // Disable khi đang gửi
+            className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md shadow-indigo-200 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isSendingMail ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Đang gửi...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />{" "}
+                <span className="hidden sm:inline">Gửi Email</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* BODY - RESPONSIVE */}
+      <div className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-8">
+        {/* DESKTOP TABLE */}
+        <div className="hidden md:block bg-white rounded-xl shadow-sm border overflow-hidden">
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b">
+              <tr>
+                <th className="px-6 py-4 w-[40%]">Nhiệm vụ</th>
+                <th className="px-4 py-4 w-[25%]">Người nhận</th>
+                <th className="px-4 py-4 w-[20%]">Deadline</th>
+                <th className="px-4 py-4 w-[5%]"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {tasks.map((task, idx) => (
+                <tr key={idx} className="hover:bg-indigo-50/10 transition">
+                  <td className="px-6 py-4 align-top">
+                    <textarea
+                      value={task.task}
+                      rows={2}
+                      onChange={(e) => {
+                        const newT = [...tasks];
+                        newT[idx].task = e.target.value;
+                        setTasks(newT);
+                      }}
+                      className="w-full border-none focus:ring-0 resize-none bg-transparent p-0 text-slate-700 font-medium placeholder-slate-300"
+                      placeholder="Nhập nội dung..."
+                    />
+                  </td>
+                  {/* CỘT NGƯỜI NHẬN (MULTI-SELECT) */}
+                  <td className="px-4 py-4 align-top">
+                    <div className="flex flex-col gap-2">
+                      {/* 1. Hiển thị các Badge người đã chọn */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {task.email.map((email) => {
+                          const mem = members.find((m) => m.email === email);
+                          return (
+                            <span
+                              key={email}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100"
+                            >
+                              {mem?.name || email}
+                              <button
+                                onClick={() => {
+                                  // Xóa người này khỏi task
+                                  const newEmails = task.email.filter(
+                                    (e) => e !== email
+                                  );
+                                  const newT = [...tasks];
+                                  newT[idx].email = newEmails;
+                                  setTasks(newT);
+                                }}
+                                className="hover:text-red-500 rounded-full p-0.5 ml-1"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })}
+                        
+                      </div>
+
+                      {/* 2. Dropdown để chọn thêm thủ công */}
+                      <select
+                        value="" // Luôn để rỗng
+                        onChange={(e) => {
+                          const selectedEmail = e.target.value;
+                          if (!selectedEmail) return;
+
+                          // Logic: Thêm vào mảng nếu chưa có
+                          if (!task.email.includes(selectedEmail)) {
+                            const newT = [...tasks];
+                            newT[idx].email = [...task.email, selectedEmail];
+                            setTasks(newT);
+                          }
+                        }}
+                        className="w-full p-1.5 text-xs border border-slate-200 rounded text-slate-500 outline-none focus:border-indigo-500"
+                      >
+                        <option value="">+ Thêm người...</option>
+                        {members.map((m) => (
+                          <option
+                            key={m.id}
+                            value={m.email}
+                            disabled={task.email.includes(m.email)} // Ẩn người đã chọn
+                            className={
+                              task.email.includes(m.email)
+                                ? "text-slate-300"
+                                : ""
+                            }
+                          >
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* Text gợi ý AI */}
+                      {task.assigneeName && (
+                        <p
+                          className="text-[10px] text-slate-400 italic mt-0.5 truncate"
+                          title={task.assigneeName}
+                        >
+                          Gợi ý: "{task.assigneeName}"
+                        </p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 align-top">
+                    <input
+                      type="datetime-local"
+                      value={task.deadline === "Chưa rõ" ? "" : task.deadline}
+                      onChange={(e) => {
+                        const newT = [...tasks];
+                        newT[idx].deadline = e.target.value;
+                        setTasks(newT);
+                      }}
+                      className="w-full p-2 border border-slate-200 rounded text-sm text-slate-600"
+                    />
+                  </td>
+                  <td className="px-4 py-4 align-middle text-center">
+                    <button
+                      onClick={() =>
+                        setTasks(tasks.filter((_, i) => i !== idx))
+                      }
+                      className="text-slate-300 hover:text-red-500 p-2"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* MOBILE CARDS (Updated for Multi-Select) */}
+        <div className="md:hidden space-y-4 pb-20">
+          {tasks.map((task, idx) => (
+            <div
+              key={idx}
+              className="bg-white p-4 rounded-xl border shadow-sm space-y-3 relative"
+            >
+              {/* Nút xóa */}
+              <button
+                onClick={() => setTasks(tasks.filter((_, i) => i !== idx))}
+                className="absolute top-3 right-3 text-slate-300 hover:text-red-500"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+
+              {/* Phần Task Content */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase">
+                  Nhiệm vụ
+                </label>
+                <textarea
+                  value={task.task}
+                  rows={3}
+                  onChange={(e) => {
+                    const newT = [...tasks];
+                    newT[idx].task = e.target.value;
+                    setTasks(newT);
+                  }}
+                  className="w-full mt-1 p-2 bg-slate-50 rounded border border-slate-200 text-sm focus:bg-white focus:border-indigo-500 outline-none"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3">
+                {/* Phần Chọn Người (Multi-Select) */}
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">
+                    Người nhận
+                  </label>
+                  
+                  {/* 1. List Badge đã chọn */}
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {task.email.map((email) => {
+                        const mem = members.find((m) => m.email === email);
+                        return (
+                            <span key={email} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100">
+                                {mem?.name || email}
+                                <button 
+                                    onClick={() => {
+                                        const newEmails = task.email.filter(e => e !== email);
+                                        const newT = [...tasks]; newT[idx].email = newEmails; setTasks(newT);
+                                    }}
+                                    className="text-indigo-400 hover:text-red-500 ml-1"
+                                >
+                                    ×
+                                </button>
+                            </span>
+                        );
+                    })}
+                    {task.email.length === 0 && <span className="text-xs text-red-400 italic">Chưa giao ai</span>}
+                  </div>
+
+                  {/* 2. Dropdown thêm người */}
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const selectedEmail = e.target.value;
+                      if (!selectedEmail) return;
+                      
+                      // Logic thêm vào mảng
+                      if (!task.email.includes(selectedEmail)) {
+                          const newT = [...tasks];
+                          newT[idx].email = [...task.email, selectedEmail];
+                          setTasks(newT);
+                      }
+                    }}
+                    className="w-full p-2 rounded border border-slate-200 text-sm outline-none focus:border-indigo-500"
+                  >
+                    <option value="">+ Thêm người...</option>
+                    {members.map((m) => (
+                      <option 
+                        key={m.id} 
+                        value={m.email}
+                        disabled={task.email.includes(m.email)}
+                        className={task.email.includes(m.email) ? 'text-slate-300' : ''}
+                      >
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* AI Suggestion */}
+                  {task.assigneeName && (
+                    <p className="text-[10px] text-slate-400 mt-1 italic">
+                      AI detect: "{task.assigneeName}"
+                    </p>
+                  )}
+                </div>
+
+                {/* Phần Deadline */}
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase">
+                    Deadline
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={task.deadline && task.deadline.includes("T") ? task.deadline : ""}
+                    onChange={(e) => {
+                      const newT = [...tasks];
+                      newT[idx].deadline = e.target.value;
+                      setTasks(newT);
+                    }}
+                    className="w-full mt-1 p-2 border border-slate-200 rounded text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ADD BUTTON (Updated) */}
+        <button
+          onClick={() =>
+            setTasks([
+              ...tasks,
+              {
+                id: Date.now(),
+                task: "",
+                assigneeName: "",
+                email: [], // 🟢 SỬA: Khởi tạo mảng rỗng thay vì string rỗng
+                deadline: "",
+              },
+            ])
+          }
+          className="mt-6 w-full py-3 border-2 border-dashed border-indigo-200 text-indigo-600 font-bold rounded-xl hover:bg-indigo-50 transition flex items-center justify-center gap-2"
+        >
+          <Plus className="w-5 h-5" /> Thêm nhiệm vụ thủ công
+        </button>
+      </div>
+    </div>
+  );
+}
