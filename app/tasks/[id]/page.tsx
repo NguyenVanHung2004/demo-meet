@@ -38,23 +38,48 @@ export default function ActionItemPage() {
   useEffect(() => {
     // Nếu check auth xong (authLoading = false) mà không có user -> Về trang chủ
     if (!authLoading && !user) {
-        router.push("/");
+      router.push("/");
     }
   }, [user, authLoading, router]);
   // 1. Load dữ liệu từ DB
   useEffect(() => {
     if (!id || authLoading || !user) return;
-    setMembers(getMembers()); // Load danh bạ
+    
+    // A. Lấy Member từ LocalStorage (Sync)
+    setMembers(getMembers());
 
+    // B. Lấy Meeting từ Firebase (Async)
     getMeetingById(id as string).then((meeting) => {
       if (meeting) {
         setMeetingTitle(meeting.title);
-        // Load task đã lưu nháp lúc nãy
-        setTasks(meeting.actionItems || []);
+        
+        // 🟢 FIX LỖI Ở ĐÂY: CHUẨN HÓA DỮ LIỆU
+        const rawTasks = meeting.actionItems || [];
+        
+        const normalizedTasks = rawTasks.map((t: any) => {
+            // Logic: Kiểm tra xem t.email đang là chuỗi hay mảng?
+            let standardizedEmail: string[] = [];
+
+            if (Array.isArray(t.email)) {
+                // Nếu đã là mảng -> Ngon, giữ nguyên
+                standardizedEmail = t.email;
+            } else if (typeof t.email === 'string' && t.email) {
+                // Nếu là chuỗi (dữ liệu cũ) -> Đóng gói vào mảng
+                standardizedEmail = [t.email];
+            } 
+            // Nếu null/undefined -> Mảng rỗng []
+
+            return {
+                ...t,
+                email: standardizedEmail // Gán lại vào biến tên là 'email'
+            };
+        });
+
+        setTasks(normalizedTasks);
       }
       setLoading(false);
     });
-  }, [id]);
+  }, [id, authLoading, user]);
 
   // 2. Hàm Lưu lại (Save Draft)
   const handleSave = async () => {
@@ -64,19 +89,23 @@ export default function ActionItemPage() {
 
   // 3. Hàm Gửi Mail
   const handleSendMail = async () => {
-    // Lọc task có email hợp lệ
-    const validTasks = tasks.filter((t) => t.email && t.email.includes("@"));
+    // 🟢 SỬA LẠI: Chỉ cần check mảng có phần tử (length > 0)
+    // (Vì dữ liệu trong mảng lấy từ Member đã chuẩn email rồi)
+    const validTasks = tasks.filter((t) => t.email && t.email.length > 0);
 
     if (validTasks.length === 0) {
-      return toast.error("Không có nhiệm vụ nào được gán email hợp lệ!");
+      return toast.error("Chưa giao nhiệm vụ cho ai cả (vui lòng chọn người nhận)!");
     }
+
+    // Đếm tổng số người nhận (Unique)
+    const allRecipients = new Set<string>();
+    // Dùng flatMap hoặc forEach lồng nhau để lấy hết email
+    validTasks.forEach(t => t.email.forEach(e => allRecipients.add(e)));
 
     // Xác nhận trước khi gửi
     const confirmSend = await confirm({
       title: "Gửi Email",
-      message: `Bạn chuẩn bị gửi thông báo cho ${
-        new Set(validTasks.map((t) => t.email)).size
-      } người với tổng cộng ${validTasks.length} nhiệm vụ. Tiếp tục?`,
+      message: `Bạn chuẩn bị gửi thông báo cho ${allRecipients.size} người với tổng cộng ${validTasks.length} nhiệm vụ. Tiếp tục?`,
       confirmText: "Gửi ngay",
       type: "info",
     });
@@ -87,14 +116,14 @@ export default function ActionItemPage() {
 
     try {
       // Gọi API Backend
-      const response = await fetch('/api/email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                tasks: validTasks,
-                meetingTitle: meetingTitle
-            })
-        });
+      const response = await fetch("/api/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tasks: validTasks,
+          meetingTitle: meetingTitle,
+        }),
+      });
 
       if (response.ok) {
         const data = await response.json();
@@ -194,34 +223,80 @@ export default function ActionItemPage() {
                       placeholder="Nhập nội dung..."
                     />
                   </td>
+                  {/* CỘT NGƯỜI NHẬN (MULTI-SELECT) */}
                   <td className="px-4 py-4 align-top">
                     <div className="flex flex-col gap-2">
-                      {/* AI Suggestion Badge */}
+                      {/* 1. Hiển thị các Badge người đã chọn */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {task.email.map((email) => {
+                          const mem = members.find((m) => m.email === email);
+                          return (
+                            <span
+                              key={email}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100"
+                            >
+                              {mem?.name || email}
+                              <button
+                                onClick={() => {
+                                  // Xóa người này khỏi task
+                                  const newEmails = task.email.filter(
+                                    (e) => e !== email
+                                  );
+                                  const newT = [...tasks];
+                                  newT[idx].email = newEmails;
+                                  setTasks(newT);
+                                }}
+                                className="hover:text-red-500 rounded-full p-0.5 ml-1"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })}
+                        
+                      </div>
 
+                      {/* 2. Dropdown để chọn thêm thủ công */}
                       <select
-                        value={task.email}
+                        value="" // Luôn để rỗng
                         onChange={(e) => {
-                          const newT = [...tasks];
-                          newT[idx].email = e.target.value;
-                          setTasks(newT);
+                          const selectedEmail = e.target.value;
+                          if (!selectedEmail) return;
+
+                          // Logic: Thêm vào mảng nếu chưa có
+                          if (!task.email.includes(selectedEmail)) {
+                            const newT = [...tasks];
+                            newT[idx].email = [...task.email, selectedEmail];
+                            setTasks(newT);
+                          }
                         }}
-                        className={`w-full p-2 rounded border text-sm ${
-                          !task.email
-                            ? "border-red-300 bg-red-50"
-                            : "border-slate-200"
-                        }`}
+                        className="w-full p-1.5 text-xs border border-slate-200 rounded text-slate-500 outline-none focus:border-indigo-500"
                       >
-                        <option value="">-- Chọn --</option>
+                        <option value="">+ Thêm người...</option>
                         {members.map((m) => (
-                          <option key={m.email} value={m.email}>
-                            {m.name} ({m.email})
+                          <option
+                            key={m.id}
+                            value={m.email}
+                            disabled={task.email.includes(m.email)} // Ẩn người đã chọn
+                            className={
+                              task.email.includes(m.email)
+                                ? "text-slate-300"
+                                : ""
+                            }
+                          >
+                            {m.name}
                           </option>
                         ))}
                       </select>
+
+                      {/* Text gợi ý AI */}
                       {task.assigneeName && (
-                        <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded w-fit border border-slate-200">
-                          AI gợi ý: {task.assigneeName}
-                        </span>
+                        <p
+                          className="text-[10px] text-slate-400 italic mt-0.5 truncate"
+                          title={task.assigneeName}
+                        >
+                          Gợi ý: "{task.assigneeName}"
+                        </p>
                       )}
                     </div>
                   </td>
@@ -253,13 +328,14 @@ export default function ActionItemPage() {
           </table>
         </div>
 
-        {/* MOBILE CARDS */}
+        {/* MOBILE CARDS (Updated for Multi-Select) */}
         <div className="md:hidden space-y-4 pb-20">
           {tasks.map((task, idx) => (
             <div
               key={idx}
               className="bg-white p-4 rounded-xl border shadow-sm space-y-3 relative"
             >
+              {/* Nút xóa */}
               <button
                 onClick={() => setTasks(tasks.filter((_, i) => i !== idx))}
                 className="absolute top-3 right-3 text-slate-300 hover:text-red-500"
@@ -267,6 +343,7 @@ export default function ActionItemPage() {
                 <Trash2 className="w-5 h-5" />
               </button>
 
+              {/* Phần Task Content */}
               <div>
                 <label className="text-xs font-bold text-slate-400 uppercase">
                   Nhiệm vụ
@@ -283,44 +360,80 @@ export default function ActionItemPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-3">
+                {/* Phần Chọn Người (Multi-Select) */}
                 <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase">
+                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">
                     Người nhận
                   </label>
+                  
+                  {/* 1. List Badge đã chọn */}
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {task.email.map((email) => {
+                        const mem = members.find((m) => m.email === email);
+                        return (
+                            <span key={email} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100">
+                                {mem?.name || email}
+                                <button 
+                                    onClick={() => {
+                                        const newEmails = task.email.filter(e => e !== email);
+                                        const newT = [...tasks]; newT[idx].email = newEmails; setTasks(newT);
+                                    }}
+                                    className="text-indigo-400 hover:text-red-500 ml-1"
+                                >
+                                    ×
+                                </button>
+                            </span>
+                        );
+                    })}
+                    {task.email.length === 0 && <span className="text-xs text-red-400 italic">Chưa giao ai</span>}
+                  </div>
+
+                  {/* 2. Dropdown thêm người */}
                   <select
-                    value={task.email}
+                    value=""
                     onChange={(e) => {
-                      const newT = [...tasks];
-                      newT[idx].email = e.target.value;
-                      setTasks(newT);
+                      const selectedEmail = e.target.value;
+                      if (!selectedEmail) return;
+                      
+                      // Logic thêm vào mảng
+                      if (!task.email.includes(selectedEmail)) {
+                          const newT = [...tasks];
+                          newT[idx].email = [...task.email, selectedEmail];
+                          setTasks(newT);
+                      }
                     }}
-                    className={`w-full mt-1 p-2 rounded border text-sm ${
-                      !task.email
-                        ? "border-red-300 bg-red-50"
-                        : "border-slate-200"
-                    }`}
+                    className="w-full p-2 rounded border border-slate-200 text-sm outline-none focus:border-indigo-500"
                   >
-                    <option value="">Chọn...</option>
+                    <option value="">+ Thêm người...</option>
                     {members.map((m) => (
-                      <option key={m.email} value={m.email}>
+                      <option 
+                        key={m.id} 
+                        value={m.email}
+                        disabled={task.email.includes(m.email)}
+                        className={task.email.includes(m.email) ? 'text-slate-300' : ''}
+                      >
                         {m.name}
                       </option>
                     ))}
                   </select>
+
+                  {/* AI Suggestion */}
                   {task.assigneeName && (
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Gợi ý: {task.assigneeName}
+                    <p className="text-[10px] text-slate-400 mt-1 italic">
+                      AI detect: "{task.assigneeName}"
                     </p>
                   )}
                 </div>
+
+                {/* Phần Deadline */}
                 <div>
                   <label className="text-xs font-bold text-slate-400 uppercase">
                     Deadline
                   </label>
                   <input
                     type="datetime-local"
-                    value={task.deadline === "Chưa rõ" ? "" : task.deadline}
+                    value={task.deadline && task.deadline.includes("T") ? task.deadline : ""}
                     onChange={(e) => {
                       const newT = [...tasks];
                       newT[idx].deadline = e.target.value;
@@ -334,7 +447,7 @@ export default function ActionItemPage() {
           ))}
         </div>
 
-        {/* ADD BUTTON */}
+        {/* ADD BUTTON (Updated) */}
         <button
           onClick={() =>
             setTasks([
@@ -343,7 +456,7 @@ export default function ActionItemPage() {
                 id: Date.now(),
                 task: "",
                 assigneeName: "",
-                email: "",
+                email: [], // 🟢 SỬA: Khởi tạo mảng rỗng thay vì string rỗng
                 deadline: "",
               },
             ])

@@ -15,7 +15,7 @@ export interface TaskItem {
     id: number;
     task: string;
     assigneeName: string; // Tên AI gợi ý
-    email: string;        // Email người nhận thực tế
+    email: string[];        // Email người nhận thực tế
     deadline: string;
 }
 // Định nghĩa Interface (Đã đổi audioBlob -> audioUrl)

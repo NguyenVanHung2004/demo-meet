@@ -35,9 +35,12 @@ export async function POST(req: Request) {
 
     const tasksByEmail: Record<string, any[]> = {};
     tasks.forEach((task: any) => {
-      if (task.email) {
-        if (!tasksByEmail[task.email]) tasksByEmail[task.email] = [];
-        tasksByEmail[task.email].push(task);
+      if (task.emails && Array.isArray(task.emails)) {
+          task.emails.forEach((email: string) => {
+              if (!tasksByEmail[email]) tasksByEmail[email] = [];
+              // Push task vào danh sách của người này
+              tasksByEmail[email].push(task); 
+          });
       }
     });
 

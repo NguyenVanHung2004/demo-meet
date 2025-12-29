@@ -28,7 +28,7 @@ import {
   saveMember,
   deleteMember,
   getAllMeetings,
-  getMeetingById
+  getMeetingById,
 } from "../lib/db";
 import MeetingDetailState from "../components/MeetingDetailState";
 // Interface nội bộ
@@ -36,7 +36,7 @@ interface TaskItem {
   id: number;
   task: string;
   assigneeName: string;
-  email: string;
+  email: string[];
   deadline: string;
 }
 import EditorState from "../components/EditorState";
@@ -60,32 +60,32 @@ export default function TaskManagerPage() {
   const [showDialog, setShowDialog] = useState(false);
   // 🟢 HÀM XỬ LÝ TÓM TẮT (Truyền vào EditorState)
   const handleSummarize = async (meetingId: string, fullText: string) => {
-      try {
-          toast.info("Đang gửi yêu cầu tóm tắt...");
-          
-          const response = await fetch("/api/gemini", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                  text: fullText,
-                  mode: "summarize" // Đảm bảo API của bạn xử lý mode này
-              }),
-          });
-          
-          const data = await response.json();
-          
-          // Cập nhật vào DB
-          await updateMeetingProcess(meetingId, { summary: data.summary });
-          
-          // Cập nhật UI ngay lập tức
-          if (viewingMeeting && viewingMeeting.id === meetingId) {
-              setViewingMeeting({ ...viewingMeeting, summary: data.summary });
-          }
-          
-          toast.success("Đã cập nhật tóm tắt mới!");
-      } catch (e) {
-          toast.error("Lỗi khi tóm tắt.");
+    try {
+      toast.info("Đang gửi yêu cầu tóm tắt...");
+
+      const response = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: fullText,
+          mode: "summarize", // Đảm bảo API của bạn xử lý mode này
+        }),
+      });
+
+      const data = await response.json();
+
+      // Cập nhật vào DB
+      await updateMeetingProcess(meetingId, { summary: data.summary });
+
+      // Cập nhật UI ngay lập tức
+      if (viewingMeeting && viewingMeeting.id === meetingId) {
+        setViewingMeeting({ ...viewingMeeting, summary: data.summary });
       }
+
+      toast.success("Đã cập nhật tóm tắt mới!");
+    } catch (e) {
+      toast.error("Lỗi khi tóm tắt.");
+    }
   };
   // 3. LOAD DATA KHI CÓ USER
   useEffect(() => {
@@ -180,34 +180,81 @@ export default function TaskManagerPage() {
         body: JSON.stringify({
           text: fullTranscript,
           mode: "extract_json",
+          // 🟢 PROMPT MỚI: Dạy AI phân biệt Sếp và Nhân viên
+          prompt_instruction: `
+            Bạn là thư ký chuyên nghiệp. Hãy trích xuất Action Items.
+            QUY TẮC VỀ NGƯỜI THỰC HIỆN (assignee):
+            1. Nếu giao cho nhiều người: Liệt kê tên ngăn cách bằng dấu phẩy (VD: "Hùng, Nam").
+            2. Nếu giao cho "cả team" hoặc "mọi người": 
+               -> Liệt kê tên các nhân viên thực thi.
+               -> TUYỆT ĐỐI KHÔNG điền tên người ra lệnh (Sếp) vào (trừ khi họ tự nhận).
+            3. Ví dụ: Sếp Tuấn bảo "Các em Hùng, Lan làm báo cáo nhé" -> Assignee: "Hùng, Lan".
+        `,
           dateContext: new Date(meeting.createdAt).toLocaleString("vi-VN"),
         }),
       });
       const data = await response.json();
 
-      let cleanJson = data.summary
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
+      const jsonMatch = data.summary.match(/\[[\s\S]*\]/);
 
-      if (cleanJson.startsWith("{") && !cleanJson.startsWith("[")) {
-        cleanJson = `[${cleanJson}]`;
+      let cleanJson = "[]";
+      if (jsonMatch) {
+        cleanJson = jsonMatch[0];
+      } else {
+        // Fallback: Nếu AI trả về object {} thay vì array [], thử tìm {}
+        const objectMatch = data.summary.match(/\{[\s\S]*\}/);
+        if (objectMatch) {
+          cleanJson = `[${objectMatch[0]}]`;
+        }
       }
 
-      const rawTasks = JSON.parse(cleanJson);
+      // Parse JSON
+      let rawTasks;
+      try {
+        rawTasks = JSON.parse(cleanJson);
+      } catch (error) {
+        console.error("JSON Parse Error:", error);
+        console.log("Bad String:", data.summary);
+        return toast.error("AI trả về dữ liệu lỗi. Hãy thử lại!");
+      }
 
+      // 🟢 LOGIC MAP TÊN -> EMAIL (Để pre-pick trong dropdown)
       const mappedTasks = rawTasks.map((t: any, index: number) => {
-        const matchedMember = members.find(
-          (m) =>
-            m.name.toLowerCase().includes(t.assignee.toLowerCase()) ||
-            t.assignee.toLowerCase().includes(m.name.toLowerCase())
-        );
+        let detectedEmails: string[] = [];
+
+        // 1. Tách chuỗi tên AI trả về. VD: "Hùng, Nam" -> ["Hùng", "Nam"]
+        const names = t.assignee
+            ? t.assignee.split(/,| và | vs | and /).map((n: string) => n.trim())
+            : [];
+        
+        // 2. Duyệt qua từng tên để tìm trong danh bạ
+        names.forEach((name: string) => {
+            if(!name) return;
+
+            // Tìm nhân viên có tên gần giống nhất
+            const matchedMember = members.find(m => 
+                m.name.toLowerCase().includes(name.toLowerCase()) || 
+                name.toLowerCase().includes(m.name.toLowerCase())
+            );
+
+            if (matchedMember) {
+                detectedEmails.push(matchedMember.email);
+            }
+        });
+
+        // 3. Fallback: Nếu AI bảo "Team" mà không tìm được ai -> Chọn hết
+        if (detectedEmails.length === 0 && (t.assignee.toLowerCase().includes("team") || t.assignee.toLowerCase().includes("mọi người"))) {
+             detectedEmails = members.map(m => m.email);
+        }
+
+        // 4. Xóa trùng lặp
+        detectedEmails = [...new Set(detectedEmails)];
 
         return {
           id: index,
           task: t.task,
-          assigneeName: t.assignee,
-          email: matchedMember ? matchedMember.email : "",
+          assigneeName: t.assignee, // Tên hiển thị (để tham khảo)
+          email: detectedEmails,    // 🟢 Mảng email đã tìm được (Sẽ hiển thị tick xanh)
           deadline: t.deadline,
         };
       });
@@ -224,22 +271,6 @@ export default function TaskManagerPage() {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  // --- LOGIC GỬI MAIL (Giả lập) ---
-  const handleSendMail = () => {
-    const validTasks = extractedTasks.filter((t) => t.email);
-    if (validTasks.length === 0) return alert("Vui lòng điền ít nhất 1 email!");
-
-    const content = validTasks
-      .map(
-        (t) =>
-          `📩 Gửi tới: ${t.email}\n   - Việc: ${t.task}\n   - Hạn: ${t.deadline}`
-      )
-      .join("\n\n");
-
-    alert(`Hệ thống đang gửi mail...\n\n${content}`);
-    setShowDialog(false);
   };
 
   // 4. HIỂN THỊ LOADING NẾU CHƯA ĐĂNG NHẬP XONG
@@ -266,24 +297,23 @@ export default function TaskManagerPage() {
       </div>
     );
   if (viewingMeeting) {
-    
     // TRƯỜNG HỢP 1: ĐANG SỬA (EDITOR)
     if (isEditing) {
-        return (
-            <EditorState 
-                audioSrc={viewingMeeting.audioUrl}
-                initialData={viewingMeeting}
-                onBack={() => {
-                    // Khi quay lại từ Editor, ta cần load lại dữ liệu mới nhất từ DB
-                    // để màn hình Detail hiển thị đúng nội dung vừa sửa.
-                    getMeetingById(viewingMeeting.id).then(updatedData => {
-                        if (updatedData) setViewingMeeting(updatedData);
-                        setIsEditing(false); // Tắt chế độ sửa
-                    });
-                }}
-                onSummarize={handleSummarize}
-            />
-        );
+      return (
+        <EditorState
+          audioSrc={viewingMeeting.audioUrl}
+          initialData={viewingMeeting}
+          onBack={() => {
+            // Khi quay lại từ Editor, ta cần load lại dữ liệu mới nhất từ DB
+            // để màn hình Detail hiển thị đúng nội dung vừa sửa.
+            getMeetingById(viewingMeeting.id).then((updatedData) => {
+              if (updatedData) setViewingMeeting(updatedData);
+              setIsEditing(false); // Tắt chế độ sửa
+            });
+          }}
+          onSummarize={handleSummarize}
+        />
+      );
     }
 
     // TRƯỜNG HỢP 2: ĐANG XEM (DETAIL)
@@ -292,7 +322,7 @@ export default function TaskManagerPage() {
         meeting={viewingMeeting}
         audioSrc={viewingMeeting.audioUrl}
         onBack={() => setViewingMeeting(null)} // Quay về danh sách
-        onEdit={() => setIsEditing(true)}      // 🟢 Bấm nút này để sang Editor
+        onEdit={() => setIsEditing(true)} // 🟢 Bấm nút này để sang Editor
       />
     );
   }
