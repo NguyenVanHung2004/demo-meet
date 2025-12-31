@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -87,19 +87,20 @@ export default function TaskManagerPage() {
       toast.error("Lỗi khi tóm tắt.");
     }
   };
-  // 3. LOAD DATA KHI CÓ USER
-  useEffect(() => {
-    // Chỉ load khi đã xác thực user thành công
+  const fetchMeetings = useCallback(() => {
     if (user) {
-      setMembers(getMembers());
-      getAllMeetings(user.uid) // <-- Truyền user.uid thật vào đây
+      getAllMeetings(user.uid)
         .then((data) => {
-          // Lọc bỏ các cuộc họp đã xóa (nếu cần)
           setMeetings(data.filter((m) => !m.isDeleted));
         })
         .catch((err) => console.error("Lỗi load meeting:", err));
     }
-  }, [user]); // Chạy lại khi user thay đổi
+  }, [user]);
+
+  // 3. SỬA USEEFFECT: Gọi hàm fetchMeetings vừa tạo
+  useEffect(() => {
+    fetchMeetings();
+  }, [fetchMeetings]);
 
   // --- LOGIC MEMBER ---
   const handleAddMember = () => {
@@ -309,6 +310,7 @@ export default function TaskManagerPage() {
             getMeetingById(viewingMeeting.id).then((updatedData) => {
               if (updatedData) setViewingMeeting(updatedData);
               setIsEditing(false); // Tắt chế độ sửa
+              fetchMeetings();
             });
           }}
           onSummarize={handleSummarize}
@@ -321,7 +323,10 @@ export default function TaskManagerPage() {
       <MeetingDetailState
         meeting={viewingMeeting}
         audioSrc={viewingMeeting.audioUrl}
-        onBack={() => setViewingMeeting(null)} // Quay về danh sách
+        onBack={() => {
+            setViewingMeeting(null); 
+            fetchMeetings(); // 🟢 4. QUAN TRỌNG: Gọi lại API khi quay về danh sách
+        }}
         onEdit={() => setIsEditing(true)} // 🟢 Bấm nút này để sang Editor
       />
     );
