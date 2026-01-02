@@ -19,6 +19,7 @@ import {
   Wand2,
   LogOut,
   ClipboardList,
+  User,
 } from "lucide-react";
 import {
   getAllMeetings,
@@ -188,6 +189,12 @@ export default function DashboardState({
             className="px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium"
           >
             <ClipboardList className="w-4 h-4" /> Quản lý Task
+          </Link>
+          <Link
+            href="/team"
+            className="px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium"
+          >
+            <User className="w-4 h-4" /> Quản lý Nhân sự
           </Link>
           <div
             onClick={() => setCurrentTab("trash")}
@@ -566,6 +573,15 @@ export default function DashboardState({
           >
             <ClipboardList className="w-5 h-5" />
             <span className="text-[10px] font-bold">Tasks</span>
+          </Link>
+          <Link
+            href="/tasks"
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition ${
+              pathname === "/team" ? "text-indigo-600" : "text-slate-400"
+            }`}
+          >
+            <User className="w-5 h-5" />
+            <span className="text-[10px] font-bold">Member</span>
           </Link>
           <button
             onClick={() => setCurrentTab("trash")}

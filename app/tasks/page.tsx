@@ -25,8 +25,6 @@ import {
   Meeting,
   Member,
   getMembers,
-  saveMember,
-  deleteMember,
   getAllMeetings,
   getMeetingById,
 } from "../lib/db";
@@ -49,9 +47,6 @@ export default function TaskManagerPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [viewingMeeting, setViewingMeeting] = useState<Meeting | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  // State form thêm member
-  const [newName, setNewName] = useState("");
-  const [newEmail, setNewEmail] = useState("");
 
   // State xử lý
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
@@ -89,11 +84,11 @@ export default function TaskManagerPage() {
   };
   const fetchMeetings = useCallback(() => {
     if (user) {
-      getAllMeetings(user.uid)
-        .then((data) => {
-          setMeetings(data.filter((m) => !m.isDeleted));
-        })
-        .catch((err) => console.error("Lỗi load meeting:", err));
+      // Load Meetings
+      getAllMeetings(user.uid).then((data) => setMeetings(data.filter((m) => !m.isDeleted)));
+      
+      // Load Members (Để AI dùng ngầm)
+      getMembers(user.uid).then((data) => setMembers(data)); 
     }
   }, [user]);
 
@@ -101,37 +96,6 @@ export default function TaskManagerPage() {
   useEffect(() => {
     fetchMeetings();
   }, [fetchMeetings]);
-
-  // --- LOGIC MEMBER ---
-  const handleAddMember = () => {
-    if (!newName || !newEmail) return;
-    const newMember: Member = {
-      id: Date.now().toString(),
-      name: newName,
-      email: newEmail,
-    };
-    saveMember(newMember);
-    setMembers(getMembers());
-    setNewName("");
-    setNewEmail("");
-  };
-
-  // ...
-  const handleDeleteMember = async (email: string) => {
-    // 🟢 SỬA: Dùng confirm từ useGlobalUI
-    const isConfirmed = await confirm({
-      title: "Xóa danh bạ",
-      message: "Bạn có chắc chắn muốn xóa thành viên này không?",
-      confirmText: "Xóa luôn",
-      type: "danger",
-    });
-
-    if (isConfirmed) {
-      deleteMember(email);
-      setMembers(getMembers());
-      toast.success("Đã xóa thành viên thành công!"); // 🟢 Thêm thông báo
-    }
-  };
 
   // --- LOGIC AI EXTRACT ---
   const handleExtractActionItems = async (meeting: Meeting) => {
@@ -170,10 +134,12 @@ export default function TaskManagerPage() {
           })
           .join("\n")
       : "";
+    const uniqueDepartments = Array.from(new Set(members.map(m => m.department).filter(Boolean)));
+    const uniqueTeams = Array.from(new Set(members.map(m => m.team).filter(Boolean)));
     console.log(fullTranscript);
     setSelectedMeeting(meeting);
     setIsProcessing(true);
-
+    console.log(uniqueDepartments);
     try {
       const response = await fetch("/api/gemini", {
         method: "POST",
@@ -181,7 +147,8 @@ export default function TaskManagerPage() {
         body: JSON.stringify({
           text: fullTranscript,
           mode: "extract_json",
-          // 🟢 PROMPT MỚI: Dạy AI phân biệt Sếp và Nhân viên
+          departments: uniqueDepartments,
+          teams: uniqueTeams,
           prompt_instruction: `
             Bạn là thư ký chuyên nghiệp. Hãy trích xuất Action Items.
             QUY TẮC VỀ NGƯỜI THỰC HIỆN (assignee):
@@ -221,41 +188,77 @@ export default function TaskManagerPage() {
 
       // 🟢 LOGIC MAP TÊN -> EMAIL (Để pre-pick trong dropdown)
       const mappedTasks = rawTasks.map((t: any, index: number) => {
+        // [QUAN TRỌNG] Hàm chuẩn hóa để so sánh chính xác (NFC)
+        const normalize = (str: any) => 
+            str ? String(str).normalize("NFC").toLowerCase().trim() : "";
+
         let detectedEmails: string[] = [];
 
-        // 1. Tách chuỗi tên AI trả về. VD: "Hùng, Nam" -> ["Hùng", "Nam"]
+        // --- BƯỚC 1: TÌM THEO TÊN RIÊNG (ASSIGNEE) ---
         const names = t.assignee
-            ? t.assignee.split(/,| và | vs | and /).map((n: string) => n.trim())
+            ? t.assignee.split(/,|;| và | vs | and /).map((n: string) => n.trim())
             : [];
         
-        // 2. Duyệt qua từng tên để tìm trong danh bạ
-        names.forEach((name: string) => {
-            if(!name) return;
+        names.forEach((rawName: string) => {
+            if(!rawName) return;
+            const targetName = normalize(rawName);
 
-            // Tìm nhân viên có tên gần giống nhất
-            const matchedMember = members.find(m => 
-                m.name.toLowerCase().includes(name.toLowerCase()) || 
-                name.toLowerCase().includes(m.name.toLowerCase())
-            );
+            // Bỏ qua các từ vô nghĩa chung chung để tránh map sai
+            if (["chua ro", "team", "moi nguoi", "ca phong"].some(k => targetName.includes(k))) return;
+
+            const matchedMember = members.find(m => {
+                const memName = normalize(m.name);
+                if (memName.length < 2) return false; // Bỏ qua tên quá ngắn
+                
+                // Logic so sánh tên
+                return memName.includes(targetName) || (targetName.includes(memName) && memName.length > 3);
+            });
 
             if (matchedMember) {
                 detectedEmails.push(matchedMember.email);
             }
         });
 
-        // 3. Fallback: Nếu AI bảo "Team" mà không tìm được ai -> Chọn hết
-        if (detectedEmails.length === 0 && (t.assignee.toLowerCase().includes("team") || t.assignee.toLowerCase().includes("mọi người"))) {
-             detectedEmails = members.map(m => m.email);
+        // --- BƯỚC 2: TÌM THEO TEAM / DEPARTMENT (Logic còn thiếu) ---
+        // Nếu AI trả về Team/Dept, hãy lấy danh sách nhân viên thuộc nhóm đó
+        let groupEmails: string[] = [];
+        
+        if (t.team) {
+            const targetTeam = normalize(t.team);
+            groupEmails = members
+                .filter(m => normalize(m.team) === targetTeam)
+                .map(m => m.email);
+        } 
+        else if (t.department) {
+            const targetDept = normalize(t.department);
+            groupEmails = members
+                .filter(m => normalize(m.department) === targetDept)
+                .map(m => m.email);
         }
 
-        // 4. Xóa trùng lặp
+        // --- BƯỚC 3: GỘP KẾT QUẢ ---
+        // Nếu bước 1 (tìm tên) không ra ai, HOẶC tên là "Chưa rõ/Team" -> Dùng kết quả Bước 2
+        if (detectedEmails.length === 0 && groupEmails.length > 0) {
+            detectedEmails = groupEmails;
+        } 
+        // Trường hợp bổ sung: Nếu AI chỉ đích danh "Team Mobile" (có trong Step 2) 
+        // thì ta ưu tiên Step 2 hơn là cố tìm ông tên là "Mobile"
+        else if (groupEmails.length > 0 && normalize(t.assignee).includes("team")) {
+             detectedEmails = groupEmails;
+        }
+
+        // Xóa trùng lặp
         detectedEmails = [...new Set(detectedEmails)];
 
         return {
           id: index,
           task: t.task,
-          assigneeName: t.assignee, // Tên hiển thị (để tham khảo)
-          email: detectedEmails,    // 🟢 Mảng email đã tìm được (Sẽ hiển thị tick xanh)
+          assigneeName: t.assignee,
+          email: detectedEmails, // Giờ đã có email của cả phòng IT
+          
+          // Lưu lại để dùng ở màn chi tiết
+          department: t.department, 
+          team: t.team,
           deadline: t.deadline,
         };
       });
@@ -332,77 +335,21 @@ export default function TaskManagerPage() {
     );
   }
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-slate-50 font-sans">
-      {/* CỘT TRÁI: DANH BẠ */}
-      <div className="w-full md:w-80 bg-white border-r flex flex-col p-4 md:p-6 shadow-sm z-10 shrink-0">
-        <div className="flex items-center gap-3 mb-6">
-          <Link
-            href="/"
-            className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <h2 className="text-xl font-bold text-slate-800">Nhân Sự</h2>
-        </div>
-
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 space-y-3">
-          <input
-            className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:border-indigo-500"
-            placeholder="Tên (VD: Hùng)"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <input
-            className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:border-indigo-500"
-            placeholder="Email"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-          />
-          <button
-            onClick={handleAddMember}
-            disabled={!newName || !newEmail}
-            className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex justify-center items-center gap-2"
-          >
-            <Plus className="w-4 h-4" /> Thêm
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-          {members.map((m) => (
-            <div
-              key={m.email}
-              className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm group hover:border-indigo-200 transition"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
-                  {m.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="truncate">
-                  <p className="text-sm font-medium text-slate-700 truncate">
-                    {m.name}
-                  </p>
-                  <p className="text-[10px] text-slate-400 truncate">
-                    {m.email}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => handleDeleteMember(m.email)}
-                className="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-          {members.length === 0 && (
-            <p className="text-center text-slate-400 text-xs mt-4">Trống.</p>
-          )}
-        </div>
+    <div className="flex flex-col h-screen bg-slate-50 font-sans">
+      {/* HEADER ĐƠN GIẢN */}
+      <div className="bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm shrink-0">
+         <div className="flex items-center gap-3">
+             <Link href="/" className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+                <ArrowLeft className="w-5 h-5" />
+             </Link>
+             <h2 className="text-xl font-bold text-slate-800">Danh sách cuộc họp cần xử lý</h2>
+         </div>
+         {/* Có thể thêm nút "Cấu hình nhân sự" ở đây để link sang trang khác nếu muốn */}
       </div>
 
       {/* CỘT PHẢI: LIST MEETING & EXTRACT */}
       <div className="flex-1 p-4 md:p-8 overflow-y-auto">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-6">
             Trích xuất công việc từ biên bản
           </h2>

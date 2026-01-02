@@ -15,6 +15,8 @@ export interface TaskItem {
     id: number;
     task: string;
     assigneeName: string; // Tên AI gợi ý
+    department?: string;
+    team?: string; // [MỚI] Thêm trường team
     email: string[];        // Email người nhận thực tế
     deadline: string;
 }
@@ -168,29 +170,74 @@ export interface Member {
   id: string;
   name: string;
   email: string;
+  department?: string; // Quan trọng để map
+  team?: string;
 }
 
-// Lưu danh sách member vào LocalStorage (cho đơn giản, thay vì tạo collection mới trên Firebase)
-// Nếu muốn dùng Firebase thật, bạn có thể tạo collection "members" tương tự "meetings"
-export const getMembers = (): Member[] => {
-  if (typeof window === "undefined") return [];
-  const data = localStorage.getItem("app_members");
-  return data ? JSON.parse(data) : [];
+// Hàm lấy sub-collection members của 1 user
+// Cấu trúc: users/{userId}/members/{memberId}
+const getMemberCollection = (userId: string) => {
+  return collection(db, "users", userId, "members");
 };
 
-export const saveMember = (member: Member) => {
-  const members = getMembers();
-  // Nếu trùng email thì update, chưa có thì thêm mới
-  const index = members.findIndex(m => m.email === member.email);
-  if (index >= 0) {
-    members[index] = member;
-  } else {
-    members.push(member);
+// 1. Lấy danh sách nhân viên
+export const getMembers = async (userId: string): Promise<Member[]> => {
+  if (!userId) return [];
+  try {
+    const q = query(getMemberCollection(userId), orderBy("name"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
+  } catch (error) {
+    console.error("Lỗi lấy danh sách member:", error);
+    return [];
   }
-  localStorage.setItem("app_members", JSON.stringify(members));
 };
 
-export const deleteMember = (email: string) => {
-  const members = getMembers().filter(m => m.email !== email);
-  localStorage.setItem("app_members", JSON.stringify(members));
+// 2. Thêm hoặc Cập nhật nhân viên
+export const saveMember = async (userId: string, member: Member) => {
+  if (!userId) return;
+  try {
+    // Nếu có ID thì update, chưa có thì tạo mới (dùng doc() để tự sinh ID nếu cần)
+    const memberRef = member.id 
+      ? doc(db, "users", userId, "members", member.id)
+      : doc(getMemberCollection(userId)); // Tự sinh ID
+      
+    const memberData = { ...member, id: memberRef.id }; // Đảm bảo ID được lưu
+    
+    // Dùng setDoc với merge: true để an toàn
+    await setDoc(memberRef, memberData, { merge: true });
+    return memberData.id;
+  } catch (error) {
+    console.error("Lỗi lưu member:", error);
+    throw error;
+  }
+};
+
+// 3. Xóa nhân viên
+export const deleteMember = async (userId: string, memberId: string) => {
+  if (!userId || !memberId) return;
+  try {
+    const memberRef = doc(db, "users", userId, "members", memberId);
+    await deleteDoc(memberRef);
+  } catch (error) {
+    console.error("Lỗi xóa member:", error);
+    throw error;
+  }
+};
+export const getExistingDepartments = async (userId: string): Promise<string[]> => {
+  const members = await getMembers(userId);
+  
+  // Trích xuất mảng department
+  const depts = members.map(m => m.department).filter((d): d is string => Boolean(d)); // Lấy tên và loại bỏ null/undefined
+  
+  // Loại bỏ trùng lặp bằng Set
+  const uniqueDepts = Array.from(new Set(depts));
+  
+  // Sắp xếp A-Z
+  return uniqueDepts.sort();
+};
+export const getExistingTeams = async (userId: string): Promise<string[]> => {
+  const members = await getMembers(userId);
+  const teams = members.map(m => m.team).filter(Boolean) as string[];
+  return Array.from(new Set(teams)).sort();
 };

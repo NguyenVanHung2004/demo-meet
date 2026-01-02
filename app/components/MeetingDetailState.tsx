@@ -562,7 +562,6 @@ export default function MeetingDetailState({
                       // Lấy màu từ DB luôn cho đồng bộ với màn Edit
                       color: matchedSpeaker ? matchedSpeaker.color : getSpeakerStyle(seg.speakerId) 
                   };
-                  console.log('segment đc show nè ', seg)
                   return (
                     <TranscriptRow 
                         key={idx}

@@ -36,49 +36,78 @@ export default function ActionItemPage() {
   const [isSendingMail, setIsSendingMail] = useState(false);
   const { toast, confirm } = useGlobalUI();
   useEffect(() => {
-    // Nếu check auth xong (authLoading = false) mà không có user -> Về trang chủ
-    if (!authLoading && !user) {
-      router.push("/");
-    }
-  }, [user, authLoading, router]);
-  // 1. Load dữ liệu từ DB
-  useEffect(() => {
     if (!id || authLoading || !user) return;
-    
-    // A. Lấy Member từ LocalStorage (Sync)
-    setMembers(getMembers());
 
-    // B. Lấy Meeting từ Firebase (Async)
-    getMeetingById(id as string).then((meeting) => {
-      if (meeting) {
-        setMeetingTitle(meeting.title);
-        
-        // 🟢 FIX LỖI Ở ĐÂY: CHUẨN HÓA DỮ LIỆU
-        const rawTasks = meeting.actionItems || [];
-        
-        const normalizedTasks = rawTasks.map((t: any) => {
-            // Logic: Kiểm tra xem t.email đang là chuỗi hay mảng?
-            let standardizedEmail: string[] = [];
+    const fetchData = async () => {
+      try {
+        // A. Lấy danh sách Member mới nhất từ Firestore (cần userId)
+        // Lưu ý: db.ts mới của bạn hàm getMembers là async và cần truyền user.uid
+        const loadedMembers = await getMembers(user.uid);
+        setMembers(loadedMembers);
 
-            if (Array.isArray(t.email)) {
-                // Nếu đã là mảng -> Ngon, giữ nguyên
-                standardizedEmail = t.email;
-            } else if (typeof t.email === 'string' && t.email) {
-                // Nếu là chuỗi (dữ liệu cũ) -> Đóng gói vào mảng
-                standardizedEmail = [t.email];
+        // B. Lấy Meeting
+        const meeting = await getMeetingById(id as string);
+        if (meeting) {
+          setMeetingTitle(meeting.title);
+
+          const rawTasks = meeting.actionItems || [];
+          console.log("Raw task", rawTasks);
+          // --- LOGIC MAPPING MỚI (Ưu tiên: Team -> Dept -> Name) ---
+          const mappedTasks = rawTasks.map((t: any) => {
+            // 1. Chuẩn hóa các chuỗi
+            const normalize = (str: any) => str ? String(str).normalize("NFC").toLowerCase().trim() : "";
+            
+            let currentEmails: string[] = [];
+            if (Array.isArray(t.email)) currentEmails = t.email;
+            else if (typeof t.email === "string" && t.email) currentEmails = [t.email];
+
+            // 2. Tìm danh sách email theo Team/Department (Luôn tính toán sẵn)
+            let autoEmails: string[] = [];
+            
+            // Tìm theo TEAM
+            if (t.team) {
+               const targetTeam = normalize(t.team);
+               autoEmails = loadedMembers
+                  .filter(m => normalize(m.team) === targetTeam)
+                  .map(m => m.email);
             } 
-            // Nếu null/undefined -> Mảng rỗng []
+            // Tìm theo DEPARTMENT
+            else if (t.department) {
+               const targetDept = normalize(t.department);
+               autoEmails = loadedMembers
+                  .filter(m => normalize(m.department) === targetDept)
+                  .map(m => m.email);
+            }
+
+            // 3. QUYẾT ĐỊNH CHỌN EMAIL:
+            // Nếu assignee là "Chưa rõ", "Team", "Mọi người"... -> ƯU TIÊN dùng autoEmails (từ Dept/Team)
+            // Ngược lại -> Giữ nguyên email cũ, chỉ dùng autoEmails nếu cũ bị rỗng
+            const isVague = !t.assigneeName || ["chưa rõ", "team", "mọi người", "cả phòng", "nhóm"].some(k => normalize(t.assigneeName).includes(k));
+            
+            if (isVague && autoEmails.length > 0) {
+                 // Ghi đè bằng danh sách phòng ban
+                 currentEmails = autoEmails;
+            } else if (currentEmails.length === 0 && autoEmails.length > 0) {
+                 // Fill nếu đang rỗng
+                 currentEmails = autoEmails;
+            }
 
             return {
-                ...t,
-                email: standardizedEmail // Gán lại vào biến tên là 'email'
+              ...t,
+              email: currentEmails
             };
-        });
+          });
 
-        setTasks(normalizedTasks);
+          setTasks(mappedTasks);
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error("Lỗi load data:", error);
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    };
+
+    fetchData();
   }, [id, authLoading, user]);
 
   // 2. Hàm Lưu lại (Save Draft)
@@ -94,13 +123,15 @@ export default function ActionItemPage() {
     const validTasks = tasks.filter((t) => t.email && t.email.length > 0);
 
     if (validTasks.length === 0) {
-      return toast.error("Chưa giao nhiệm vụ cho ai cả (vui lòng chọn người nhận)!");
+      return toast.error(
+        "Chưa giao nhiệm vụ cho ai cả (vui lòng chọn người nhận)!"
+      );
     }
 
     // Đếm tổng số người nhận (Unique)
     const allRecipients = new Set<string>();
     // Dùng flatMap hoặc forEach lồng nhau để lấy hết email
-    validTasks.forEach(t => t.email.forEach(e => allRecipients.add(e)));
+    validTasks.forEach((t) => t.email.forEach((e) => allRecipients.add(e)));
 
     // Xác nhận trước khi gửi
     const confirmSend = await confirm({
@@ -211,6 +242,18 @@ export default function ActionItemPage() {
               {tasks.map((task, idx) => (
                 <tr key={idx} className="hover:bg-indigo-50/10 transition">
                   <td className="px-6 py-4 align-top">
+                    <div className="flex gap-2 mb-1">
+                      {task.team && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
+                          Team: {task.team}
+                        </span>
+                      )}
+                      {task.department && !task.team && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                          Phòng: {task.department}
+                        </span>
+                      )}
+                    </div>
                     <textarea
                       value={task.task}
                       rows={2}
@@ -253,7 +296,6 @@ export default function ActionItemPage() {
                             </span>
                           );
                         })}
-                        
                       </div>
 
                       {/* 2. Dropdown để chọn thêm thủ công */}
@@ -366,27 +408,33 @@ export default function ActionItemPage() {
                   <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">
                     Người nhận
                   </label>
-                  
+
                   {/* 1. List Badge đã chọn */}
                   <div className="flex flex-wrap gap-2 mb-2">
                     {task.email.map((email) => {
-                        const mem = members.find((m) => m.email === email);
-                        return (
-                            <span key={email} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100">
-                                {mem?.name || email}
-                                <button 
-                                    onClick={() => {
-                                        const newEmails = task.email.filter(e => e !== email);
-                                        const newT = [...tasks]; newT[idx].email = newEmails; setTasks(newT);
-                                    }}
-                                    className="text-indigo-400 hover:text-red-500 ml-1"
-                                >
-                                    ×
-                                </button>
-                            </span>
-                        );
+                      const mem = members.find((m) => m.email === email);
+                      return (
+                        <span
+                          key={email}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100"
+                        >
+                          {mem?.name || email}
+                          <button
+                            onClick={() => {
+                              const newEmails = task.email.filter(
+                                (e) => e !== email
+                              );
+                              const newT = [...tasks];
+                              newT[idx].email = newEmails;
+                              setTasks(newT);
+                            }}
+                            className="text-indigo-400 hover:text-red-500 ml-1"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
                     })}
-                    {task.email.length === 0 && <span className="text-xs text-red-400 italic">Chưa giao ai</span>}
                   </div>
 
                   {/* 2. Dropdown thêm người */}
@@ -395,23 +443,25 @@ export default function ActionItemPage() {
                     onChange={(e) => {
                       const selectedEmail = e.target.value;
                       if (!selectedEmail) return;
-                      
+
                       // Logic thêm vào mảng
                       if (!task.email.includes(selectedEmail)) {
-                          const newT = [...tasks];
-                          newT[idx].email = [...task.email, selectedEmail];
-                          setTasks(newT);
+                        const newT = [...tasks];
+                        newT[idx].email = [...task.email, selectedEmail];
+                        setTasks(newT);
                       }
                     }}
                     className="w-full p-2 rounded border border-slate-200 text-sm outline-none focus:border-indigo-500"
                   >
                     <option value="">+ Thêm người...</option>
                     {members.map((m) => (
-                      <option 
-                        key={m.id} 
+                      <option
+                        key={m.id}
                         value={m.email}
                         disabled={task.email.includes(m.email)}
-                        className={task.email.includes(m.email) ? 'text-slate-300' : ''}
+                        className={
+                          task.email.includes(m.email) ? "text-slate-300" : ""
+                        }
                       >
                         {m.name}
                       </option>
@@ -433,7 +483,11 @@ export default function ActionItemPage() {
                   </label>
                   <input
                     type="datetime-local"
-                    value={task.deadline && task.deadline.includes("T") ? task.deadline : ""}
+                    value={
+                      task.deadline && task.deadline.includes("T")
+                        ? task.deadline
+                        : ""
+                    }
                     onChange={(e) => {
                       const newT = [...tasks];
                       newT[idx].deadline = e.target.value;
