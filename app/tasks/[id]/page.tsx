@@ -337,7 +337,7 @@ export default function ActionItemPage() {
                           className="text-[10px] text-slate-400 italic mt-0.5 truncate"
                           title={task.assigneeName}
                         >
-                          Gợi ý: "{task.assigneeName}"
+                          {[task.assigneeName, task.department, task.team].filter(Boolean).join(", ")}
                         </p>
                       )}
                     </div>

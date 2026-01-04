@@ -187,8 +187,9 @@ export default function TaskManagerPage() {
       }
 
       // 🟢 LOGIC MAP TÊN -> EMAIL (Để pre-pick trong dropdown)
+      // 🟢 LOGIC MAP TÊN/PHÒNG BAN -> EMAIL (FIX FINAL)
       const mappedTasks = rawTasks.map((t: any, index: number) => {
-        // [QUAN TRỌNG] Hàm chuẩn hóa để so sánh chính xác (NFC)
+        // Hàm chuẩn hóa: Chuyển về chữ thường, giữ nguyên dấu tiếng Việt chuẩn NFC
         const normalize = (str: any) => 
             str ? String(str).normalize("NFC").toLowerCase().trim() : "";
 
@@ -199,19 +200,47 @@ export default function TaskManagerPage() {
             ? t.assignee.split(/,|;| và | vs | and /).map((n: string) => n.trim())
             : [];
         
+        // [FIX 1] Bổ sung danh xưng CÓ DẤU để replace chính xác
+        const prefixes = [
+            "ông ", "bà ", "anh ", "chị ", "em ", "sếp ", "bạn ", "cậu ", "cô ", "chú ", "bác ", // Có dấu
+            "ong ", "ba ", "sep ", "ban ", "cau ", "co ", "chu ", "bac ", // Không dấu (phòng hờ)
+            "mr ", "ms ", "mrs ", "to ", "nhom ", "doi ", "team "
+        ];
+
         names.forEach((rawName: string) => {
             if(!rawName) return;
-            const targetName = normalize(rawName);
+            let targetName = normalize(rawName);
 
-            // Bỏ qua các từ vô nghĩa chung chung để tránh map sai
-            if (["chua ro", "team", "moi nguoi", "ca phong"].some(k => targetName.includes(k))) return;
+            // Xóa danh xưng
+            for (const p of prefixes) {
+                if (targetName.startsWith(p)) {
+                    targetName = targetName.replace(p, "").trim();
+                    break; // Xóa xong 1 cái thì thôi
+                }
+            }
 
+            // Bỏ qua các từ vô nghĩa nếu còn sót lại
+            if (["chua ro", "moi nguoi", "ca phong", "all"].some(k => targetName === k)) return;
+
+            // TÌM TRONG DB MEMBER
             const matchedMember = members.find(m => {
-                const memName = normalize(m.name);
-                if (memName.length < 2) return false; // Bỏ qua tên quá ngắn
+                const memName = normalize(m.name); // VD: "trần văn b"
                 
-                // Logic so sánh tên
-                return memName.includes(targetName) || (targetName.includes(memName) && memName.length > 3);
+                // [FIX 2] Logic so sánh thông minh hơn
+                
+                // Case A: Khớp chính xác 100% (VD: "b" == "b")
+                if (memName === targetName) return true;
+
+                // Case B: Khớp từng từ (Word Boundary) - Quan trọng cho tên ngắn như "B"
+                // Tách "trần văn b" -> ["trần", "văn", "b"]. Nếu target là "b" -> KHỚP.
+                const words = memName.split(" ");
+                if (words.some(w => w === targetName)) return true;
+
+                // Case C: Chứa nhau (chỉ áp dụng nếu tên tìm đủ dài để tránh khớp sai)
+                // VD: "lan" khớp "nguyễn thị lan", nhưng "a" không được khớp "lan"
+                if (targetName.length > 1 && memName.includes(targetName)) return true;
+
+                return false;
             });
 
             if (matchedMember) {
@@ -219,8 +248,7 @@ export default function TaskManagerPage() {
             }
         });
 
-        // --- BƯỚC 2: TÌM THEO TEAM / DEPARTMENT (Logic còn thiếu) ---
-        // Nếu AI trả về Team/Dept, hãy lấy danh sách nhân viên thuộc nhóm đó
+        // --- BƯỚC 2: TÌM THEO TEAM / DEPARTMENT ---
         let groupEmails: string[] = [];
         
         if (t.team) {
@@ -236,15 +264,39 @@ export default function TaskManagerPage() {
                 .map(m => m.email);
         }
 
-        // --- BƯỚC 3: GỘP KẾT QUẢ ---
-        // Nếu bước 1 (tìm tên) không ra ai, HOẶC tên là "Chưa rõ/Team" -> Dùng kết quả Bước 2
-        if (detectedEmails.length === 0 && groupEmails.length > 0) {
-            detectedEmails = groupEmails;
-        } 
-        // Trường hợp bổ sung: Nếu AI chỉ đích danh "Team Mobile" (có trong Step 2) 
-        // thì ta ưu tiên Step 2 hơn là cố tìm ông tên là "Mobile"
-        else if (groupEmails.length > 0 && normalize(t.assignee).includes("team")) {
-             detectedEmails = groupEmails;
+        // --- BƯỚC 3: QUYẾT ĐỊNH (Logic Thông Minh: Subset Merge) ---
+        
+        // Trường hợp 1: Có cả Người cụ thể VÀ Nhóm (Team/Dept)
+        if (detectedEmails.length > 0 && groupEmails.length > 0) {
+            
+            // Kiểm tra xem những người được tìm thấy có thuộc nhóm này không?
+            // (VD: Ông B có thuộc phòng IT không?)
+            const isSubset = detectedEmails.every(email => groupEmails.includes(email));
+
+            if (isSubset) {
+                // Kịch bản 3: "Ông B bên IT" 
+                // -> Ông B là con của IT -> Chỉ lấy ông B (Override)
+                // Giữ nguyên detectedEmails
+            } else {
+                // Kịch bản 4: "Ông A (IT) phối hợp với Kế toán"
+                // -> Ông A không thuộc Kế toán -> Lấy cả A và Kế toán (Merge)
+                detectedEmails = [...detectedEmails, ...groupEmails];
+            }
+        }
+        
+        // Trường hợp 2: Chỉ có Nhóm (không tìm thấy tên riêng)
+        else if (detectedEmails.length === 0 && groupEmails.length > 0) {
+             
+             // Check lại xem Assignee có keyword ám chỉ nhóm không để chắc ăn
+             // (Tránh trường hợp AI hallucinations gán bừa Dept)
+             const normAssignee = normalize(t.assignee);
+             const groupKeywords = ["team", "doi", "nhom", "phong", "bo phan", "ben", "toan bo", "ca "];
+             const isExplicitGroup = groupKeywords.some(k => normAssignee.includes(k));
+
+             // Nếu Assignee là "Chưa rõ" hoặc có keyword nhóm -> Lấy cả nhóm
+             if (detectedEmails.length === 0 || isExplicitGroup) {
+                 detectedEmails = groupEmails;
+             }
         }
 
         // Xóa trùng lặp
@@ -254,9 +306,7 @@ export default function TaskManagerPage() {
           id: index,
           task: t.task,
           assigneeName: t.assignee,
-          email: detectedEmails, // Giờ đã có email của cả phòng IT
-          
-          // Lưu lại để dùng ở màn chi tiết
+          email: detectedEmails,
           department: t.department, 
           team: t.team,
           deadline: t.deadline,
