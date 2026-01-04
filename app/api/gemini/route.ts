@@ -6,7 +6,7 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
-    const { text, mode, dateContext, previousSummary } = await req.json();
+    const { text, mode, dateContext, previousSummary,departments,teams } = await req.json();
 
     if (!text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
@@ -18,21 +18,25 @@ export async function POST(req: Request) {
     let prompt = "";
     
      if (mode === "extract_json") {
+      const deptListStr = departments?.join(", ") || "";
+      const teamListStr = teams?.join(", ") || ""; // [MỚI]
       prompt = `
       Bạn là trợ lý AI chuyên trích xuất công việc (Action Item) từ biên bản cuộc họp.
       THÔNG TIN NGỮ CẢNH:
     - Thời gian diễn ra cuộc họp: ${dateContext || "Hôm nay"} (Hãy dùng ngày này làm mốc để tính toán các từ chỉ thời gian như 'ngày mai', 'thứ 6 tới').
-      
-      NHIỆM VỤ:
+    - Danh sách Phòng ban (Department): [${deptListStr}]
+    - Danh sách Nhóm (Team): [${teamListStr}]
       NHIỆM VỤ: Phân tích đoạn hội thoại (Transcript) dưới đây và trích xuất danh sách các nhiệm vụ/công việc cần thực hiện (Action Items).
-      
+      QUY TẮC MAPPING (Ưu tiên từ trên xuống dưới):
+      1. Nếu nhắc đến TÊN RIÊNG -> Điền "assignee".
+      2. Nếu nhắc đến TEAM/Phòng cụ thể (VD: "Team Mobile", "Đội Web", ...) -> Điền field "team" (phải khớp chính xác danh sách Team ở trên).
+      3. Nếu chỉ nhắc đến PHÒNG BAN chung (VD: "Phòng IT", "Kế toán") -> Điền field "department".(phải khớp chính xác danh sách Phòng ở trên).
       VĂN BẢN ĐẦU VÀO:
       "${text}"
 
       YÊU CẦU XỬ LÝ:
         1. Tìm các câu mệnh lệnh, lời hứa, hoặc kế hoạch cụ thể (Ví dụ: "Tôi sẽ gửi...", "Bạn hãy làm...", "Tuần sau phải xong...").
         2. Bỏ qua các câu chào hỏi, giới thiệu, hoặc chia sẻ cảm xúc chung chung.
-        3. Nếu ngữ cảnh không rõ người được giao, hãy để assignee là "Team" hoặc "Chưa rõ".
         4. Nếu không tìm thấy bất kỳ nhiệm vụ cụ thể nào, hãy trả về mảng rỗng [].
       
       CẤU TRÚC JSON:
@@ -40,36 +44,22 @@ export async function POST(req: Request) {
         {
           "task": "Mô tả công việc ngắn gọn",
           "assignee": "Tên người được giao (Nếu không rõ ghi 'Chưa rõ')",
+          "team": "Tên Team (nếu có) hoặc null",
+          "department": "Tên Phòng (nếu có) hoặc null",
           "deadline": "YYYY-MM-DDTHH:mm (Hãy quy đổi các cụm từ như 'chiều nay 5h', 'thứ 2 tuần sau' thành định dạng ngày giờ cụ thể dựa trên mốc thời gian trên. Nếu không xác định được giờ thì để cuối ngày. Nếu không có deadline thì ghi 'Chưa rõ')"
         }
       ]
+      QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
-    } else if (mode === "segment") {
-      // [PROMPT NÂNG CẤP] Chống lặp ý + Tối ưu cho hội thoại
-      prompt = `
-      Bạn là chuyên gia ghi chép biên bản cuộc họp theo thời gian thực (Live-taker).
-      Nhiệm vụ: Tóm tắt đoạn hội thoại mới nhất ("VĂN BẢN MỚI") để nối tiếp vào biên bản ("NGỮ CẢNH").
-
-      QUY TRÌNH TƯ DUY (Không in ra):
-      1. So sánh "VĂN BẢN MỚI" với "NGỮ CẢNH" xem có thông tin gì thực sự mới không.
-      2. Nếu "VĂN BẢN MỚI" chỉ là lặp lại ý cũ, lời ậm ừ, hoặc các câu đệm vô nghĩa -> Bỏ qua.
-      3. Nếu có ý mới -> Viết lại súc tích, ngắn gọn nhất có thể.
-
-      YÊU CẦU ĐẦU RA (BẮT BUỘC):
-      - Tuyệt đối KHÔNG nhắc lại những gì đã có trong "NGỮ CẢNH".
-      - Chỉ xuất ra thông tin mới (Incremental Update).
-      - Nếu đoạn văn bản vô nghĩa hoặc lặp hoàn toàn -> Trả về rỗng hoặc câu cực ngắn.
-      - Không dùng các từ nối rườm rà như "Tiếp theo", "Sau đó", "Ông ấy nói rằng". Đi thẳng vào nội dung.
-      - Giữ nguyên thuật ngữ chuyên ngành.
-
-      -----
-      NGỮ CẢNH (Những gì đã diễn ra trước đó):
-      "${previousSummary || "Chưa có thông tin."}"
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
       
-      VĂN BẢN MỚI (Cần xử lý):
-      "${text}"
-      -----
-      `;
+      const rawText = response.text();
+
+      // Vì đã ép JSON Mode nên không cần replace markdown nữa, nhưng cứ để cho chắc
+      const cleanText = rawText.replace(/```json|```/g, "").trim();
+      
+      return NextResponse.json({ summary: cleanText }); // Trả về text dạng chuỗi cho Client parse
     } else {
       // [PROMPT NÂNG CẤP] Cho tóm tắt tổng hợp (Full Summary)
       prompt = `
