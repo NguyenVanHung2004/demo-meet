@@ -3,7 +3,37 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
+// --- BẮT ĐẦU ĐOẠN CODE MỚI ---
+const PRIMARY_MODEL = "gemini-2.5-flash"; // Model chính (bạn có thể đổi thành 2.5)
+const BACKUP_MODEL = "gemini-1.5-flash"; // Model dự phòng
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function generateWithRetry(modelName: string, prompt: string, retries = 3) {
+  const model = genAI.getGenerativeModel({ model: modelName });
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await model.generateContent(prompt);
+      return (await result.response).text();
+    } catch (error: any) {
+      if (attempt < retries && (error.status === 503 || error.status >= 500)) {
+        await delay(1000 * attempt);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Retry failed");
+}
+
+async function generateContentSafe(prompt: string) {
+  try {
+    return await generateWithRetry(PRIMARY_MODEL, prompt);
+  } catch (error) {
+    console.warn("Model chính lỗi, chuyển sang backup...");
+    return await generateWithRetry(BACKUP_MODEL, prompt);
+  }
+}
 export async function POST(req: Request) {
   try {
     const { text, mode, dateContext, previousSummary,departments,teams } = await req.json();
@@ -11,9 +41,6 @@ export async function POST(req: Request) {
     if (!text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
     }
-
-    // Dùng model Flash cho tốc độ cao nhất
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     let prompt = "";
     
@@ -51,10 +78,7 @@ export async function POST(req: Request) {
       ]
       QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      
-      const rawText = response.text();
+      const rawText = await generateContentSafe(prompt);
 
       // Vì đã ép JSON Mode nên không cần replace markdown nữa, nhưng cứ để cho chắc
       const cleanText = rawText.replace(/```json|```/g, "").trim();
@@ -108,7 +132,6 @@ export async function POST(req: Request) {
       - **Mục đích:** (Tóm tắt mục tiêu chính của cuộc họp trong 1-2 dòng)
 
       ## 2. NỘI DUNG CHÍNH & THẢO LUẬN
-      *(Tóm tắt theo chủ đề. Các con số và dữ kiện quan trọng cần được **Bôi đậm** để dễ đối chiếu)*
 
       - **[Chủ đề 1]:**
         - Diễn giải ý chính và các kết luận thống nhất...
@@ -134,9 +157,8 @@ export async function POST(req: Request) {
       `;
     }
     
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const summary = response.text();
+    const summary = await generateContentSafe(prompt);
+
     return NextResponse.json({ summary });
 
   } catch (error: any) {
