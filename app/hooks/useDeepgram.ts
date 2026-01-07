@@ -54,7 +54,10 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
   const isSessionActive = useRef(false);
   const audioQueueRef = useRef<Blob[]>([]); 
   const lastInterimRef = useRef<{ content: string, speaker: number }>({ content: "", speaker: 0 });
-
+    const offsetTimeRef = useRef(0);
+  // LEVEL 3: DSP REFS
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const logIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const fetchNewKey = async () => {
     try {
       fetch("/api/deepgram")
@@ -70,7 +73,73 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
   };
 
   useEffect(() => { fetchNewKey(); return () => stopListening(); }, []);
-  const offsetTimeRef = useRef(0);
+  // --- LEVEL 3: XỬ LÝ TÍN HIỆU (DSP) ---
+
+  const setupAudioProcessing = async (rawStream: MediaStream) => {
+    const audioContext = new AudioContext();
+    audioContextRef.current = audioContext;
+
+    const source = audioContext.createMediaStreamSource(rawStream);
+    
+    // 1. COMPRESSOR
+    const compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-50, audioContext.currentTime); 
+    compressor.knee.setValueAtTime(40, audioContext.currentTime);
+    compressor.ratio.setValueAtTime(12, audioContext.currentTime);      
+    compressor.attack.setValueAtTime(0, audioContext.currentTime);
+    compressor.release.setValueAtTime(0.25, audioContext.currentTime);
+
+    // 2. GAIN (Đã giảm xuống 2.0 để giảm tiếng ồn nền như đã bàn)
+    const gainNode = audioContext.createGain();
+    gainNode.gain.setValueAtTime(2.0, audioContext.currentTime);        
+
+    // 3. ANALYSER INPUT (Đo mic gốc)
+    const analyserIn = audioContext.createAnalyser();
+    analyserIn.fftSize = 256;
+    
+    // 4. ANALYSER OUTPUT (Đo sau khi xử lý)
+    const analyserOut = audioContext.createAnalyser();
+    analyserOut.fftSize = 256;
+
+    // --- KẾT NỐI DÂY ---
+    // Nhánh 1: Đo mic gốc
+    source.connect(analyserIn);
+
+    // Nhánh 2: Xử lý âm thanh
+    source.connect(compressor);
+    compressor.connect(gainNode);
+    gainNode.connect(analyserOut); // Đo đầu ra
+    
+    const destination = audioContext.createMediaStreamDestination();
+    gainNode.connect(destination); // Đưa ra loa/recorder
+
+    // --- LOGGING ---
+    const bufferLength = analyserIn.frequencyBinCount;
+    const dataArrayIn = new Uint8Array(bufferLength);
+    const dataArrayOut = new Uint8Array(bufferLength);
+
+    if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+    logIntervalRef.current = setInterval(() => {
+        analyserIn.getByteFrequencyData(dataArrayIn);
+        analyserOut.getByteFrequencyData(dataArrayOut);
+        
+        // Tính trung bình
+        let sumIn = 0, sumOut = 0;
+        for(let i = 0; i < bufferLength; i++) {
+            sumIn += dataArrayIn[i];
+            sumOut += dataArrayOut[i];
+        }
+        const avgIn = sumIn / bufferLength;
+        const avgOut = sumOut / bufferLength;
+        
+        // Chỉ log khi có tín hiệu để đỡ rác console
+        if (avgOut > 5 || avgIn > 5) {
+            //  console.log(` Mic Gốc: ${avgIn.toFixed(0)} Đã Xử Lý: ${avgOut.toFixed(0)}  (Gain: 2.0)`);
+        }
+    }, 1000);
+
+    return destination.stream;
+  };
   const handleTranscript = (data: any) => {
     const received = data.channel.alternatives[0];
     const transcript = received.transcript;
@@ -131,13 +200,19 @@ export default function useDeepgram(onFinal?: OnFinalCallback) {
     }
   };
 
-  const startListening = async (stream: MediaStream,startTimeOffset: number = 0) => {
+  const startListening = async (rawStream: MediaStream,startTimeOffset: number = 0) => {
     offsetTimeRef.current = startTimeOffset;
     isSessionActive.current = true;
     setIsListening(true);
     audioQueueRef.current = []; 
 
-    const mediaRecorder = new MediaRecorder(stream);
+    // --- LEVEL 3: ÁP DỤNG XỬ LÝ ÂM THANH ---
+    console.log("🎛️ Đang kích hoạt bộ xử lý tín hiệu DSP (AGC)...");
+    const processedStream = await setupAudioProcessing(rawStream);
+    // -----------------------------------------
+
+    // Dùng processedStream thay vì rawStream
+    const mediaRecorder = new MediaRecorder(processedStream);
     mediaRecorder.addEventListener("dataavailable", (event) => {
       if (event.data.size > 0) {
         if (deepgramLiveRef.current && deepgramLiveRef.current.getReadyState() === 1) {
