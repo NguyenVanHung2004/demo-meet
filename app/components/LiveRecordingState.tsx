@@ -106,7 +106,15 @@ export default function LiveRecordingState({
       }
 
       // 3. LOGIC START NEW (MỚI TINH)
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+  audio: {
+    noiseSuppression: false, // Tắt khử ồn (QUAN TRỌNG NHẤT)
+    echoCancellation: false, // Tắt khử vọng
+    autoGainControl: false,  // Tắt tự động chỉnh gain của trình duyệt
+    channelCount: 1,         // Thu mono cho nhẹ
+    sampleRate: 48000        // Tần số lấy mẫu chuẩn
+  }
+});
       streamRef.current = stream;
       
       const mediaRecorder = new MediaRecorder(stream);

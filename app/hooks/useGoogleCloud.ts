@@ -37,7 +37,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
 
   const lastSpeechTimeRef = useRef<number>(Date.now());
   const shouldMergeRef = useRef<boolean>(false);
-  
+  const audioContextRef = useRef<AudioContext | null>(null);
   const isInterimActiveRef = useRef(false);
 
   // [FIX 1] Lưu callback mới nhất vào Ref để tránh lỗi Stale Closure trong useEffect []
@@ -180,7 +180,33 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     };
   }, []); 
+  const setupAudioProcessing = async (rawStream: MediaStream) => {
+    const audioContext = new AudioContext();
+    audioContextRef.current = audioContext;
 
+    const source = audioContext.createMediaStreamSource(rawStream);
+    
+    // 1. Compressor: Ép giọng to xuống
+    const compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-50, audioContext.currentTime); 
+    compressor.knee.setValueAtTime(40, audioContext.currentTime);
+    compressor.ratio.setValueAtTime(12, audioContext.currentTime);      
+    compressor.attack.setValueAtTime(0, audioContext.currentTime);
+    compressor.release.setValueAtTime(0.25, audioContext.currentTime);
+
+    // 2. Gain: Kích âm lượng lên 2.0 lần
+    const gainNode = audioContext.createGain();
+    gainNode.gain.setValueAtTime(2.0, audioContext.currentTime);        
+
+    // Kết nối: Mic -> Compressor -> Gain -> Output
+    source.connect(compressor);   
+    compressor.connect(gainNode);         
+    
+    const destination = audioContext.createMediaStreamDestination();
+    gainNode.connect(destination);
+
+    return destination.stream;
+  };
   const startListening = async (stream: MediaStream, startTimeOffset: number = 0) => {
     if (!socketRef.current || !socketRef.current.connected) return;
     try {
@@ -192,8 +218,10 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
       isInterimActiveRef.current = false; 
       
       socketRef.current.emit("start-google-stream");
-      
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const processedStream = await setupAudioProcessing(stream);
+
+      // 👇 [SỬA] Dùng processedStream thay vì stream
+      const mediaRecorder = new MediaRecorder(processedStream, { mimeType: 'audio/webm' });
       mediaRecorder.addEventListener("dataavailable", (event) => {
         if (event.data.size > 0 && socketRef.current?.connected) {
           socketRef.current.emit("audio-chunk", event.data);
@@ -212,6 +240,10 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
     if (socketRef.current) socketRef.current.emit("stop-google-stream");
+    if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+    }
   };
 
   const resetTranscript = () => {
