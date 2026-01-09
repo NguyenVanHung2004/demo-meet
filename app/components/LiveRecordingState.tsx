@@ -92,7 +92,23 @@ export default function LiveRecordingState({
       };
       updateVolume();
   };
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Logic: Nếu đang ghi âm (isListening) HOẶC đã có nội dung (segments > 0)
+      // thì chặn người dùng tắt tab
+      if (isListening || segments.length > 0) {
+        e.preventDefault();
+        e.returnValue = ''; // Dòng này bắt buộc để hiện popup trên Chrome/Edge
+      }
+    };
 
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Cleanup function: Gỡ sự kiện khi component bị hủy (để tránh lỗi memory leak)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isListening, segments]);
   const startRecordingSession = async () => {
     try {
       // 2. LOGIC RESUME (NẾU ĐANG TẠM DỪNG)
@@ -244,7 +260,21 @@ export default function LiveRecordingState({
       {/* HEADER */}
       <div className="h-14 md:h-16 bg-white border-b flex items-center justify-between px-4 md:px-6 shadow-sm z-20 shrink-0">
          <div className="flex items-center gap-3">
-             <button onClick={() => { stopRecordingSession(); onBack(); streamRef.current?.getTracks().forEach(track => track.stop())}} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ChevronLeft className="w-5 h-5" /></button>
+             <button 
+    onClick={() => {
+        if (isListening || segments.length > 0) {
+            // Nếu đang ghi âm hoặc đã có dữ liệu -> Gọi hàm Lưu
+            handleSaveAndProcess(); 
+        } else {
+            // Nếu chưa có gì -> Quay lại bình thường
+            onBack();
+        }
+    }} 
+    className="p-2 hover:bg-slate-100 rounded-full text-slate-500"
+    disabled={isUploading} // Khóa nút khi đang lưu để tránh lỗi
+>
+    <ChevronLeft className="w-5 h-5" />
+</button>
              <div className="flex flex-col">
                 <span className="text-xs text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1">
                     {isConnecting ? <Loader2 className="w-3 h-3 animate-spin"/> : <Cloud className="w-3 h-3"/>} Google Mode
