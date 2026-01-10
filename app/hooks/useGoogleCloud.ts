@@ -48,7 +48,7 @@ export default function useGoogleCloud(onSegmentEnd?: OnSegmentEndCallback) {
     onSegmentEndRef.current = onSegmentEnd;
   }, [onSegmentEnd]);
 
-  const SERVER_URL = "https://meeting-socket-server.onrender.com"; 
+  const SERVER_URL = "https://gg-stt-socket.zeabur.app/"; 
   const offsetTimeRef = useRef(0);
   // Hàm xử lý khi phát hiện im lặng
   const handleSilenceDetected = () => {
