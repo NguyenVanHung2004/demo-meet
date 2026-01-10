@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 // --- BẮT ĐẦU ĐOẠN CODE MỚI ---
-const PRIMARY_MODEL = "gemini-2.5-flash"; // Model chính (bạn có thể đổi thành 2.5)
-const BACKUP_MODEL = "gemini-1.5-flash"; // Model dự phòng
+const PRIMARY_MODEL = "gemini-3-flash-preview"; // Model chính (bạn có thể đổi thành 2.5)
+const BACKUP_MODEL = "gemini-2.0-flash"; // Model dự phòng
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
