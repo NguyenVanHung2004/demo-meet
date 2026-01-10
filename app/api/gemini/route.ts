@@ -35,6 +35,12 @@ async function generateContentSafe(prompt: string) {
   }
 }
 export async function POST(req: Request) {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey || apiKey.length === 0) {
+      console.error("❌ LỖI NGHIÊM TRỌNG: Server chưa có Google API Key!");
+      return NextResponse.json({ error: "Server Missing API Key" }, { status: 500 });
+  }
+  console.log("✅ API Key đã có. Đang bắt đầu xử lý...");
   try {
     const { text, mode, dateContext, previousSummary,departments,teams } = await req.json();
 
