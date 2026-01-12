@@ -1,24 +1,24 @@
 // app/lib/db.ts
 import { db } from "./firebase";
-import { 
-  collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, 
-  query, where, orderBy 
+import {
+  collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
+  query, where, orderBy
 } from "firebase/firestore";
 import { Segment, Speaker, RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "./mockData";
 import { parseTranscriptFile } from "./parser";
 
 // Định nghĩa trạng thái
-export type MeetingStatus = 'transcribing' | 'transcribed' | 'summarizing' | 'completed' | 'failed';
+export type MeetingStatus = 'transcribing' | 'transcribed' | 'summarizing' | 'completed' | 'failed' | 'draft';
 export type ActionItemStatus = 'pending' | 'draft' | 'sent';
 // Thêm interface TaskItem
 export interface TaskItem {
-    id: number;
-    task: string;
-    assigneeName: string; // Tên AI gợi ý
-    department?: string;
-    team?: string; // [MỚI] Thêm trường team
-    email: string[];        // Email người nhận thực tế
-    deadline: string;
+  id: number;
+  task: string;
+  assigneeName: string; // Tên AI gợi ý
+  department?: string;
+  team?: string; // [MỚI] Thêm trường team
+  email: string[];        // Email người nhận thực tế
+  deadline: string;
 }
 // Định nghĩa Interface (Đã đổi audioBlob -> audioUrl)
 export interface Meeting {
@@ -28,7 +28,7 @@ export interface Meeting {
   title: string;
   createdAt: number;
   duration: number;
-  audioUrl: string;     // [THAY ĐỔI] Lưu đường dẫn thay vì file Blob
+  audioUrl?: string;     // [THAY ĐỔI] Lưu đường dẫn thay vì file Blob (Optional cho Draft)
   segments: Segment[];
   speakers: Speaker[];
   summary?: string;
@@ -61,11 +61,11 @@ export const getAllMeetings = async (userId: string): Promise<Meeting[]> => {
   try {
     const meetingsRef = collection(db, COLLECTION_NAME);
     const q = query(
-      meetingsRef, 
-      where("userId", "==", userId), 
+      meetingsRef,
+      where("userId", "==", userId),
       orderBy("createdAt", "desc")
     );
-    
+
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => doc.data() as Meeting);
   } catch (error) {
@@ -117,7 +117,7 @@ export const updateMeetingTitle = async (id: string, newTitle: string) => {
 // 8. Lấy danh sách đang chạy (Cho PollingManager)
 export const getActiveTranscribingMeetings = async (userId: string): Promise<Meeting[]> => {
   const q = query(
-    collection(db, COLLECTION_NAME), 
+    collection(db, COLLECTION_NAME),
     where("userId", "==", userId),
     where("status", "==", "transcribing")
   );
@@ -131,12 +131,12 @@ export const seedInitialData = async (userId: string) => {
   if (!userId) return;
 
   const meetings = await getAllMeetings(userId);
-  
+
   // Chỉ tạo nếu user chưa có cuộc họp nào
   if (meetings.length === 0) {
     try {
       console.log("🚀 Đang khởi tạo dữ liệu mẫu cho user mới...");
-      
+
       const parsedData = parseTranscriptFile(RAW_TRANSCRIPT_FILE);
 
       const seedMeeting: Meeting = {
@@ -146,14 +146,14 @@ export const seedInitialData = async (userId: string) => {
         createdAt: Date.now(),
         duration: 480,
         // Firebase không lưu Blob, ta trỏ thẳng vào file trong folder public
-        audioUrl: "/demo.mp3", 
+        audioUrl: "/demo.mp3",
         segments: parsedData.segments,
         speakers: parsedData.speakers,
         summary: RAW_SUMMARY_FILE,
         status: 'completed',
         isDeleted: false
       };
-      
+
       await saveMeeting(seedMeeting);
       console.log("✅ Đã nạp dữ liệu mẫu!");
       return true;
@@ -198,12 +198,12 @@ export const saveMember = async (userId: string, member: Member) => {
   if (!userId) return;
   try {
     // Nếu có ID thì update, chưa có thì tạo mới (dùng doc() để tự sinh ID nếu cần)
-    const memberRef = member.id 
+    const memberRef = member.id
       ? doc(db, "users", userId, "members", member.id)
       : doc(getMemberCollection(userId)); // Tự sinh ID
-      
+
     const memberData = { ...member, id: memberRef.id }; // Đảm bảo ID được lưu
-    
+
     // Dùng setDoc với merge: true để an toàn
     await setDoc(memberRef, memberData, { merge: true });
     return memberData.id;
@@ -226,13 +226,13 @@ export const deleteMember = async (userId: string, memberId: string) => {
 };
 export const getExistingDepartments = async (userId: string): Promise<string[]> => {
   const members = await getMembers(userId);
-  
+
   // Trích xuất mảng department
   const depts = members.map(m => m.department).filter((d): d is string => Boolean(d)); // Lấy tên và loại bỏ null/undefined
-  
+
   // Loại bỏ trùng lặp bằng Set
   const uniqueDepts = Array.from(new Set(depts));
-  
+
   // Sắp xếp A-Z
   return uniqueDepts.sort();
 };
