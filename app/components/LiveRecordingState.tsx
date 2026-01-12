@@ -6,6 +6,7 @@ import useDeepgram from "../hooks/useDeepgram";
 import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api"; // [MỚI] Thêm api mới
 import { saveMeeting } from "../lib/db"; // [MỚI]
 import { useAuth } from "../context/AuthContext"; // [MỚI]
+import useLocalTranscription from "../hooks/useLocalTranscription";
 
 type SummaryItem = {
   id: number;
@@ -124,7 +125,7 @@ export default function LiveRecordingState({
       }, timeoutMs);
   };
 
-  const { segments, interimContent, isListening, startListening, stopListening, resetTranscript } = useDeepgram(handleDeepgramFinal);
+  const { segments, interimContent, isListening, startListening, stopListening, resetTranscript } = useLocalTranscription(handleDeepgramFinal);
 
   // [LOGIC MỚI] Cập nhật cờ hiệu Interim
   useEffect(() => {
