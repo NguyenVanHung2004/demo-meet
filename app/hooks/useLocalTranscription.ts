@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Word } from "../lib/mockData"; 
+import { Word } from "../lib/mockData";
 
 // HÀM NỐI CHUỖI THÔNG MINH (CHỐNG LẶP) - COPY TỪ CODE CŨ CỦA BẠN
 const mergeText = (prev: string, next: string) => {
@@ -46,152 +46,160 @@ const convertFloat32ToInt16 = (buffer: Float32Array) => {
 };
 
 export type TranscriptSegment = {
-  speaker: number;
-  content: string;
-  isFinal: boolean;
-  words?: Word[];
+    speaker: number;
+    content: string;
+    isFinal: boolean;
+    words?: Word[];
 };
 
 export default function useLocalTranscription(
     onFinal?: (data: any) => void
 ) {
-  const serverUrl = "wss://zipformer-server.zeabur.app";
-  // --- STATE ---
-  const [segments, setSegments] = useState<TranscriptSegment[]>([]);
-  const [interimContent, setInterimContent] = useState<string>(""); 
-  const [isListening, setIsListening] = useState(false);
-  
-  // --- REFS ---
-  const socketRef = useRef<WebSocket | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  
-  // [QUAN TRỌNG] Biến cộng dồn thời gian (giống useDeepgram)
-  const offsetTimeRef = useRef(0);
+    const serverUrl = "ws://localhost:6006";
+    // --- STATE ---
+    const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+    const [interimContent, setInterimContent] = useState<string>("");
+    const [isListening, setIsListening] = useState(false);
+
+    // --- REFS ---
+    const socketRef = useRef<WebSocket | null>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const processorRef = useRef<ScriptProcessorNode | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+
+    // [QUAN TRỌNG] Biến cộng dồn thời gian (giống useDeepgram)
+    const offsetTimeRef = useRef(0);
     const lastEndTimestampRef = useRef<number>(0);
-  // -----------------------------------------------------
+    // -----------------------------------------------------
 
-  const startListening = async (rawStream: MediaStream, startTimeOffset: number = 0) => {
-    // 1. CẬP NHẬT THỜI GIAN
-    offsetTimeRef.current = startTimeOffset;
-    setIsListening(true);
-    // [FIX] KHÔNG GỌI setSegments([]) Ở ĐÂY để giữ lại nội dung cũ khi Resume
-     if (startTimeOffset === 0) {
-        lastEndTimestampRef.current = 0;
-    } 
-    console.log(`🔌 Connecting to ${serverUrl} at offset ${startTimeOffset}s...`);
+    const startListening = async (rawStream: MediaStream, startTimeOffset: number = 0) => {
+        // 1. CẬP NHẬT THỜI GIAN
+        offsetTimeRef.current = startTimeOffset;
+        setIsListening(true);
+        // [FIX] KHÔNG GỌI setSegments([]) Ở ĐÂY để giữ lại nội dung cũ khi Resume
+        if (startTimeOffset === 0) {
+            lastEndTimestampRef.current = 0;
+        }
+        console.log(`🔌 Connecting to ${serverUrl} at offset ${startTimeOffset}s...`);
 
-    // 2. SETUP WEBSOCKET
-    const ws = new WebSocket(serverUrl);
-    socketRef.current = ws;
+        // 2. SETUP WEBSOCKET
+        const ws = new WebSocket(serverUrl);
+        socketRef.current = ws;
 
-    ws.onopen = () => { console.log("✅ Connected to Local Zipformer Server"); };
-    ws.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            handleServerResponse(data);
-        } catch (e) { console.error("Parse error:", e); }
+        ws.onopen = () => { console.log("✅ Connected to Local Zipformer Server"); };
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleServerResponse(data);
+            } catch (e) { console.error("Parse error:", e); }
+        };
+        ws.onerror = (e) => console.error("WS Error:", e);
+
+        // 3. AUDIO PROCESSING (Raw Int16 16kHz)
+        const audioContext = new AudioContext();
+        audioContextRef.current = audioContext;
+        const source = audioContext.createMediaStreamSource(rawStream);
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
+
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+
+        processor.onaudioprocess = (e) => {
+            if (ws.readyState !== WebSocket.OPEN) return;
+            const inputData = e.inputBuffer.getChannelData(0);
+            const pcmData = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
+            ws.send(pcmData.buffer);
+        };
+        streamRef.current = rawStream;
     };
-    ws.onerror = (e) => console.error("WS Error:", e);
 
-    // 3. AUDIO PROCESSING (Raw Int16 16kHz)
-    const audioContext = new AudioContext();
-    audioContextRef.current = audioContext;
-    const source = audioContext.createMediaStreamSource(rawStream);
-    const processor = audioContext.createScriptProcessor(4096, 1, 1);
-    processorRef.current = processor;
-    
-    source.connect(processor);
-    processor.connect(audioContext.destination);
+    const handleServerResponse = (data: any) => {
+        // [QUAN TRỌNG] Kiểm tra cờ is_final từ server
+        // Server mình vừa sửa sẽ gửi { ..., "is_final": false } cho text xám
+        // và { ..., "is_final": true } cho text chốt.
+        const isFinalPacket = data.is_final;
 
-    processor.onaudioprocess = (e) => {
-        if (ws.readyState !== WebSocket.OPEN) return;
-        const inputData = e.inputBuffer.getChannelData(0);
-        const pcmData = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
-        ws.send(pcmData.buffer);
-    };
-    streamRef.current = rawStream;
-  };
+        if (data.channel && data.channel.alternatives?.[0]) {
+            const alt = data.channel.alternatives[0];
+            const transcript = alt.transcript;
 
-  const handleServerResponse = (data: any) => {
-      // Structure: { channel: { alternatives: [...] }, is_final: true }
-      if (data.channel && data.channel.alternatives?.[0]) {
-          const alt = data.channel.alternatives[0];
-          const transcript = alt.transcript;
-          
-          // [FIX] CỘNG THÊM offsetTimeRef VÀO TỪNG TỪ
-          const words = (alt.words || []).map((w: any) => ({
-             ...w,
-             start: w.start + offsetTimeRef.current,
-             end: w.end + offsetTimeRef.current
-          }));
+            if (!transcript) return;
 
-          if (transcript) {
-             // GỌI CALLBACK NẾU CẦN
-             if (onFinal) onFinal({ speaker: 0, content: transcript });
+            // --- TRƯỜNG HỢP 1: KẾT QUẢ TẠM (Interim / Màu xám) ---
+            if (!isFinalPacket) {
+                // Chỉ cập nhật state tạm để UI hiển thị text xám (nhảy liên tục)
+                setInterimContent(transcript);
+                return; // Dừng lại, không thêm vào segments chính thức
+            }
 
-             setSegments(prev => {
+            // --- TRƯỜNG HỢP 2: KẾT QUẢ CHỐT (Final / Màu thường) ---
+            // Khi câu đã chốt, xóa text tạm và đưa text vào segments
+            setInterimContent("");
+
+            // Logic thêm vào segments giữ nguyên như cũ
+            const words = (alt.words || []).map((w: any) => ({
+                ...w,
+                start: w.start + offsetTimeRef.current,
+                end: w.end + offsetTimeRef.current
+            }));
+
+            if (onFinal) onFinal({ speaker: 0, content: transcript });
+
+            setSegments(prev => {
                 const lastSegment = prev[prev.length - 1];
-                
-                // [LOGIC TÁCH ĐOẠN DỰA TRÊN THỜI GIAN]
-                // 1. Lấy thời gian bắt đầu của câu mới này
-                const currentStart = words.length > 0 ? words[0].start : (lastEndTimestampRef.current + 0.1); 
-                
-                // 2. Tính khoảng cách so với câu trước (GAP)
+                const currentStart = words.length > 0 ? words[0].start : (lastEndTimestampRef.current + 0.1);
                 const gap = currentStart - lastEndTimestampRef.current;
-                
-                // Cập nhật mốc thời gian kết thúc mới nhất
+                const serverSpeaker = alt.speaker ?? (words[0]?.speaker) ?? 0;
                 if (words.length > 0) {
                     lastEndTimestampRef.current = words[words.length - 1].end;
                 }
-                // 3. RULE: Nếu im lặng < 1.5s -> Gộp vào đoạn cũ
-                if (lastSegment && gap < 1.0) {
-                     return [
+
+                // SỬA ĐIỀU KIỆN GỘP:
+                // Chỉ gộp khi CÙNG Speaker VÀ gần nhau
+                if (lastSegment && lastSegment.speaker === serverSpeaker && gap < 1.0) {
+                    return [
                         ...prev.slice(0, -1),
                         {
                             ...lastSegment,
                             content: mergeText(lastSegment.content, transcript),
                             words: (lastSegment.words || []).concat(words)
                         }
-                     ];
+                    ];
                 }
-                
-                // 4. Nếu im lặng > 1.5s -> Tách đoạn mới (coi như ngắt ý hoặc người khác nói)
-                // Mẹo: Đổi speaker ID giả (toggle 0 -> 1) để UI hiển thị khác màu cho dễ nhìn
-                const nextSpeaker = lastSegment ? (lastSegment.speaker === 0 ? 1 : 0) : 0;
+
+                // NẾU KHÁC SPEAKER -> TẠO SEGMENT MỚI (Xuống dòng)
                 return [...prev, {
-                     speaker: nextSpeaker,
-                     content: transcript,
-                     isFinal: true,
-                     words: words
+                    speaker: serverSpeaker, // Dùng đúng serverSpeaker thay vì tự tính nextSpeaker
+                    content: transcript,
+                    isFinal: true,
+                    words: words
                 }];
-             });
-          }
-      }
-  };
+            });
+        }
+    };
 
 
-  const stopListening = () => {
-    setIsListening(false);
-    socketRef.current?.close();
-    
-    if (processorRef.current) {
-        processorRef.current.disconnect();
-        processorRef.current = null;
-    }
-    if (audioContextRef.current) {
-        audioContextRef.current.close();
-        audioContextRef.current = null;
-    }
-    // [QUAN TRỌNG] KHÔNG setSegments([]) ở đây
-  };
+    const stopListening = () => {
+        setIsListening(false);
+        socketRef.current?.close();
 
-  const resetTranscript = () => {
-      // Chỉ khi người dùng ấn nút Thùng rác mới xóa
-      setSegments([]);
-      setInterimContent("");
-  };
+        if (processorRef.current) {
+            processorRef.current.disconnect();
+            processorRef.current = null;
+        }
+        if (audioContextRef.current) {
+            audioContextRef.current.close();
+            audioContextRef.current = null;
+        }
+        // [QUAN TRỌNG] KHÔNG setSegments([]) ở đây
+    };
 
-  return { segments, interimContent, isListening, startListening, stopListening, resetTranscript };
+    const resetTranscript = () => {
+        // Chỉ khi người dùng ấn nút Thùng rác mới xóa
+        setSegments([]);
+        setInterimContent("");
+    };
+
+    return { segments, interimContent, isListening, startListening, stopListening, resetTranscript };
 }

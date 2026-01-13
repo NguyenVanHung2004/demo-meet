@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import {
   Play, Pause, ChevronLeft, Edit3, Calendar,
   Clock, Download, FileText, Sparkles, User, AlignLeft, Share2,
-  FileType, Music
+  FileType, Music, RotateCcw, RotateCw, Gauge
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
@@ -25,6 +25,7 @@ export default function MeetingDetailState({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(meeting.duration || 0);
+  const [playbackRate, setPlaybackRate] = useState(1.0); // [MỚI] Tốc độ phát
   const audioRef = useRef<HTMLAudioElement>(null);
   const [activeTab, setActiveTab] = useState<'transcript' | 'summary'>('transcript');
 
@@ -35,8 +36,16 @@ export default function MeetingDetailState({
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.load();
+      audioRef.current.playbackRate = playbackRate; // Đảm bảo rate đúng khi load mới
     }
   }, [audioSrc]);
+
+  // [MỚI] Effect thay đổi tốc độ
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -63,6 +72,22 @@ export default function MeetingDetailState({
       audioRef.current.play();
       setIsPlaying(true);
     }
+  };
+
+  // [MỚI] Tua nhanh/lùi
+  const skipTime = (seconds: number) => {
+    if (audioRef.current) {
+      const newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds));
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  };
+
+  // [MỚI] Đổi tốc độ (Cycle loop)
+  const togglePlaybackRate = () => {
+    const rates = [0.5, 1.0, 1.25, 1.5, 2.0];
+    const nextIdx = (rates.indexOf(playbackRate) + 1) % rates.length;
+    setPlaybackRate(rates[nextIdx]);
   };
 
   // [MỚI] Hàm tải Audio
@@ -653,6 +678,31 @@ export default function MeetingDetailState({
           >
             {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 pl-1" />}
           </button>
+
+          {/* [MỚI] CONTROLS PHỤ (Skip & Speed) - Desktop only (hoặc responsive tùy chỉnh) */}
+          <div className="flex items-center gap-1 md:gap-2">
+            <button
+              onClick={() => skipTime(-10)}
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition"
+              title="Lùi 10s"
+            >
+              <RotateCcw className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => skipTime(10)}
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition"
+              title="Tua 10s"
+            >
+              <RotateCw className="w-5 h-5" />
+            </button>
+            <button
+              onClick={togglePlaybackRate}
+              className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg transition text-xs font-bold min-w-[3rem]"
+              title="Tốc độ phát"
+            >
+              {playbackRate}x
+            </button>
+          </div>
 
           <div className="flex-1 flex flex-col justify-center gap-1">
             <div className="flex justify-between text-[10px] md:text-xs font-medium text-slate-500">
