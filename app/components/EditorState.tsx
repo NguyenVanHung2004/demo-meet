@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Play, Pause, ChevronLeft, Save, Sparkles, X,
   FileText, Copy, Check, Keyboard, ArrowRight,
-  Plus, Trash2, Pencil, Type, Eye, Users // [MỚI] Thêm icon Users
+  Plus, Trash2, Pencil, Type, Eye, Users, // [MỚI] Thêm icon Users
+  RotateCcw, RotateCw
 } from "lucide-react";
 import TranscriptRow from "./TranscriptRow";
 import { Meeting, saveMeeting, updateMeetingTitle } from "../lib/db";
@@ -34,6 +35,7 @@ export default function EditorState({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(initialData.duration || 0);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,6 +58,12 @@ export default function EditorState({
       titleInputRef.current.focus();
     }
   }, [isEditingTitle]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   // --- ACTIONS (Giữ nguyên logic cũ) ---
   const formatTime = (time: number) => {
@@ -81,6 +89,20 @@ export default function EditorState({
         setIsPlaying(true);
       }
     }
+  };
+
+  const skipTime = (seconds: number) => {
+    if (audioRef.current) {
+      const newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds));
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  };
+
+  const togglePlaybackRate = () => {
+    const rates = [0.5, 1.0, 1.25, 1.5, 2.0];
+    const nextIdx = (rates.indexOf(playbackRate) + 1) % rates.length;
+    setPlaybackRate(rates[nextIdx]);
   };
 
   // Logic Title
@@ -507,6 +529,18 @@ export default function EditorState({
         <button onClick={togglePlay} className="w-10 h-10 md:w-12 md:h-12 bg-slate-900 text-white rounded-full flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
           {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
         </button>
+
+        <div className="flex items-center gap-1 md:gap-2">
+          <button onClick={() => skipTime(-10)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition" title="-10s">
+            <RotateCcw className="w-5 h-5" />
+          </button>
+          <button onClick={() => skipTime(10)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition" title="+10s">
+            <RotateCw className="w-5 h-5" />
+          </button>
+          <button onClick={togglePlaybackRate} className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg transition text-xs font-bold min-w-[3rem]" title="Tốc độ">
+            {playbackRate}x
+          </button>
+        </div>
 
         <div className="flex-1 flex flex-col gap-1">
           <div className="flex justify-between text-[10px] md:text-xs font-medium text-slate-500">
