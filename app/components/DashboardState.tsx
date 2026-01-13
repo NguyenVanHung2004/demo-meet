@@ -20,6 +20,7 @@ import {
   LogOut,
   ClipboardList,
   User,
+  Edit3,
 } from "lucide-react";
 import {
   getAllMeetings,
@@ -54,12 +55,33 @@ export default function DashboardState({
   const [currentTab, setCurrentTab] = useState<DashboardTab>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
-  const loadMeetings = () => {
+  // --- IMPORT DYNAMIC ---
+  // const { getAllDraftsMeta, deleteDraft } = await import("../lib/indexedDB");
+
+  const hasShownDraftWarning = useRef(false);
+
+  const loadMeetings = async () => {
     if (user) {
-      // Truyền user.uid vào để chỉ lấy cuộc họp của người này
-      getAllMeetings(user.uid).then(setMeetings);
+      try {
+        const [cloudMeetings, localDrafts] = await Promise.all([
+          getAllMeetings(user.uid),
+          import("../lib/indexedDB")
+            .then(mod => mod.getAllDraftsMeta(user.uid))
+            .catch(() => []) as Promise<Meeting[]>
+        ]);
+
+        const all = [...localDrafts, ...cloudMeetings].sort((a, b) => b.createdAt - a.createdAt);
+        setMeetings(all);
+
+        if (localDrafts.length > 0 && !hasShownDraftWarning.current) {
+          toast.info(`⚠️ Bạn có ${localDrafts.length} bản nháp chưa lưu! Hãy kiểm tra để tránh mất dữ liệu.`);
+          hasShownDraftWarning.current = true;
+        }
+      } catch (e) {
+        console.error("Load failed", e);
+      }
     } else {
-      setMeetings([]); // Chưa đăng nhập thì list rỗng
+      setMeetings([]);
     }
   };
 
@@ -70,16 +92,31 @@ export default function DashboardState({
   // --- ACTIONS ---
   const handleMoveToTrash = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+
+    const meeting = meetings.find(m => m.id === id);
+    if (!meeting) return;
+
+    const isDraft = meeting.status === 'draft';
+
     const isConfirmed = await confirm({
-      title: "Xóa cuộc họp?",
-      message: "Cuộc họp sẽ được chuyển vào thùng rác.",
+      title: isDraft ? "Xóa bản nháp?" : "Xóa cuộc họp?",
+      message: isDraft
+        ? "Bản nháp này sẽ bị xóa vĩnh viễn khỏi thiết bị."
+        : "Cuộc họp sẽ được chuyển vào thùng rác.",
       confirmText: "Xóa",
       type: "danger",
     });
 
     if (isConfirmed) {
-      await toggleTrashMeeting(id, true);
-      toast.success("Đã chuyển vào thùng rác");
+      if (isDraft) {
+        // Xóa Local
+        await import("../lib/indexedDB").then(mod => mod.deleteDraft(id));
+        toast.success("Đã xóa bản nháp");
+      } else {
+        // Xóa Cloud
+        await toggleTrashMeeting(id, true);
+        toast.success("Đã chuyển vào thùng rác");
+      }
       loadMeetings();
     }
   };
@@ -138,6 +175,12 @@ export default function DashboardState({
             <AlertCircle className="w-3 h-3" /> Lỗi
           </span>
         );
+      case "draft":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+            <Edit3 className="w-3 h-3" /> Bản nháp
+          </span>
+        );
       default:
         return null;
     }
@@ -169,11 +212,10 @@ export default function DashboardState({
         <nav className="space-y-2">
           <div
             onClick={() => setCurrentTab("all")}
-            className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${
-              currentTab === "all"
-                ? "bg-indigo-600 text-white shadow-md transform translate-x-1"
-                : "hover:bg-slate-800 hover:text-white"
-            }`}
+            className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${currentTab === "all"
+              ? "bg-indigo-600 text-white shadow-md transform translate-x-1"
+              : "hover:bg-slate-800 hover:text-white"
+              }`}
           >
             <FolderOpen className="w-5 h-5" /> Tất cả cuộc họp
           </div>
@@ -191,11 +233,10 @@ export default function DashboardState({
           </Link>
           <div
             onClick={() => setCurrentTab("trash")}
-            className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${
-              currentTab === "trash"
-                ? "bg-red-900/40 text-red-200 border border-red-900/50"
-                : "hover:bg-slate-800 hover:text-white"
-            }`}
+            className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${currentTab === "trash"
+              ? "bg-red-900/40 text-red-200 border border-red-900/50"
+              : "hover:bg-slate-800 hover:text-white"
+              }`}
           >
             <Trash2 className="w-5 h-5" /> Thùng rác
           </div>
@@ -350,25 +391,24 @@ export default function DashboardState({
                           "summarizing",
                           "completed",
                           "failed",
+                          "draft",
                         ].includes(m.status);
                         return (
                           <tr
                             key={m.id}
                             onClick={() => isInteractive && onOpenMeeting(m)}
-                            className={`group transition-colors ${
-                              isInteractive
-                                ? "hover:bg-indigo-50/50 cursor-pointer"
-                                : "bg-slate-50 opacity-70"
-                            }`}
+                            className={`group transition-colors ${isInteractive
+                              ? "hover:bg-indigo-50/50 cursor-pointer"
+                              : "bg-slate-50 opacity-70"
+                              }`}
                           >
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
                                 <div
-                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs ${
-                                    m.status === "failed"
-                                      ? "bg-red-100 text-red-600"
-                                      : "bg-indigo-100 text-indigo-600"
-                                  }`}
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs ${m.status === "failed"
+                                    ? "bg-red-100 text-red-600"
+                                    : "bg-indigo-100 text-indigo-600"
+                                    }`}
                                 >
                                   {m.title.charAt(0).toUpperCase()}
                                 </div>
@@ -394,17 +434,17 @@ export default function DashboardState({
                                     {["completed", "transcribed"].includes(
                                       m.status
                                     ) && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onReprocess(m);
-                                        }}
-                                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition"
-                                        title="Tạo bản Transcript AI chính xác hơn"
-                                      >
-                                        <Wand2 className="w-4 h-4" />
-                                      </button>
-                                    )}
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onReprocess(m);
+                                          }}
+                                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition"
+                                          title="Tạo bản Transcript AI chính xác hơn"
+                                        >
+                                          <Wand2 className="w-4 h-4" />
+                                        </button>
+                                      )}
                                     <button
                                       onClick={(e) =>
                                         handleMoveToTrash(e, m.id)
@@ -449,23 +489,22 @@ export default function DashboardState({
                       "summarizing",
                       "completed",
                       "failed",
+                      "draft",
                     ].includes(m.status);
                     return (
                       <div
                         key={m.id}
                         onClick={() => isInteractive && onOpenMeeting(m)}
-                        className={`bg-white p-4 rounded-xl shadow-sm border border-slate-200 active:scale-[0.98] transition-all flex items-start gap-3 ${
-                          !isInteractive && "opacity-75 bg-slate-50"
-                        }`}
+                        className={`bg-white p-4 rounded-xl shadow-sm border border-slate-200 active:scale-[0.98] transition-all flex items-start gap-3 ${!isInteractive && "opacity-75 bg-slate-50"
+                          }`}
                       >
                         <div
-                          className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm ${
-                            m.status === "failed"
-                              ? "bg-red-100 text-red-600"
-                              : m.status === "completed"
+                          className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm ${m.status === "failed"
+                            ? "bg-red-100 text-red-600"
+                            : m.status === "completed"
                               ? "bg-indigo-100 text-indigo-600"
                               : "bg-slate-200 text-slate-500"
-                          }`}
+                            }`}
                         >
                           {m.title.charAt(0).toUpperCase()}
                         </div>
@@ -501,16 +540,16 @@ export default function DashboardState({
                                 {["completed", "transcribed"].includes(
                                   m.status
                                 ) && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onReprocess(m);
-                                    }}
-                                    className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg"
-                                  >
-                                    <Wand2 className="w-3 h-3" />
-                                  </button>
-                                )}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onReprocess(m);
+                                      }}
+                                      className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg"
+                                    >
+                                      <Wand2 className="w-3 h-3" />
+                                    </button>
+                                  )}
                               </div>
                             )}
                             {currentTab === "trash" && (
@@ -544,11 +583,10 @@ export default function DashboardState({
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t flex items-center justify-around pb-safe pt-2 z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] h-16">
           <button
             onClick={() => setCurrentTab("all")}
-            className={`flex flex-col items-center gap-1 p-2 w-16 transition-colors ${
-              currentTab === "all"
-                ? "text-indigo-600"
-                : "text-slate-400 hover:text-slate-600"
-            }`}
+            className={`flex flex-col items-center gap-1 p-2 w-16 transition-colors ${currentTab === "all"
+              ? "text-indigo-600"
+              : "text-slate-400 hover:text-slate-600"
+              }`}
           >
             <FolderOpen
               className={`w-6 h-6 ${currentTab === "all" && "fill-current"}`}
@@ -559,18 +597,16 @@ export default function DashboardState({
           {/* Main Action: Record */}
           <Link
             href="/tasks"
-            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition ${
-              pathname === "/tasks" ? "text-indigo-600" : "text-slate-400"
-            }`}
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition ${pathname === "/tasks" ? "text-indigo-600" : "text-slate-400"
+              }`}
           >
             <ClipboardList className="w-5 h-5" />
             <span className="text-[10px] font-bold">Tasks</span>
           </Link>
           <Link
             href="/tasks"
-            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition ${
-              pathname === "/team" ? "text-indigo-600" : "text-slate-400"
-            }`}
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition ${pathname === "/team" ? "text-indigo-600" : "text-slate-400"
+              }`}
           >
             <User className="w-5 h-5" />
             <span className="text-[10px] font-bold">Member</span>
@@ -578,11 +614,10 @@ export default function DashboardState({
 
           <button
             onClick={() => setCurrentTab("trash")}
-            className={`flex flex-col items-center gap-1 p-2 w-16 transition-colors ${
-              currentTab === "trash"
-                ? "text-red-600"
-                : "text-slate-400 hover:text-slate-600"
-            }`}
+            className={`flex flex-col items-center gap-1 p-2 w-16 transition-colors ${currentTab === "trash"
+              ? "text-red-600"
+              : "text-slate-400 hover:text-slate-600"
+              }`}
           >
             <Trash2
               className={`w-6 h-6 ${currentTab === "trash" && "fill-current"}`}

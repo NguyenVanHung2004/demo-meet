@@ -50,24 +50,56 @@ export default function Page() {
     initData();
   }, [user]);
   if (loading) {
-     return (
-        <div className="h-screen w-screen flex items-center justify-center bg-white">
-           <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-     );
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-white">
+        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
   }
-   if (!user) {
-     return <LoginState />;
+  if (!user) {
+    return <LoginState />;
   }
   // --- NAVIGATION ---
-  const handleDirectEdit = (meeting: Meeting) => {
-    setAudioUrl(meeting.audioUrl);
+  const handleDirectEdit = async (meeting: Meeting) => {
+    let url = meeting.audioUrl;
+
+    // [LOGIC MỚI] Nếu là draft -> Lấy Blob từ IndexedDB
+    if (meeting.status === 'draft') {
+      try {
+        const { getDraftFull } = await import("./lib/indexedDB");
+        const fullDraft = await getDraftFull(meeting.id);
+        if (fullDraft?.audioBlob) {
+          console.log("Loaded draft blob:", fullDraft.audioBlob.size, fullDraft.audioBlob.type);
+          if (fullDraft.audioBlob.size < 100) console.warn("Blob size too small!");
+          url = URL.createObjectURL(fullDraft.audioBlob);
+        }
+      } catch (e) {
+        console.error("Failed to load draft audio", e);
+        toast.error("Không thể tải file ghi âm nháp!");
+      }
+    }
+
+    setAudioUrl(url || ""); // Fallback empty string
     setCurrentMeeting(meeting);
     setCurrentState("EDITOR");
   };
 
-  const handleViewDetail = (meeting: Meeting) => {
-    setAudioUrl(meeting.audioUrl);
+  const handleViewDetail = async (meeting: Meeting) => {
+    let url = meeting.audioUrl;
+
+    if (meeting.status === 'draft') {
+      try {
+        const { getDraftFull } = await import("./lib/indexedDB");
+        const fullDraft = await getDraftFull(meeting.id);
+        if (fullDraft?.audioBlob) {
+          url = URL.createObjectURL(fullDraft.audioBlob);
+        }
+      } catch (e) {
+        console.error("Failed to load draft audio", e);
+      }
+    }
+
+    setAudioUrl(url || "");
     setCurrentMeeting(meeting);
     setCurrentState("MEETING_DETAIL");
   };
@@ -96,16 +128,16 @@ export default function Page() {
 
     const tempId = crypto.randomUUID();
     toast.info("Đang tải lên server...");
-try {
-    // 1. Upload lên Firebase Storage
-    const url = await uploadAudioToFirebase(file, user.uid);
+    try {
+      // 1. Upload lên Firebase Storage
+      const url = await uploadAudioToFirebase(file, user.uid);
 
-    // 2. Trigger RunPod để lấy Job ID
-    const jobId = await startTranscriptionJob(url);
+      // 2. Trigger RunPod để lấy Job ID
+      const jobId = await startTranscriptionJob(url);
 
-    // 3. Lưu Meeting vào Firestore
-    // PollingManager sẽ tự quét job này dựa trên status 'transcribing'
-    const newMeeting: Meeting = {
+      // 3. Lưu Meeting vào Firestore
+      // PollingManager sẽ tự quét job này dựa trên status 'transcribing'
+      const newMeeting: Meeting = {
         id: tempId,
         userId: user.uid,
         jobId: jobId,
@@ -117,18 +149,18 @@ try {
         speakers: [],
         status: 'transcribing',
         isDeleted: false
-    };
+      };
 
-    await saveMeeting(newMeeting);
+      await saveMeeting(newMeeting);
 
-    toast.success("Đã gửi yêu cầu xử lý! Hệ thống sẽ tự động cập nhật.");
-    triggerRefresh();
+      toast.success("Đã gửi yêu cầu xử lý! Hệ thống sẽ tự động cập nhật.");
+      triggerRefresh();
 
-  } catch (error) {
-    console.error("Lỗi upload:", error);
-    toast.error("Có lỗi xảy ra: " + (error as Error).message);
-  }
-};
+    } catch (error) {
+      console.error("Lỗi upload:", error);
+      toast.error("Có lỗi xảy ra: " + (error as Error).message);
+    }
+  };
   // Flow 2: Demo Data
   const handleStartDemo = async () => {
     if (!user) return toast.error("Vui lòng đăng nhập!");
@@ -178,7 +210,7 @@ try {
       });
   };
   // ✅ [MỚI] Hàm xử lý lại: Lấy audio cũ -> Đẩy vào quy trình Upload xịn
- // --- LOGIC 5: XỬ LÝ LẠI (REPROCESS) ---
+  // --- LOGIC 5: XỬ LÝ LẠI (REPROCESS) ---
   const handleReprocess = async (meeting: Meeting) => {
     // 1. Check quyền
     if (!user) return toast.error("Vui lòng đăng nhập!");
@@ -191,37 +223,37 @@ try {
 
     // 2. Hỏi xác nhận
     const isConfirmed = await confirm({
-       title: "Xử lý lại?",
-       message: "Hệ thống sẽ chạy lại AI cho file này. Dữ liệu cũ (Segments/Summary) sẽ bị ghi đè. Bạn có chắc chắn?",
-       confirmText: "Chạy lại",
-       type: "info"
+      title: "Xử lý lại?",
+      message: "Hệ thống sẽ chạy lại AI cho file này. Dữ liệu cũ (Segments/Summary) sẽ bị ghi đè. Bạn có chắc chắn?",
+      confirmText: "Chạy lại",
+      type: "info"
     });
-    
+
     if (!isConfirmed) return;
 
     try {
-        toast.info("Đang gửi lệnh xử lý lại...");
+      toast.info("Đang gửi lệnh xử lý lại...");
 
-        // 3. [TỐI ƯU] Tái sử dụng URL cũ, KHÔNG CẦN UPLOAD LẠI
-        // Chỉ việc gọi RunPod với url đang có sẵn trên Firebase
-        const newJobId = await startTranscriptionJob(meeting.audioUrl);
+      // 3. [TỐI ƯU] Tái sử dụng URL cũ, KHÔNG CẦN UPLOAD LẠI
+      // Chỉ việc gọi RunPod với url đang có sẵn trên Firebase
+      const newJobId = await startTranscriptionJob(meeting.audioUrl);
 
-        // 4. Cập nhật lại bản ghi cũ trong Firestore
-        // Đưa về trạng thái 'transcribing' để PollingManager bắt đầu làm việc
-        await updateMeetingProcess(meeting.id, {
-            status: 'transcribing',
-            jobId: newJobId,      // Gắn Job ID mới
-            segments: [],         // Xóa dữ liệu cũ đi cho sạch
-            summary: deleteField() as any,
-            errorMessage: deleteField() as any
-        });
+      // 4. Cập nhật lại bản ghi cũ trong Firestore
+      // Đưa về trạng thái 'transcribing' để PollingManager bắt đầu làm việc
+      await updateMeetingProcess(meeting.id, {
+        status: 'transcribing',
+        jobId: newJobId,      // Gắn Job ID mới
+        segments: [],         // Xóa dữ liệu cũ đi cho sạch
+        summary: deleteField() as any,
+        errorMessage: deleteField() as any
+      });
 
-        triggerRefresh();
-        toast.success("Đã bắt đầu xử lý lại!");
+      triggerRefresh();
+      toast.success("Đã bắt đầu xử lý lại!");
 
     } catch (e) {
-        console.error(e);
-        toast.error("Lỗi khi xử lý lại: " + (e as Error).message);
+      console.error(e);
+      toast.error("Lỗi khi xử lý lại: " + (e as Error).message);
     }
   };
 
