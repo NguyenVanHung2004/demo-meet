@@ -86,9 +86,9 @@ export default function TaskManagerPage() {
     if (user) {
       // Load Meetings
       getAllMeetings(user.uid).then((data) => setMeetings(data.filter((m) => !m.isDeleted)));
-      
+
       // Load Members (Để AI dùng ngầm)
-      getMembers(user.uid).then((data) => setMembers(data)); 
+      getMembers(user.uid).then((data) => setMembers(data));
     }
   }, [user]);
 
@@ -115,24 +115,24 @@ export default function TaskManagerPage() {
       return alert("Cuộc họp này chưa có nội dung transcript!");
     const fullTranscript = meeting.segments
       ? meeting.segments
-          .map((seg) => {
-            // 1. Xác định ID người nói trong segment (tuỳ interface của bạn là .speaker hay .speakerId)
-            // (Thường pyannote trả về key là 'speaker', nhưng bạn dùng 'speakerId' thì cứ theo interface của bạn)
-            const speakerKey = seg.speakerId;
+        .map((seg) => {
+          // 1. Xác định ID người nói trong segment (tuỳ interface của bạn là .speaker hay .speakerId)
+          // (Thường pyannote trả về key là 'speaker', nhưng bạn dùng 'speakerId' thì cứ theo interface của bạn)
+          const speakerKey = seg.speakerId;
 
-            // 2. Tìm object Speaker tương ứng trong danh sách đã edit tên
-            const matchedSpeaker = meeting.speakers.find(
-              (s) => s.id === speakerKey
-            );
+          // 2. Tìm object Speaker tương ứng trong danh sách đã edit tên
+          const matchedSpeaker = meeting.speakers.find(
+            (s) => s.id === speakerKey
+          );
 
-            // 3. Ưu tiên lấy tên thật (name), nếu không thấy thì lấy ID gốc
-            const displayName = matchedSpeaker
-              ? matchedSpeaker.name
-              : speakerKey;
+          // 3. Ưu tiên lấy tên thật (name), nếu không thấy thì lấy ID gốc
+          const displayName = matchedSpeaker
+            ? matchedSpeaker.name
+            : speakerKey;
 
-            return `${displayName}: ${seg.text}`;
-          })
-          .join("\n")
+          return `${displayName}: ${seg.text}`;
+        })
+        .join("\n")
       : "";
     const uniqueDepartments = Array.from(new Set(members.map(m => m.department).filter(Boolean)));
     const uniqueTeams = Array.from(new Set(members.map(m => m.team).filter(Boolean)));
@@ -190,113 +190,113 @@ export default function TaskManagerPage() {
       // 🟢 LOGIC MAP TÊN/PHÒNG BAN -> EMAIL (FIX FINAL)
       const mappedTasks = rawTasks.map((t: any, index: number) => {
         // Hàm chuẩn hóa: Chuyển về chữ thường, giữ nguyên dấu tiếng Việt chuẩn NFC
-        const normalize = (str: any) => 
-            str ? String(str).normalize("NFC").toLowerCase().trim() : "";
+        const normalize = (str: any) =>
+          str ? String(str).normalize("NFC").toLowerCase().trim() : "";
 
         let detectedEmails: string[] = [];
 
         // --- BƯỚC 1: TÌM THEO TÊN RIÊNG (ASSIGNEE) ---
         const names = t.assignee
-            ? t.assignee.split(/,|;| và | vs | and /).map((n: string) => n.trim())
-            : [];
-        
+          ? t.assignee.split(/,|;| và | vs | and /).map((n: string) => n.trim())
+          : [];
+
         // [FIX 1] Bổ sung danh xưng CÓ DẤU để replace chính xác
         const prefixes = [
-            "ông ", "bà ", "anh ", "chị ", "em ", "sếp ", "bạn ", "cậu ", "cô ", "chú ", "bác ", // Có dấu
-            "ong ", "ba ", "sep ", "ban ", "cau ", "co ", "chu ", "bac ", // Không dấu (phòng hờ)
-            "mr ", "ms ", "mrs ", "to ", "nhom ", "doi ", "team "
+          "ông ", "bà ", "anh ", "chị ", "em ", "sếp ", "bạn ", "cậu ", "cô ", "chú ", "bác ", // Có dấu
+          "ong ", "ba ", "sep ", "ban ", "cau ", "co ", "chu ", "bac ", // Không dấu (phòng hờ)
+          "mr ", "ms ", "mrs ", "to ", "nhom ", "doi ", "team "
         ];
 
         names.forEach((rawName: string) => {
-            if(!rawName) return;
-            let targetName = normalize(rawName);
+          if (!rawName) return;
+          let targetName = normalize(rawName);
 
-            // Xóa danh xưng
-            for (const p of prefixes) {
-                if (targetName.startsWith(p)) {
-                    targetName = targetName.replace(p, "").trim();
-                    break; // Xóa xong 1 cái thì thôi
-                }
+          // Xóa danh xưng
+          for (const p of prefixes) {
+            if (targetName.startsWith(p)) {
+              targetName = targetName.replace(p, "").trim();
+              break; // Xóa xong 1 cái thì thôi
             }
+          }
 
-            // Bỏ qua các từ vô nghĩa nếu còn sót lại
-            if (["chua ro", "moi nguoi", "ca phong", "all"].some(k => targetName === k)) return;
+          // Bỏ qua các từ vô nghĩa nếu còn sót lại
+          if (["chua ro", "moi nguoi", "ca phong", "all"].some(k => targetName === k)) return;
 
-            // TÌM TRONG DB MEMBER
-            const matchedMember = members.find(m => {
-                const memName = normalize(m.name); // VD: "trần văn b"
-                
-                // [FIX 2] Logic so sánh thông minh hơn
-                
-                // Case A: Khớp chính xác 100% (VD: "b" == "b")
-                if (memName === targetName) return true;
+          // TÌM TRONG DB MEMBER
+          const matchedMember = members.find(m => {
+            const memName = normalize(m.name); // VD: "trần văn b"
 
-                // Case B: Khớp từng từ (Word Boundary) - Quan trọng cho tên ngắn như "B"
-                // Tách "trần văn b" -> ["trần", "văn", "b"]. Nếu target là "b" -> KHỚP.
-                const words = memName.split(" ");
-                if (words.some(w => w === targetName)) return true;
+            // [FIX 2] Logic so sánh thông minh hơn
 
-                // Case C: Chứa nhau (chỉ áp dụng nếu tên tìm đủ dài để tránh khớp sai)
-                // VD: "lan" khớp "nguyễn thị lan", nhưng "a" không được khớp "lan"
-                if (targetName.length > 1 && memName.includes(targetName)) return true;
+            // Case A: Khớp chính xác 100% (VD: "b" == "b")
+            if (memName === targetName) return true;
 
-                return false;
-            });
+            // Case B: Khớp từng từ (Word Boundary) - Quan trọng cho tên ngắn như "B"
+            // Tách "trần văn b" -> ["trần", "văn", "b"]. Nếu target là "b" -> KHỚP.
+            const words = memName.split(" ");
+            if (words.some(w => w === targetName)) return true;
 
-            if (matchedMember) {
-                detectedEmails.push(matchedMember.email);
-            }
+            // Case C: Chứa nhau (chỉ áp dụng nếu tên tìm đủ dài để tránh khớp sai)
+            // VD: "lan" khớp "nguyễn thị lan", nhưng "a" không được khớp "lan"
+            if (targetName.length > 1 && memName.includes(targetName)) return true;
+
+            return false;
+          });
+
+          if (matchedMember) {
+            detectedEmails.push(matchedMember.email);
+          }
         });
 
         // --- BƯỚC 2: TÌM THEO TEAM / DEPARTMENT ---
         let groupEmails: string[] = [];
-        
+
         if (t.team) {
-            const targetTeam = normalize(t.team);
-            groupEmails = members
-                .filter(m => normalize(m.team) === targetTeam)
-                .map(m => m.email);
-        } 
+          const targetTeam = normalize(t.team);
+          groupEmails = members
+            .filter(m => normalize(m.team) === targetTeam)
+            .map(m => m.email);
+        }
         else if (t.department) {
-            const targetDept = normalize(t.department);
-            groupEmails = members
-                .filter(m => normalize(m.department) === targetDept)
-                .map(m => m.email);
+          const targetDept = normalize(t.department);
+          groupEmails = members
+            .filter(m => normalize(m.department) === targetDept)
+            .map(m => m.email);
         }
 
         // --- BƯỚC 3: QUYẾT ĐỊNH (Logic Thông Minh: Subset Merge) ---
-        
+
         // Trường hợp 1: Có cả Người cụ thể VÀ Nhóm (Team/Dept)
         if (detectedEmails.length > 0 && groupEmails.length > 0) {
-            
-            // Kiểm tra xem những người được tìm thấy có thuộc nhóm này không?
-            // (VD: Ông B có thuộc phòng IT không?)
-            const isSubset = detectedEmails.every(email => groupEmails.includes(email));
 
-            if (isSubset) {
-                // Kịch bản 3: "Ông B bên IT" 
-                // -> Ông B là con của IT -> Chỉ lấy ông B (Override)
-                // Giữ nguyên detectedEmails
-            } else {
-                // Kịch bản 4: "Ông A (IT) phối hợp với Kế toán"
-                // -> Ông A không thuộc Kế toán -> Lấy cả A và Kế toán (Merge)
-                detectedEmails = [...detectedEmails, ...groupEmails];
-            }
+          // Kiểm tra xem những người được tìm thấy có thuộc nhóm này không?
+          // (VD: Ông B có thuộc phòng IT không?)
+          const isSubset = detectedEmails.every(email => groupEmails.includes(email));
+
+          if (isSubset) {
+            // Kịch bản 3: "Ông B bên IT" 
+            // -> Ông B là con của IT -> Chỉ lấy ông B (Override)
+            // Giữ nguyên detectedEmails
+          } else {
+            // Kịch bản 4: "Ông A (IT) phối hợp với Kế toán"
+            // -> Ông A không thuộc Kế toán -> Lấy cả A và Kế toán (Merge)
+            detectedEmails = [...detectedEmails, ...groupEmails];
+          }
         }
-        
+
         // Trường hợp 2: Chỉ có Nhóm (không tìm thấy tên riêng)
         else if (detectedEmails.length === 0 && groupEmails.length > 0) {
-             
-             // Check lại xem Assignee có keyword ám chỉ nhóm không để chắc ăn
-             // (Tránh trường hợp AI hallucinations gán bừa Dept)
-             const normAssignee = normalize(t.assignee);
-             const groupKeywords = ["team", "doi", "nhom", "phong", "bo phan", "ben", "toan bo", "ca "];
-             const isExplicitGroup = groupKeywords.some(k => normAssignee.includes(k));
 
-             // Nếu Assignee là "Chưa rõ" hoặc có keyword nhóm -> Lấy cả nhóm
-             if (detectedEmails.length === 0 || isExplicitGroup) {
-                 detectedEmails = groupEmails;
-             }
+          // Check lại xem Assignee có keyword ám chỉ nhóm không để chắc ăn
+          // (Tránh trường hợp AI hallucinations gán bừa Dept)
+          const normAssignee = normalize(t.assignee);
+          const groupKeywords = ["team", "doi", "nhom", "phong", "bo phan", "ben", "toan bo", "ca "];
+          const isExplicitGroup = groupKeywords.some(k => normAssignee.includes(k));
+
+          // Nếu Assignee là "Chưa rõ" hoặc có keyword nhóm -> Lấy cả nhóm
+          if (detectedEmails.length === 0 || isExplicitGroup) {
+            detectedEmails = groupEmails;
+          }
         }
 
         // Xóa trùng lặp
@@ -307,7 +307,7 @@ export default function TaskManagerPage() {
           task: t.task,
           assigneeName: t.assignee,
           email: detectedEmails,
-          department: t.department, 
+          department: t.department,
           team: t.team,
           deadline: t.deadline,
         };
@@ -355,7 +355,7 @@ export default function TaskManagerPage() {
     if (isEditing) {
       return (
         <EditorState
-          audioSrc={viewingMeeting.audioUrl}
+          audioSrc={viewingMeeting.audioUrl || ""}
           initialData={viewingMeeting}
           onBack={() => {
             // Khi quay lại từ Editor, ta cần load lại dữ liệu mới nhất từ DB
@@ -375,10 +375,10 @@ export default function TaskManagerPage() {
     return (
       <MeetingDetailState
         meeting={viewingMeeting}
-        audioSrc={viewingMeeting.audioUrl}
+        audioSrc={viewingMeeting.audioUrl || ""}
         onBack={() => {
-            setViewingMeeting(null); 
-            fetchMeetings(); // 🟢 4. QUAN TRỌNG: Gọi lại API khi quay về danh sách
+          setViewingMeeting(null);
+          fetchMeetings(); // 🟢 4. QUAN TRỌNG: Gọi lại API khi quay về danh sách
         }}
         onEdit={() => setIsEditing(true)} // 🟢 Bấm nút này để sang Editor
       />
@@ -388,13 +388,13 @@ export default function TaskManagerPage() {
     <div className="flex flex-col h-screen bg-slate-50 font-sans">
       {/* HEADER ĐƠN GIẢN */}
       <div className="bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm shrink-0">
-         <div className="flex items-center gap-3">
-             <Link href="/" className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
-                <ArrowLeft className="w-5 h-5" />
-             </Link>
-             <h2 className="text-xl font-bold text-slate-800">Danh sách cuộc họp cần xử lý</h2>
-         </div>
-         {/* Có thể thêm nút "Cấu hình nhân sự" ở đây để link sang trang khác nếu muốn */}
+        <div className="flex items-center gap-3">
+          <Link href="/" className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <h2 className="text-xl font-bold text-slate-800">Danh sách cuộc họp cần xử lý</h2>
+        </div>
+        {/* Có thể thêm nút "Cấu hình nhân sự" ở đây để link sang trang khác nếu muốn */}
       </div>
 
       {/* CỘT PHẢI: LIST MEETING & EXTRACT */}
