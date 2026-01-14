@@ -2,7 +2,7 @@
 import { db } from "./firebase";
 import {
   collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
-  query, where, orderBy
+  query, where, orderBy, onSnapshot
 } from "firebase/firestore";
 import { Segment, Speaker, RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "./mockData";
 import { parseTranscriptFile } from "./parser";
@@ -115,6 +115,23 @@ export const updateMeetingTitle = async (id: string, newTitle: string) => {
 };
 
 // 8. Lấy danh sách đang chạy (Cho PollingManager)
+// Dùng onSnapshot để lắng nghe real-time (TỐI ƯU HƠN GET LIÊN TỤC)
+export const subscribeToActiveMeetings = (userId: string, onUpdate: (meetings: Meeting[]) => void) => {
+  const q = query(
+    collection(db, COLLECTION_NAME),
+    where("userId", "==", userId),
+    where("status", "==", "transcribing")
+  );
+
+  // Trả về hàm unsubscribe
+  return onSnapshot(q, (snapshot) => {
+    const meetings = snapshot.docs.map(doc => doc.data() as Meeting);
+    onUpdate(meetings);
+  }, (error) => {
+    console.error("Lỗi listen active meetings:", error);
+  });
+};
+
 export const getActiveTranscribingMeetings = async (userId: string): Promise<Meeting[]> => {
   const q = query(
     collection(db, COLLECTION_NAME),
