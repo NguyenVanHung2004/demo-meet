@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Word } from "../lib/mockData";
+import { formatTranscriptText, formatWords } from "../lib/utils";
 
 // HÀM NỐI CHUỖI THÔNG MINH (CHỐNG LẶP) - COPY TỪ CODE CŨ CỦA BẠN
 const mergeText = (prev: string, next: string) => {
@@ -123,9 +124,14 @@ export default function useLocalTranscription(
 
         if (data.channel && data.channel.alternatives?.[0]) {
             const alt = data.channel.alternatives[0];
-            const transcript = alt.transcript;
+            // [MOD] Format text trước khi sử dụng
+            // import { formatTranscriptText } from "../lib/utils"; (Sẽ được auto-import hoặc thêm ở đầu file)
+            // Lưu ý: Cần thêm import thủ công nếu tool không tự làm.
+            const rawTranscript = alt.transcript;
+            if (!rawTranscript) return;
 
-            if (!transcript) return;
+            // Xử lý format
+            const transcript = formatTranscriptText(rawTranscript);
 
             // --- TRƯỜNG HỢP 1: KẾT QUẢ TẠM (Interim / Màu xám) ---
             if (!isFinalPacket) {
@@ -139,11 +145,15 @@ export default function useLocalTranscription(
             setInterimContent("");
 
             // Logic thêm vào segments giữ nguyên như cũ
-            const words = (alt.words || []).map((w: any) => ({
+            // [MOD] Format words array
+            // import { formatWords } from "../lib/utils";
+            let rawWords = (alt.words || []).map((w: any) => ({
                 ...w,
                 start: w.start + offsetTimeRef.current,
                 end: w.end + offsetTimeRef.current
             }));
+
+            const words = formatWords(rawWords);
 
             if (onFinal) onFinal({ speaker: 0, content: transcript });
 

@@ -19,11 +19,11 @@ interface TranscriptRowProps {
   onTimeChange: (id: string, newTime: number) => void; // [MỚI]
 }
 
-export default function TranscriptRow({ 
-  segment, speaker, allSpeakers, isActive, 
-  isAudioPlaying,currentTime, onTogglePlay, 
+export default function TranscriptRow({
+  segment, speaker, allSpeakers, isActive,
+  isAudioPlaying, currentTime, onTogglePlay,
   onSeek, onTextChange, onSpeakerChange, onSplit, onMerge,
-  onAddRow, onTimeChange 
+  onAddRow, onTimeChange
 }: TranscriptRowProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -43,7 +43,7 @@ export default function TranscriptRow({
   const renderKaraokeText = () => {
     // BACKWARD COMPATIBILITY: Nếu dữ liệu cũ không có words -> Hiện text thường
     if (!segment.words || segment.words.length === 0) {
-        return <p className="text-slate-800 leading-relaxed text-sm md:text-base">{segment.text}</p>;
+      return <p className="text-slate-800 leading-relaxed text-sm md:text-base">{segment.text}</p>;
     }
     return (
       <p className="leading-relaxed text-slate-800 text-sm md:text-base">
@@ -51,14 +51,14 @@ export default function TranscriptRow({
           // Logic highlight: Thời gian hiện tại nằm trong khoảng bắt đầu và kết thúc của từ
           // Thêm sai số 0.2s để highlight mượt hơn (giữ màu lâu hơn một chút)
           const isHighlight = currentTime >= w.start && currentTime <= (w.end + 0.15);
-          
+
           return (
-            <span 
+            <span
               key={idx}
               className={`transition-all duration-150 rounded px-0.5 inline-block
-                ${isHighlight 
-                    ? "bg-green-200 text-black font-semibold  shadow-sm ring-1 ring-green-300" 
-                    : "hover:bg-slate-100"
+                ${isHighlight
+                  ? "bg-green-200 text-black font-semibold  shadow-sm ring-1 ring-green-300"
+                  : "hover:bg-slate-100"
                 }
               `}
               title={`${w.start.toFixed(2)}s`}
@@ -99,7 +99,7 @@ export default function TranscriptRow({
   }, [segment.text]);
 
   const handlePlayClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     if (isActive) {
       onTogglePlay();
     } else {
@@ -115,7 +115,7 @@ export default function TranscriptRow({
     }
     if (e.key === 'Backspace' && target.selectionStart === 0 && target.selectionEnd === 0) {
       // Chỉ cho phép gộp nếu không bôi đen
-      e.preventDefault(); 
+      e.preventDefault();
       onMerge(segment.id);
     }
   };
@@ -126,39 +126,39 @@ export default function TranscriptRow({
     if (newTime !== segment.start) {
       onTimeChange(segment.id, newTime);
     } else {
-        // Nếu nhập sai hoặc không đổi, reset lại hiển thị cũ
-        setTimeStr(formatTime(segment.start));
+      // Nếu nhập sai hoặc không đổi, reset lại hiển thị cũ
+      setTimeStr(formatTime(segment.start));
     }
   };
 
   return (
     <div className={`flex gap-4 group transition-all duration-300 ${isActive ? "opacity-100" : "opacity-80 hover:opacity-100"}`}>
-      
+
       {/* 1. Cột Thời Gian & Nút Play */}
       <div className="w-16 flex flex-col items-end pt-1 gap-2 flex-shrink-0">
         {/* [MỚI] Input thời gian thay vì text tĩnh */}
         <div className="relative group/time">
-             <input 
-                  className={`text-xs font-mono text-right bg-transparent border-b border-transparent focus:border-indigo-500 outline-none w-14
+          <input
+            className={`text-xs font-mono text-right bg-transparent border-b border-transparent focus:border-indigo-500 outline-none w-14
                       ${isActive ? "text-indigo-600 font-bold" : "text-slate-400"}
                   `}
-                  value={timeStr}
-                  onChange={(e) => setTimeStr(e.target.value)}
-                  onBlur={handleTimeBlur}
-                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-              />
-              {/* Tooltip nhắc nhở format */}
-              <span className="absolute right-0 -top-6 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-focus-within/time:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                  Nhập MM:SS
-              </span>
+            value={timeStr}
+            onChange={(e) => setTimeStr(e.target.value)}
+            onBlur={handleTimeBlur}
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          />
+          {/* Tooltip nhắc nhở format */}
+          <span className="absolute right-0 -top-6 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-focus-within/time:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+            Nhập MM:SS
+          </span>
         </div>
 
-       <button 
+        <button
           onClick={handlePlayClick}
           className={`w-6 h-6 rounded-full flex items-center justify-center transition-all 
-            ${isActive 
-              ? "bg-indigo-600 text-white shadow-md scale-110" 
-              : "bg-slate-100 text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-indigo-100 hover:text-indigo-600" 
+            ${isActive
+              ? "bg-indigo-600 text-white shadow-md scale-110"
+              : "bg-slate-100 text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-indigo-100 hover:text-indigo-600"
             }`}
           title={isActive && isAudioPlaying ? "Tạm dừng" : "Nghe đoạn này"}
         >
@@ -171,22 +171,22 @@ export default function TranscriptRow({
       </div>
 
       {/* 2. Cột Nội Dung */}
-      <div 
+      <div
         className={`flex-1 p-4 rounded-xl border transition-all relative group/content 
             ${isActive ? "bg-indigo-50 border-indigo-200 shadow-sm" : "bg-white border-transparent hover:border-slate-200"}
         `}
         // Double click để vào chế độ sửa nhanh
         onDoubleClick={() => setIsEditing(true)}
       >
-        
+
         {/* [MỚI] Action Buttons (Insert & Merge) - Chỉ hiện khi hover vào box nội dung */}
         <div className="absolute right-2 top-2 opacity-0 group-hover/content:opacity-100 transition-opacity flex gap-1 bg-white/90 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 z-10">
           {!isEditing && (
-              <button onClick={() => setIsEditing(true)} title="Sửa văn bản" className="p-1.5 hover:bg-blue-50 rounded text-slate-400 hover:text-blue-600 transition-colors">
-                <Edit2 className="w-3.5 h-3.5" />
-              </button>
+            <button onClick={() => setIsEditing(true)} title="Sửa văn bản" className="p-1.5 hover:bg-blue-50 rounded text-slate-400 hover:text-blue-600 transition-colors">
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
           )}
-          <button 
+          <button
             onClick={() => onAddRow(segment.id)}
             title="Chèn dòng mới phía dưới"
             className="p-1.5 hover:bg-green-50 rounded text-slate-400 hover:text-green-600 transition-colors"
@@ -194,7 +194,7 @@ export default function TranscriptRow({
             <Plus className="w-4 h-4" />
           </button>
           <div className="w-px h-4 bg-slate-200 my-auto"></div>
-          <button 
+          <button
             onClick={() => onMerge(segment.id)}
             title="Gộp với đoạn trên (Backspace)"
             className="p-1.5 hover:bg-indigo-50 rounded text-slate-400 hover:text-indigo-600 transition-colors"
@@ -205,70 +205,70 @@ export default function TranscriptRow({
 
         {/* Speaker Name */}
         <div className="group/spk relative inline-block mb-1">
-          <button 
+          <button
             // SỬA: Chuyển sang onClick, bỏ group-hover
             onClick={(e) => {
-                e.stopPropagation(); // Tránh kích hoạt play audio
-                setShowSpeakerMenu(!showSpeakerMenu);
+              e.stopPropagation(); // Tránh kích hoạt play audio
+              setShowSpeakerMenu(!showSpeakerMenu);
             }}
-            className={`text-xs font-bold px-2 py-1 rounded border uppercase flex items-center gap-1 transition-colors ${speaker.color}`}
+            className={`text-xs font-bold px-2 py-1 rounded border flex items-center gap-1 transition-colors ${speaker.color}`}
           >
             {speaker.name}
             <ChevronDown className="w-3 h-3 opacity-50" />
           </button>
-          
+
           {/* SỬA: Logic hiển thị dựa trên State thay vì CSS Hover */}
           {showSpeakerMenu && (
             <>
-                {/* Lớp màng vô hình: Click ra ngoài để đóng menu */}
-                <div 
-                    className="fixed inset-0 z-40 cursor-default" 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setShowSpeakerMenu(false);
-                    }}
-                />
+              {/* Lớp màng vô hình: Click ra ngoài để đóng menu */}
+              <div
+                className="fixed inset-0 z-40 cursor-default"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSpeakerMenu(false);
+                }}
+              />
 
-                {/* Dropdown Menu */}
-                <div className="absolute top-full left-0 mt-1 w-48 bg-white border rounded-lg shadow-xl z-50 py-1 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
-                    {allSpeakers.map((spk: any) => (
-                    <div 
-                        key={spk.id}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onSpeakerChange(segment.id, spk.id);
-                            setShowSpeakerMenu(false); // Chọn xong tự đóng
-                        }}
-                        className="px-3 py-2 text-xs hover:bg-slate-50 cursor-pointer flex items-center gap-2"
-                    >
-                        <div className={`w-2 h-2 rounded-full ${spk.color.split(" ")[0].replace("bg-", "bg-slate-900")}`}></div> 
-                        {spk.name}
-                    </div>
-                    ))}
-                </div>
+              {/* Dropdown Menu */}
+              <div className="absolute top-full left-0 mt-1 w-48 bg-white border rounded-lg shadow-xl z-50 py-1 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                {allSpeakers.map((spk: any) => (
+                  <div
+                    key={spk.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSpeakerChange(segment.id, spk.id);
+                      setShowSpeakerMenu(false); // Chọn xong tự đóng
+                    }}
+                    className="px-3 py-2 text-xs hover:bg-slate-50 cursor-pointer flex items-center gap-2"
+                  >
+                    <div className={`w-2 h-2 rounded-full ${spk.color.split(" ")[0].replace("bg-", "bg-slate-900")}`}></div>
+                    {spk.name}
+                  </div>
+                ))}
+              </div>
             </>
           )}
         </div>
 
         {/* Text Area */}
         <div className="mt-1 min-h-[24px]">
-            {isEditing ? (
-                <textarea
-                    ref={textareaRef}
-                    value={segment.text}
-                    onChange={(e) => onTextChange(segment.id, e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onBlur={() => setIsEditing(false)} // Blur ra ngoài thì lưu và thoát chế độ sửa
-                    autoFocus
-                    rows={1}
-                    className="w-full bg-transparent resize-none outline-none text-slate-800 leading-relaxed placeholder:text-slate-300 focus:ring-0 border-none p-0"
-                    placeholder="Nhập nội dung hội thoại..."
-                />
-            ) : (
-                <div onClick={() => !isActive && onSeek(segment.start)} className="cursor-text">
-                    {renderKaraokeText()}
-                </div>
-            )}
+          {isEditing ? (
+            <textarea
+              ref={textareaRef}
+              value={segment.text}
+              onChange={(e) => onTextChange(segment.id, e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={() => setIsEditing(false)} // Blur ra ngoài thì lưu và thoát chế độ sửa
+              autoFocus
+              rows={1}
+              className="w-full bg-transparent resize-none outline-none text-slate-800 leading-relaxed placeholder:text-slate-300 focus:ring-0 border-none p-0"
+              placeholder="Nhập nội dung hội thoại..."
+            />
+          ) : (
+            <div onClick={() => !isActive && onSeek(segment.start)} className="cursor-text">
+              {renderKaraokeText()}
+            </div>
+          )}
         </div>
       </div>
     </div>
