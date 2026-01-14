@@ -56,8 +56,8 @@ export type TranscriptSegment = {
 export default function useLocalTranscription(
     onFinal?: (data: any) => void
 ) {
-    // const serverUrl = "wss://zipformer-server.zeabur.app";
-    const serverUrl = "ws://localhost:6006";
+    const serverUrl = "wss://zipformer-server.zeabur.app";
+    // const serverUrl = "ws://localhost:6006";
     // --- STATE ---
     const [segments, setSegments] = useState<TranscriptSegment[]>([]);
     const [interimContent, setInterimContent] = useState<string>("");
