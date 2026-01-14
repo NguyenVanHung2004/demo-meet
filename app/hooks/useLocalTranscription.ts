@@ -56,8 +56,8 @@ export type TranscriptSegment = {
 export default function useLocalTranscription(
     onFinal?: (data: any) => void
 ) {
-    const serverUrl = "wss://zipformer-server.zeabur.app";
-
+    // const serverUrl = "wss://zipformer-server.zeabur.app";
+    const serverUrl = "ws://localhost:6006";
     // --- STATE ---
     const [segments, setSegments] = useState<TranscriptSegment[]>([]);
     const [interimContent, setInterimContent] = useState<string>("");
@@ -72,12 +72,18 @@ export default function useLocalTranscription(
     // [QUAN TRỌNG] Biến cộng dồn thời gian (giống useDeepgram)
     const offsetTimeRef = useRef(0);
     const lastEndTimestampRef = useRef<number>(0);
+
+    // [FIX] Biến để chuẩn hóa timestamp nếu Server bị lỗi gửi số quá lớn (VD: 123081s)
+    const serverStartOffsetRef = useRef<number | null>(null);
     // -----------------------------------------------------
 
     const startListening = async (rawStream: MediaStream, startTimeOffset: number = 0) => {
         // 1. CẬP NHẬT THỜI GIAN
         offsetTimeRef.current = startTimeOffset;
         setIsListening(true);
+        // [FIX] Reset Server Offset cho session mới
+        serverStartOffsetRef.current = null;
+
         // [FIX] KHÔNG GỌI setSegments([]) Ở ĐÂY để giữ lại nội dung cũ khi Resume
         if (startTimeOffset === 0) {
             lastEndTimestampRef.current = 0;
@@ -147,11 +153,27 @@ export default function useLocalTranscription(
             // Logic thêm vào segments giữ nguyên như cũ
             // [MOD] Format words array
             // import { formatWords } from "../lib/utils";
-            let rawWords = (alt.words || []).map((w: any) => ({
-                ...w,
-                start: w.start + offsetTimeRef.current,
-                end: w.end + offsetTimeRef.current
-            }));
+            let rawWords = (alt.words || []).map((w: any) => {
+                // [FIX] Auto-detect & Normalize Server Timestamp
+                // Nếu timestamp đầu tiên quá lớn (> 3600s = 1h), coi đó là lỗi Server Offset và trừ đi
+                if (serverStartOffsetRef.current === null) {
+                    if (w.start > 3600) { // Ngưỡng 1 giờ
+                        serverStartOffsetRef.current = w.start;
+                        console.warn(`⚠️ Server timestamp huge (${w.start}s). Normalizing to 0.`);
+                    } else {
+                        serverStartOffsetRef.current = 0;
+                    }
+                }
+
+                const normStart = Math.max(0, w.start - (serverStartOffsetRef.current || 0));
+                const normEnd = Math.max(0, w.end - (serverStartOffsetRef.current || 0));
+
+                return {
+                    ...w,
+                    start: normStart + offsetTimeRef.current,
+                    end: normEnd + offsetTimeRef.current
+                };
+            });
 
             const words = formatWords(rawWords);
 
