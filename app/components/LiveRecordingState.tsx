@@ -366,6 +366,15 @@ export default function LiveRecordingState({
         isDeleted: false
       });
 
+      // [FIX] Xóa Draft sau khi đã lưu thành công lên Cloud
+      try {
+        const { deleteDraft } = await import("../lib/indexedDB");
+        await deleteDraft(draftIdRef.current);
+        console.log("Deleted local draft:", draftIdRef.current);
+      } catch (err) {
+        console.error("Failed to delete draft:", err);
+      }
+
       // 5. Xong -> Quay về Dashboard
       onFinish();
 
