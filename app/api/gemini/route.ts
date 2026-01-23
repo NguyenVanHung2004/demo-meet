@@ -36,15 +36,15 @@ async function generateContentSafe(prompt: string) {
 }
 export async function POST(req: Request) {
   try {
-    const { text, mode, dateContext, previousSummary,departments,teams } = await req.json();
+    const { text, mode, dateContext, previousSummary, departments, teams } = await req.json();
 
     if (!text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
     }
 
     let prompt = "";
-    
-     if (mode === "extract_json") {
+
+    if (mode === "extract_json") {
       const deptListStr = departments?.join(", ") || "";
       const teamListStr = teams?.join(", ") || ""; // [MỚI]
       prompt = `
@@ -53,18 +53,27 @@ export async function POST(req: Request) {
     - Thời gian diễn ra cuộc họp: ${dateContext || "Hôm nay"} (Hãy dùng ngày này làm mốc để tính toán các từ chỉ thời gian như 'ngày mai', 'thứ 6 tới').
     - Danh sách Phòng ban (Department): [${deptListStr}]
     - Danh sách Nhóm (Team): [${teamListStr}]
-      NHIỆM VỤ: Phân tích đoạn hội thoại (Transcript) dưới đây và trích xuất danh sách các nhiệm vụ/công việc cần thực hiện (Action Items).
+      NHIỆM VỤ: Phân tích đoạn hội thoại (Transcript) dưới đây và trích xuất danh sách các nhiệm vụ/công việc cần thực hiện SAU CUỘC HỌP (Action Items).
+      
+      ⚠️ QUAN TRỌNG - CHỈ TRÍCH XUẤT CÔNG VIỆC SAU CUỘC HỌP:
+      - ✅ BẮT BUỘC bao gồm: Các nhiệm vụ cần làm SAU KHI cuộc họp kết thúc (Ví dụ: "Tôi sẽ gửi báo cáo vào thứ 2", "Anh X hãy chuẩn bị tài liệu cho buổi họp tiếp theo", "Tuần sau phải hoàn thành...")
+      - ❌ LOẠI TRỪ hoàn toàn: Các hoạt động ĐANG DIỄN RA TRONG cuộc họp (Ví dụ: "Chúng ta đang thảo luận về...", "Tôi đang trình bày...", "Hãy cùng xem qua...", "Bây giờ chúng ta sẽ nói về...")
+      
       QUY TẮC MAPPING (Ưu tiên từ trên xuống dưới):
       1. Nếu nhắc đến TÊN RIÊNG -> Điền "assignee".
       2. Nếu nhắc đến TEAM/Phòng cụ thể (VD: "Team Mobile", "Đội Web", ...) -> Điền field "team" (phải khớp chính xác danh sách Team ở trên).
       3. Nếu chỉ nhắc đến PHÒNG BAN chung (VD: "Phòng IT", "Kế toán") -> Điền field "department".(phải khớp chính xác danh sách Phòng ở trên).
+      
       VĂN BẢN ĐẦU VÀO:
       "${text}"
 
       YÊU CẦU XỬ LÝ:
-        1. Tìm các câu mệnh lệnh, lời hứa, hoặc kế hoạch cụ thể (Ví dụ: "Tôi sẽ gửi...", "Bạn hãy làm...", "Tuần sau phải xong...").
-        2. Bỏ qua các câu chào hỏi, giới thiệu, hoặc chia sẻ cảm xúc chung chung.
-        4. Nếu không tìm thấy bất kỳ nhiệm vụ cụ thể nào, hãy trả về mảng rỗng [].
+        1. CHỈ tìm các công việc cần làm SAU cuộc họp: lời hứa, cam kết, kế hoạch hành động (Ví dụ: "Tôi sẽ gửi...", "Bạn hãy làm...", "Tuần sau phải xong...", "Deadline là...").
+        2. BỎ QUA hoàn toàn:
+           - Các hoạt động đang diễn ra TRONG cuộc họp (thảo luận, trình bày, chia sẻ ý kiến...)
+           - Câu chào hỏi, giới thiệu, cảm xúc chung chung
+           - Các câu mô tả tình trạng hiện tại không kèm cam kết hành động
+        3. Nếu không tìm thấy bất kỳ nhiệm vụ SAU CUỘC HỌP nào, hãy trả về mảng rỗng [].
       
       CẤU TRÚC JSON:
       [
@@ -82,7 +91,7 @@ export async function POST(req: Request) {
 
       // Vì đã ép JSON Mode nên không cần replace markdown nữa, nhưng cứ để cho chắc
       const cleanText = rawText.replace(/```json|```/g, "").trim();
-      
+
       return NextResponse.json({ summary: cleanText }); // Trả về text dạng chuỗi cho Client parse
     } else if (mode === "segment") {
       // [PROMPT NÂNG CẤP] Chống lặp ý + Tối ưu cho hội thoại
@@ -158,15 +167,15 @@ export async function POST(req: Request) {
       - Nếu transcript có thông tin mâu thuẫn (VD: Lúc đầu nói A, sau sửa thành B), hãy ghi nhận thông tin cuối cùng đã được chốt lại (B).
       `;
     }
-    
+
     const summary = await generateContentSafe(prompt);
 
     return NextResponse.json({ summary });
 
   } catch (error: any) {
-    const errorMessage = error.status === 503 
-        ? "Hệ thống AI đang quá tải, vui lòng thử lại sau." 
-        : (error.message || "Lỗi xử lý AI.");
+    const errorMessage = error.status === 503
+      ? "Hệ thống AI đang quá tải, vui lòng thử lại sau."
+      : (error.message || "Lỗi xử lý AI.");
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
