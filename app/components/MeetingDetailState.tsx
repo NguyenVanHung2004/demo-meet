@@ -633,9 +633,18 @@ export default function MeetingDetailState({
                 <Sparkles className="w-4 h-4" /> AI Tóm tắt
               </h3>
               {meeting.summary ? (
-                <div className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none">
-                  <ReactMarkdown>{meeting.summary}</ReactMarkdown>
-                </div>
+                meeting.summary.startsWith('<') ? (
+                  // If HTML, render directly
+                  <div
+                    className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none"
+                    dangerouslySetInnerHTML={{ __html: meeting.summary }}
+                  />
+                ) : (
+                  // If Markdown, use ReactMarkdown
+                  <div className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none">
+                    <ReactMarkdown>{meeting.summary}</ReactMarkdown>
+                  </div>
+                )
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-slate-400">
                   <Sparkles className="w-12 h-12 mb-2 opacity-20" />

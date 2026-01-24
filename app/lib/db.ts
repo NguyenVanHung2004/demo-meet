@@ -37,6 +37,7 @@ export interface Meeting {
   errorMessage?: string;
   actionItems?: TaskItem[];
   actionStatus?: ActionItemStatus;
+  isMinuteOnly?: boolean; // Flag for imported minutes without audio/transcript
 }
 
 const COLLECTION_NAME = "meetings";

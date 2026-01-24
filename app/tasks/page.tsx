@@ -51,6 +51,7 @@ export default function TaskManagerPage() {
   // State xử lý
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [extractedTasks, setExtractedTasks] = useState<TaskItem[]>([]);
   const [showDialog, setShowDialog] = useState(false);
   // 🟢 HÀM XỬ LÝ TÓM TẮT (Truyền vào EditorState)
@@ -84,8 +85,11 @@ export default function TaskManagerPage() {
   };
   const fetchMeetings = useCallback(() => {
     if (user) {
+      setLoadingMeetings(true);
       // Load Meetings
-      getAllMeetings(user.uid).then((data) => setMeetings(data.filter((m) => !m.isDeleted)));
+      getAllMeetings(user.uid)
+        .then((data) => setMeetings(data.filter((m) => !m.isDeleted)))
+        .finally(() => setLoadingMeetings(false));
 
       // Load Members (Để AI dùng ngầm)
       getMembers(user.uid).then((data) => setMembers(data));
@@ -405,99 +409,121 @@ export default function TaskManagerPage() {
           </h2>
 
           <div className="grid gap-4">
-            {meetings.map((meeting) => {
-              // 🟢 KHAI BÁO BIẾN TRẠNG THÁI
-              const hasData =
-                meeting.actionItems && meeting.actionItems.length > 0;
-              const isSent = meeting.actionStatus === "sent";
-              const isProcessingThis =
-                isProcessing && selectedMeeting?.id === meeting.id;
-
-              return (
-                <div
-                  key={meeting.id}
-                  className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div>
-                    <h3
-                      onClick={() => setViewingMeeting(meeting)}
-                      className="font-bold text-lg text-slate-800 hover:text-indigo-600 hover:underline cursor-pointer transition-colors flex items-center gap-2 group"
-                    >
-                      {meeting.title}
-                      <Eye className="w-4 h-4 opacity-0 group-hover:opacity-50 text-indigo-400" />
-                    </h3>
-                    <div className="flex items-center gap-4 text-sm text-slate-500 mt-2">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />{" "}
-                        {new Date(meeting.createdAt).toLocaleString("vi-VN")}
-                      </span>
-
-                      {/* HIỂN THỊ BADGE TRẠNG THÁI */}
-                      {isSent ? (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 border border-green-200">
-                          <Mail className="w-3 h-3" /> Đã gửi mail
-                        </span>
-                      ) : hasData ? (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
-                          <CheckCircle className="w-3 h-3" /> Đã xử lý
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
-                          <Clock className="w-3 h-3" /> Chưa xử lý
-                        </span>
-                      )}
+            {loadingMeetings ? (
+              // Loading skeleton
+              <>
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm animate-pulse"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        <div className="h-6 bg-slate-200 rounded w-2/3"></div>
+                        <div className="flex items-center gap-4">
+                          <div className="h-4 bg-slate-100 rounded w-32"></div>
+                          <div className="h-6 bg-slate-100 rounded-full w-24"></div>
+                        </div>
+                      </div>
+                      <div className="h-10 bg-slate-200 rounded-lg w-32"></div>
                     </div>
                   </div>
+                ))}
+              </>
+            ) : meetings.length === 0 ? (
+              <p className="text-center text-slate-500 mt-10">
+                Không tìm thấy cuộc họp nào.
+              </p>
+            ) : (
+              meetings.map((meeting) => {
+                // 🟢 KHAI BÁO BIẾN TRẠNG THÁI
+                const hasData =
+                  meeting.actionItems && meeting.actionItems.length > 0;
+                const isSent = meeting.actionStatus === "sent";
+                const isProcessingThis =
+                  isProcessing && selectedMeeting?.id === meeting.id;
 
-                  {/* 🟢 LOGIC NÚT BẤM MỚI */}
-                  <div className="flex items-center gap-2">
-                    {hasData ? (
-                      <>
-                        {/* Nút 1: Xem chi tiết (Chính) */}
-                        <button
-                          onClick={() => router.push(`/tasks/${meeting.id}`)}
-                          className="px-5 py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold rounded-lg hover:bg-indigo-100 flex items-center gap-2 transition"
-                        >
-                          <Eye className="w-4 h-4" /> Xem chi tiết
-                        </button>
+                return (
+                  <div
+                    key={meeting.id}
+                    className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  >
+                    <div>
+                      <h3
+                        onClick={() => setViewingMeeting(meeting)}
+                        className="font-bold text-lg text-slate-800 hover:text-indigo-600 hover:underline cursor-pointer transition-colors flex items-center gap-2 group"
+                      >
+                        {meeting.title}
+                        <Eye className="w-4 h-4 opacity-0 group-hover:opacity-50 text-indigo-400" />
+                      </h3>
+                      <div className="flex items-center gap-4 text-sm text-slate-500 mt-2">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />{" "}
+                          {new Date(meeting.createdAt).toLocaleString("vi-VN")}
+                        </span>
 
-                        {/* Nút 2: Làm lại (Phụ) */}
+                        {/* HIỂN THỊ BADGE TRẠNG THÁI */}
+                        {isSent ? (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 border border-green-200">
+                            <Mail className="w-3 h-3" /> Đã gửi mail
+                          </span>
+                        ) : hasData ? (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                            <CheckCircle className="w-3 h-3" /> Đã xử lý
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                            <Clock className="w-3 h-3" /> Chưa xử lý
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 🟢 LOGIC NÚT BẤM MỚI */}
+                    <div className="flex items-center gap-2">
+                      {hasData ? (
+                        <>
+                          {/* Nút 1: Xem chi tiết (Chính) */}
+                          <button
+                            onClick={() => router.push(`/tasks/${meeting.id}`)}
+                            className="px-5 py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold rounded-lg hover:bg-indigo-100 flex items-center gap-2 transition"
+                          >
+                            <Eye className="w-4 h-4" /> Xem chi tiết
+                          </button>
+
+                          {/* Nút 2: Làm lại (Phụ) */}
+                          <button
+                            onClick={() => handleExtractActionItems(meeting)}
+                            disabled={isProcessing}
+                            title="Trích xuất lại (Xóa dữ liệu cũ)"
+                            className="p-2.5 text-slate-400 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-lg hover:bg-red-50 transition"
+                          >
+                            {isProcessingThis ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-4 h-4" />
+                            )}
+                          </button>
+                        </>
+                      ) : (
+                        /* Nút 3: Trích xuất (Khi chưa có dữ liệu) */
                         <button
                           onClick={() => handleExtractActionItems(meeting)}
-                          disabled={isProcessing}
-                          title="Trích xuất lại (Xóa dữ liệu cũ)"
-                          className="p-2.5 text-slate-400 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-lg hover:bg-red-50 transition"
+                          disabled={!meeting.segments || isProcessing}
+                          className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md shadow-indigo-200 flex items-center justify-center gap-2 transition disabled:opacity-50"
                         >
                           {isProcessingThis ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
-                            <RotateCcw className="w-4 h-4" />
+                            <ArrowRightFromLine className="w-4 h-4" />
                           )}
+                          {isProcessingThis ? "Đang xử lý..." : "Trích xuất Task"}
                         </button>
-                      </>
-                    ) : (
-                      /* Nút 3: Trích xuất (Khi chưa có dữ liệu) */
-                      <button
-                        onClick={() => handleExtractActionItems(meeting)}
-                        disabled={!meeting.segments || isProcessing}
-                        className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md shadow-indigo-200 flex items-center justify-center gap-2 transition disabled:opacity-50"
-                      >
-                        {isProcessingThis ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <ArrowRightFromLine className="w-4 h-4" />
-                        )}
-                        {isProcessingThis ? "Đang xử lý..." : "Trích xuất Task"}
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-            {meetings.length === 0 && (
-              <p className="text-center text-slate-500 mt-10">
-                Không tìm thấy cuộc họp nào (hoặc đang tải).
-              </p>
+                );
+              })
             )}
           </div>
         </div>

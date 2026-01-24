@@ -20,7 +20,8 @@ import {
   LogOut,
   ClipboardList,
   User,
-  Edit3 // [MỚI]
+  Edit3, // [MỚI]
+  FileText as FileTextIcon // [MỚI] Biên bản icon
 } from "lucide-react";
 import {
   getAllMeetings,
@@ -52,6 +53,7 @@ export default function DashboardState({
   const { user, login, logout } = useAuth(); // [MỚI] Lấy thêm logout
   const { toast, confirm } = useGlobalUI();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [loading, setLoading] = useState(false);
   const [currentTab, setCurrentTab] = useState<DashboardTab>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
@@ -59,9 +61,11 @@ export default function DashboardState({
 
   const loadMeetings = async () => {
     if (user) {
+      setLoading(true);
       try {
-        // 1. Load Cloud Meetings
-        const cloudMeetings = await getAllMeetings(user.uid);
+        // 1. Load Cloud Meetings (exclude minute-only imports)
+        const allCloudMeetings = await getAllMeetings(user.uid);
+        const cloudMeetings = allCloudMeetings.filter(m => !m.isMinuteOnly);
 
         // 2. Load Local Drafts
         const { getAllDraftsMeta } = await import("../lib/indexedDB");
@@ -72,12 +76,14 @@ export default function DashboardState({
 
         // [MỚI] Cảnh báo nếu có bản nháp chưa lưu (Chỉ hiện 1 lần)
         if (localDrafts.length > 0 && !hasShownDraftWarning.current) {
-          toast.info(`⚠️ Bạn có ${localDrafts.length} bản nháp chưa lưu! Hãy kiểm tra để tránh mất dữ liệu.`);
+          toast.info(`Bạn có ${localDrafts.length} bản nháp chưa lưu lên Cloud`);
           hasShownDraftWarning.current = true;
         }
 
       } catch (error) {
-        console.error("Error loading meetings", error);
+        console.error("Error loading meetings:", error);
+      } finally {
+        setLoading(false);
       }
     } else {
       setMeetings([]);
@@ -222,15 +228,24 @@ export default function DashboardState({
           </div>
           <Link
             href="/tasks"
-            className="px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium"
+            className="px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium hover:bg-slate-800 hover:text-white"
           >
             <ClipboardList className="w-4 h-4" /> Quản lý Task
           </Link>
           <Link
             href="/team"
-            className="px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium"
+            className="px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium hover:bg-slate-800 hover:text-white"
           >
             <User className="w-4 h-4" /> Quản lý Nhân sự
+          </Link>
+          <Link
+            href="/minutes"
+            className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${pathname === "/minutes"
+              ? "bg-indigo-600 text-white shadow-md transform translate-x-1"
+              : "hover:bg-slate-800 hover:text-white"
+              }`}
+          >
+            <FileTextIcon className="w-4 h-4" /> Biên bản họp
           </Link>
           <div
             onClick={() => setCurrentTab("trash")}
@@ -358,7 +373,50 @@ export default function DashboardState({
               </h3>
             </div>
 
-            {filteredMeetings.length === 0 ? (
+
+            {loading ? (
+              // Loading skeleton
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+                    <tr>
+                      <th className="px-6 py-4">Tên cuộc họp</th>
+                      <th className="px-6 py-4">Thời lượng</th>
+                      <th className="px-6 py-4">Ngày tạo</th>
+                      <th className="px-6 py-4">Trạng thái</th>
+                      <th className="px-6 py-4"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <tr key={i} className="animate-pulse">
+                        <td className="px-6 py-4">
+                          <div className="space-y-2">
+                            <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                            <div className="h-3 bg-slate-100 rounded w-1/2"></div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="h-4 bg-slate-200 rounded w-16"></div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="h-4 bg-slate-200 rounded w-24"></div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="h-6 bg-slate-200 rounded-full w-20"></div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex justify-end gap-2">
+                            <div className="h-8 w-8 bg-slate-200 rounded"></div>
+                            <div className="h-8 w-8 bg-slate-200 rounded"></div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : filteredMeetings.length === 0 ? (
               <div className="text-center py-12 md:py-20 bg-white rounded-2xl border border-dashed border-slate-200">
                 <div className="w-12 h-12 md:w-16 md:h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-300">
                   {currentTab === "all" ? (
@@ -595,7 +653,6 @@ export default function DashboardState({
             <span className="text-[10px] font-medium">Tất cả</span>
           </button>
 
-          {/* Main Action: Record */}
           <Link
             href="/tasks"
             className={`flex flex-col items-center gap-1 p-2 rounded-lg transition ${pathname === "/tasks" ? "text-indigo-600" : "text-slate-400"
@@ -605,12 +662,20 @@ export default function DashboardState({
             <span className="text-[10px] font-bold">Tasks</span>
           </Link>
           <Link
-            href="/tasks"
+            href="/team"
             className={`flex flex-col items-center gap-1 p-2 rounded-lg transition ${pathname === "/team" ? "text-indigo-600" : "text-slate-400"
               }`}
           >
             <User className="w-5 h-5" />
             <span className="text-[10px] font-bold">Member</span>
+          </Link>
+          <Link
+            href="/minutes"
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition ${pathname === "/minutes" ? "text-indigo-600" : "text-slate-400"
+              }`}
+          >
+            <FileTextIcon className="w-5 h-5" />
+            <span className="text-[10px] font-bold">Biên bản</span>
           </Link>
 
           <button
