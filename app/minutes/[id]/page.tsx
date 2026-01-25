@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
     ArrowLeft,
     Calendar,
@@ -11,6 +11,9 @@ import {
     X,
     Loader2,
     Trash2,
+    ChevronUp,
+    ChevronDown,
+    Search,
 } from "lucide-react";
 import { getMeetingById, updateMeetingProcess } from "@/app/lib/db";
 import { useAuth } from "@/app/context/AuthContext";
@@ -56,13 +59,101 @@ function parseMarkdown(text: string): string {
 export default function MinuteDetailPage() {
     const params = useParams();
     const router = useRouter();
+    // 🟢 LẤY SEARCH PARAMS ĐỂ HIGHLIGHT
+    const searchParams = useSearchParams();
+    const highlightQuery = searchParams.get("highlight");
+
     const { user } = useAuth();
     const { toast, confirm } = useGlobalUI();
+
     const [meeting, setMeeting] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState("");
     const [saving, setSaving] = useState(false);
+
+    // 🟢 SEARCH NAVIGATION STATE
+    const [matchCount, setMatchCount] = useState(0);
+    const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+
+    // 🟢 FLOATING WIDGET STATE
+    const [showSearch, setShowSearch] = useState(false);
+    const [searchInput, setSearchInput] = useState("");
+    const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+    // Sync URL param to local input
+    useEffect(() => {
+        if (highlightQuery) {
+            setSearchInput(highlightQuery);
+            setShowSearch(true);
+        } else {
+            if (!showSearch) setSearchInput("");
+        }
+    }, [highlightQuery, showSearch]);
+
+    // 🟢 KEYBOARD SHORTCUT (Ctrl+F)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                setShowSearch(true);
+                setTimeout(() => searchInputRef.current?.focus(), 50);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
+    // 🟢 SCROLL TO HIGHLIGHT EFFECT (UPDATED)
+    useEffect(() => {
+        if (highlightQuery && !loading) {
+            // Đợi render xong
+            setTimeout(() => {
+                const marks = document.querySelectorAll('mark');
+                setMatchCount(marks.length);
+                if (marks.length > 0) {
+                    setCurrentMatchIndex(0);
+                }
+            }, 800);
+        }
+    }, [highlightQuery, loading]);
+
+    // 🟢 HANDLE NAVIGATION
+    const handleNavigation = (direction: 'next' | 'prev') => {
+        if (matchCount === 0) return;
+
+        let newIndex = direction === 'next' ? currentMatchIndex + 1 : currentMatchIndex - 1;
+        if (newIndex >= matchCount) newIndex = 0;
+        if (newIndex < 0) newIndex = matchCount - 1;
+
+        setCurrentMatchIndex(newIndex);
+    };
+
+    // 🟢 APPLY ACTIVE STYLE EFFECT (Runs after render/state change)
+    useEffect(() => {
+        const marks = document.querySelectorAll('mark');
+        if (marks.length === 0) return;
+
+        marks.forEach((m, i) => {
+            if (i === currentMatchIndex) {
+                m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                m.className = "bg-indigo-600 text-white ring-2 ring-indigo-300 shadow-sm scale-110 transition-transform rounded-sm px-0.5";
+            } else {
+                m.className = "bg-yellow-200 text-slate-900 rounded-sm px-0.5 transition-colors";
+            }
+        });
+    }, [currentMatchIndex, matchCount, highlightQuery]);
+
+    // 🟢 HÀM HELPER: HIGHLIGHT TEXT TRONG HTML (VIEW MODE)
+    const getHighlightedContent = (htmlContent: string, query: string | null) => {
+        if (!query || !query.trim()) return htmlContent;
+        try {
+            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![^<]*>)`, 'gi');
+            return htmlContent.replace(regex, '<mark class="bg-yellow-200 text-slate-900 rounded-sm px-0.5">$1</mark>');
+        } catch (e) {
+            return htmlContent;
+        }
+    };
 
     const meetingId = params.id as string;
 
@@ -236,6 +327,16 @@ export default function MinuteDetailPage() {
                             ) : (
                                 <>
                                     <button
+                                        onClick={() => {
+                                            setShowSearch(!showSearch);
+                                            setTimeout(() => searchInputRef.current?.focus(), 50);
+                                        }}
+                                        className={`p-2 rounded-lg transition-all ${showSearch ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+                                        title="Tìm kiếm (Ctrl+F)"
+                                    >
+                                        <Search className="w-5 h-5" />
+                                    </button>
+                                    <button
                                         onClick={handleDelete}
                                         className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium flex items-center gap-2 transition-all"
                                     >
@@ -259,8 +360,38 @@ export default function MinuteDetailPage() {
             {/* Main Content */}
             <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
+                    <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                         <h2 className="text-lg font-bold text-slate-800">Nội dung biên bản</h2>
+                        {highlightQuery && (
+                            <div className="flex items-center gap-3">
+                                {/* Match Counter */}
+                                <span className="text-xs font-semibold text-slate-500">
+                                    {matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : "0/0"} matches
+                                </span>
+
+                                {/* Navigation Buttons */}
+                                <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                    <button
+                                        onClick={() => handleNavigation('prev')}
+                                        className="p-1 hover:bg-slate-50 text-slate-500 rounded-l-lg border-r border-slate-200 transition-colors"
+                                        title="Previous Match"
+                                    >
+                                        <ChevronUp className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleNavigation('next')}
+                                        className="p-1 hover:bg-slate-50 text-slate-500 rounded-r-lg transition-colors"
+                                        title="Next Match"
+                                    >
+                                        <ChevronDown className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full border border-yellow-200">
+                                    "{highlightQuery}"
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="px-6 py-6">
@@ -344,15 +475,92 @@ export default function MinuteDetailPage() {
                                         color: #475569;
                                     }
                                 `}</style>
+                                {/* 🟢 SỬ DỤNG DANGEROUSLYSETINNERHTML VỚI CONTENT ĐÃ ĐƯỢC HIGHLIGHT */}
                                 <div
                                     className="summary-text"
-                                    dangerouslySetInnerHTML={{ __html: meeting.summary.startsWith('<') ? meeting.summary : parseMarkdown(meeting.summary) }}
+                                    dangerouslySetInnerHTML={{
+                                        __html: getHighlightedContent(
+                                            meeting.summary && meeting.summary.trim().startsWith("<")
+                                                ? meeting.summary
+                                                : parseMarkdown(meeting.summary || ""),
+                                            highlightQuery
+                                        )
+                                    }}
                                 />
                             </div>
                         )}
                     </div>
                 </div>
             </main>
+
+            {/* 🟢 FLOATING SEARCH WIDGET */}
+            <div className={`fixed top-24 right-6 flex flex-col items-end gap-2 transition-opacity duration-300 ${!highlightQuery && !searchInput && !showSearch ? 'opacity-0 pointer-events-none' : 'opacity-100'} z-50`}>
+
+                {(showSearch || highlightQuery) && (
+                    <div className="bg-white p-2 rounded-xl shadow-lg border border-slate-200 flex items-center gap-2 animate-in slide-in-from-top-4 ring-1 ring-black/5">
+                        {/* Nav Buttons */}
+                        <div className="flex items-center gap-0.5">
+                            <button
+                                onClick={() => handleNavigation('prev')}
+                                className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-md transition-colors active:bg-slate-200"
+                                title="Previous Match"
+                            >
+                                <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handleNavigation('next')}
+                                className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-md transition-colors active:bg-slate-200"
+                                title="Next Match"
+                            >
+                                <ChevronDown className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="w-px h-6 bg-slate-200 mx-1"></div>
+
+                        {/* Input */}
+                        <div className="relative group">
+                            <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500" />
+                            <input
+                                ref={searchInputRef}
+                                autoFocus
+                                type="text"
+                                value={searchInput}
+                                onChange={(e) => setSearchInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        router.push(`/minutes/${meetingId}?highlight=${encodeURIComponent(searchInput)}`);
+                                    }
+                                }}
+                                placeholder="Tìm kiếm..."
+                                className="pl-8 pr-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 w-32 transition-all focus:w-60 focus:ring-2 focus:ring-indigo-100"
+                            />
+                        </div>
+
+                        <div className="w-px h-6 bg-slate-200 mx-1"></div>
+
+                        {/* Counter */}
+                        <span className="text-xs font-semibold text-slate-500 min-w-[40px] text-center select-none">
+                            {matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : "0"}
+                        </span>
+
+                        <div className="w-px h-6 bg-slate-200 mx-1"></div>
+
+                        {/* Close Button */}
+                        <button
+                            onClick={() => {
+                                setSearchInput("");
+                                setShowSearch(false);
+                                router.push(`/minutes/${meetingId}`);
+                            }}
+                            className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-md transition-colors"
+                            title="Close Search"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

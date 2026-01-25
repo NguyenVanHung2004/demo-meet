@@ -151,6 +151,46 @@ export default function MinutesState() {
         return plainText.substring(0, maxLength) + "...";
     };
 
+    // 🟢 HÀM MỚI: TẠO SNIPPET HIGHLIGHT KHI SEARCH
+    const getHighlightedSnippet = (content: string, query: string): string => {
+        if (!query.trim()) return getSummaryPreview(content);
+
+        // 1. Clean content (giống preview)
+        const plainText = content
+            .replace(/<[^>]*>/g, '')
+            .replace(/#{1,6}\s/g, '')
+            .replace(/\*\*(.+?)\*\*/g, '$1')
+            .replace(/\*(.+?)\*/g, '$1')
+            .replace(/^[-*+]\s/gm, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // 2. Tìm vị trí match case-insensitive
+        const lowerText = plainText.toLowerCase();
+        const lowerQuery = query.toLowerCase().trim();
+        const index = lowerText.indexOf(lowerQuery);
+
+        // Nếu không tìm thấy (có thể match ở title), trả về preview thường
+        if (index === -1) return getSummaryPreview(content);
+
+        // 3. Trích xuất window text (60 ký tự trước, 100 sau)
+        const start = Math.max(0, index - 60);
+        const end = Math.min(plainText.length, index + lowerQuery.length + 100);
+
+        let snippet = plainText.substring(start, end);
+
+        // Highlight từ khóa
+        // Dùng replace với regex case-insensitive, giữ nguyên case gốc của text
+        const regex = new RegExp(`(${lowerQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        snippet = snippet.replace(regex, '<mark class="bg-yellow-200 text-slate-900 rounded-sm px-0.5">$1</mark>');
+
+        // Thêm ellipsis nếu cắt bớt
+        if (start > 0) snippet = "..." + snippet;
+        if (end < plainText.length) snippet = snippet + "...";
+
+        return snippet;
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
             {/* Header */}
@@ -305,7 +345,10 @@ export default function MinutesState() {
                                     {filteredMeetings.map((meeting) => (
                                         <tr
                                             key={meeting.id}
-                                            onClick={() => router.push(`/minutes/${meeting.id}`)}
+                                            onClick={() => {
+                                                const url = `/minutes/${meeting.id}${searchQuery ? `?highlight=${encodeURIComponent(searchQuery)}` : ''}`;
+                                                router.push(url);
+                                            }}
                                             className="group hover:bg-indigo-50/50 cursor-pointer transition-colors"
                                         >
                                             <td className="px-6 py-4">
@@ -325,9 +368,13 @@ export default function MinutesState() {
                                                 {meeting.duration > 0 ? formatDuration(meeting.duration) : "-"}
                                             </td>
                                             <td className="px-6 py-4 text-slate-500 text-sm max-w-md">
-                                                <p className="line-clamp-2">
-                                                    {getSummaryPreview(meeting.summary || "")}
-                                                </p>
+                                                <div className="text-slate-600 line-clamp-2"
+                                                    dangerouslySetInnerHTML={{
+                                                        __html: searchQuery
+                                                            ? getHighlightedSnippet(meeting.summary || "", searchQuery)
+                                                            : getSummaryPreview(meeting.summary || "")
+                                                    }}
+                                                />
                                             </td>
                                             <td className="px-6 py-4">
                                                 <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-indigo-600 transition-colors" />
@@ -343,7 +390,10 @@ export default function MinutesState() {
                             {filteredMeetings.map((meeting) => (
                                 <div
                                     key={meeting.id}
-                                    onClick={() => router.push(`/minutes/${meeting.id}`)}
+                                    onClick={() => {
+                                        const url = `/minutes/${meeting.id}${searchQuery ? `?highlight=${encodeURIComponent(searchQuery)}` : ''}`;
+                                        router.push(url);
+                                    }}
                                     className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 active:scale-[0.98] transition-all cursor-pointer"
                                 >
                                     <div className="flex items-start gap-3">
@@ -366,9 +416,13 @@ export default function MinutesState() {
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-slate-600 line-clamp-2">
-                                                {getSummaryPreview(meeting.summary || "")}
-                                            </p>
+                                            <div className="text-sm text-slate-600 line-clamp-2"
+                                                dangerouslySetInnerHTML={{
+                                                    __html: searchQuery
+                                                        ? getHighlightedSnippet(meeting.summary || "", searchQuery)
+                                                        : getSummaryPreview(meeting.summary || "")
+                                                }}
+                                            />
                                         </div>
                                         <ChevronRight className="w-5 h-5 text-slate-400 shrink-0 mt-1" />
                                     </div>
