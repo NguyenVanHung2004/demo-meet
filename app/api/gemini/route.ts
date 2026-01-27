@@ -36,7 +36,7 @@ async function generateContentSafe(prompt: string) {
 }
 export async function POST(req: Request) {
   try {
-    const { text, mode, dateContext, previousSummary, departments, teams } = await req.json();
+    const { text, mode, dateContext, previousSummary, departments, teams, question, history } = await req.json();
 
     if (!text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
@@ -118,6 +118,34 @@ export async function POST(req: Request) {
       VĂN BẢN MỚI (Cần xử lý):
       "${text}"
       -----
+      `;
+    } else if (mode === "qa") {
+      const historyStr = history?.map((m: any) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join("\n") || "";
+
+      prompt = `
+      Bạn là trợ lý AI thông minh, chuyên trả lời câu hỏi dựa trên biên bản cuộc họp.
+      
+      NGỮ CẢNH (Nội dung các cuộc họp đã chọn):
+      ---------------------
+      ${text}
+      ---------------------
+
+      LỊCH SỬ TRÒ CHUYỆN TRƯỚC ĐÓ:
+      ${historyStr}
+
+      CÂU HỎI MỚI NHẤT CỦA NGƯỜI DÙNG:
+      "${question}"
+
+      YÊU CẦU TRẢ LỜI:
+      1. Trả lời chính xác, ngắn gọn, súc tích dựa trên ngữ cảnh được cung cấp.
+      2. Nếu thông tin không có trong ngữ cảnh, hãy nói "Tôi không tìm thấy thông tin này trong các biên bản đã chọn."
+      3. TRÍCH DẪN (BẮT BUỘC): 
+         - Khi tham khảo thông tin, hãy chèn link trích dẫn ngay sau câu đó.
+         - Cú pháp BẮT BUỘC: [[ID_CUỘC_HỌP|Đoạn văn bản trích dẫn ngắn]].
+         - ID lấy từ dòng header "DOCUMENT ID: ...".
+         - Ví dụ: "Theo báo cáo, doanh thu tăng trưởng mạnh [[meeting-id-123|doanh thu tăng 20%]]."
+         - ⚠️ LƯU Ý QUAN TRỌNG: Đoạn trích dẫn (phần sau dấu |) phải COPY-PASTE CHÍNH XÁC 100% từ văn bản gốc, không được thay đổi bất kỳ ký tự nào, kể cả dấu câu. Nếu sửa đổi, tính năng tìm kiếm sẽ bị lỗi.
+      4. Sử dụng format Markdown cho câu trả lời dễ đọc (bold, list...).
       `;
     } else {
       // [PROMPT NÂNG CẤP] Cho tóm tắt tổng hợp (Full Summary)

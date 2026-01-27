@@ -11,12 +11,21 @@ import {
     Loader2,
     Plus,
     RefreshCw,
+    Square,
+    CheckSquare,
+    MessageSquare,
+    X,
+    Send,
+    Trash2,
+    Sparkles,
 } from "lucide-react";
 import { getAllMeetings, Meeting, saveMeeting } from "../lib/db";
 import { useAuth } from "../context/AuthContext";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { useRouter } from "next/navigation";
+import AIChatModal from "./AIChatModal";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown"; // Optional for rendering MD answer
 
 export default function MinutesState() {
     const { user } = useAuth();
@@ -26,6 +35,18 @@ export default function MinutesState() {
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // 🟢 SELECTION & QA STATE
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [showAIChat, setShowAIChat] = useState(false);
+
+    const toggleSelection = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedIds(newSet);
+    };
 
     const loadMeetings = async () => {
         if (!user) return;
@@ -352,6 +373,11 @@ export default function MinutesState() {
                                             className="group hover:bg-indigo-50/50 cursor-pointer transition-colors"
                                         >
                                             <td className="px-6 py-4">
+                                                <button onClick={(e) => toggleSelection(meeting.id, e)} className="text-slate-400 hover:text-indigo-600 transition-colors">
+                                                    {selectedIds.has(meeting.id) ? <CheckSquare className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5" />}
+                                                </button>
+                                            </td>
+                                            <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 font-bold text-xs">
                                                         {meeting.title.charAt(0).toUpperCase()}
@@ -397,6 +423,9 @@ export default function MinutesState() {
                                     className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 active:scale-[0.98] transition-all cursor-pointer"
                                 >
                                     <div className="flex items-start gap-3">
+                                        <button onClick={(e) => toggleSelection(meeting.id, e)} className="mt-1 shrink-0">
+                                            {selectedIds.has(meeting.id) ? <CheckSquare className="w-6 h-6 text-indigo-600" /> : <Square className="w-6 h-6 text-slate-300" />}
+                                        </button>
                                         <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 font-bold text-sm">
                                             {meeting.title.charAt(0).toUpperCase()}
                                         </div>
@@ -432,6 +461,44 @@ export default function MinutesState() {
                     </div>
                 )}
             </main>
+
+            {/* 🟢 FLOATING ACTION PANEL */}
+            {selectedIds.size > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-6 z-50 animate-in slide-in-from-bottom-4 transition-all hover:scale-105 cursor-default">
+                    <span className="font-semibold text-sm">{selectedIds.size} đã chọn</span>
+                    <div className="h-6 w-px bg-slate-700"></div>
+                    <button
+                        onClick={() => setShowAIChat(true)}
+                        className="flex items-center gap-2 text-indigo-300 hover:text-white transition-colors font-bold text-sm"
+                    >
+                        <Sparkles className="w-4 h-4" />
+                        Hỏi AI
+                    </button>
+                    {/* Clear selection */}
+                    <button
+                        onClick={() => setSelectedIds(new Set())}
+                        className="text-slate-500 hover:text-white transition-colors"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            )}
+
+            {/* 🟢 AI CHAT MODAL */}
+            <AIChatModal
+                isOpen={showAIChat}
+                onClose={() => setShowAIChat(false)}
+                contextText={meetings.filter(m => selectedIds.has(m.id)).map(m => `
+--- DOCUMENT ID: ${m.id} | TITLE: ${m.title} (${new Date(m.createdAt).toLocaleDateString()}) ---
+${m.summary}
+---------------------------------------------
+`).join("\n\n")}
+                contextCount={selectedIds.size}
+                onClearContext={() => {
+                    setShowAIChat(false);
+                    setSelectedIds(new Set());
+                }}
+            />
         </div>
     );
 }
