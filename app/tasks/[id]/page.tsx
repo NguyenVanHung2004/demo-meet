@@ -13,6 +13,8 @@ import {
   User,
   Clock,
   CheckCircle,
+  ExternalLink,
+  Download,
 } from "lucide-react";
 import {
   getMeetingById,
@@ -56,40 +58,40 @@ export default function ActionItemPage() {
           const mappedTasks = rawTasks.map((t: any) => {
             // 1. Chuẩn hóa các chuỗi
             const normalize = (str: any) => str ? String(str).normalize("NFC").toLowerCase().trim() : "";
-            
+
             let currentEmails: string[] = [];
             if (Array.isArray(t.email)) currentEmails = t.email;
             else if (typeof t.email === "string" && t.email) currentEmails = [t.email];
 
             // 2. Tìm danh sách email theo Team/Department (Luôn tính toán sẵn)
             let autoEmails: string[] = [];
-            
+
             // Tìm theo TEAM
             if (t.team) {
-               const targetTeam = normalize(t.team);
-               autoEmails = loadedMembers
-                  .filter(m => normalize(m.team) === targetTeam)
-                  .map(m => m.email);
-            } 
+              const targetTeam = normalize(t.team);
+              autoEmails = loadedMembers
+                .filter(m => normalize(m.team) === targetTeam)
+                .map(m => m.email);
+            }
             // Tìm theo DEPARTMENT
             else if (t.department) {
-               const targetDept = normalize(t.department);
-               autoEmails = loadedMembers
-                  .filter(m => normalize(m.department) === targetDept)
-                  .map(m => m.email);
+              const targetDept = normalize(t.department);
+              autoEmails = loadedMembers
+                .filter(m => normalize(m.department) === targetDept)
+                .map(m => m.email);
             }
 
             // 3. QUYẾT ĐỊNH CHỌN EMAIL:
             // Nếu assignee là "Chưa rõ", "Team", "Mọi người"... -> ƯU TIÊN dùng autoEmails (từ Dept/Team)
             // Ngược lại -> Giữ nguyên email cũ, chỉ dùng autoEmails nếu cũ bị rỗng
             const isVague = !t.assigneeName || ["chưa rõ", "team", "mọi người", "cả phòng", "nhóm"].some(k => normalize(t.assigneeName).includes(k));
-            
+
             if (isVague && autoEmails.length > 0) {
-                 // Ghi đè bằng danh sách phòng ban
-                 currentEmails = autoEmails;
+              // Ghi đè bằng danh sách phòng ban
+              currentEmails = autoEmails;
             } else if (currentEmails.length === 0 && autoEmails.length > 0) {
-                 // Fill nếu đang rỗng
-                 currentEmails = autoEmails;
+              // Fill nếu đang rỗng
+              currentEmails = autoEmails;
             }
 
             return {
@@ -109,6 +111,85 @@ export default function ActionItemPage() {
 
     fetchData();
   }, [id, authLoading, user]);
+
+  // 🟢 HELPER: Tạo link Google Calendar (Thư ký mời người khác)
+  const createCalendarLink = (taskItem: TaskItem) => {
+    const title = encodeURIComponent(`[Task] ${taskItem.task}`);
+    const details = encodeURIComponent(`Nhiệm vụ từ cuộc họp: ${meetingTitle}\n\nNgười thực hiện: ${taskItem.email.join(", ")}`);
+
+    // Xử lý thời gian
+    // Nếu có deadline -> Set thời gian là Deadline (trong 1 tiếng)
+    // Nếu không -> Set là ngày mai 9h sáng
+    let startDate = new Date();
+    let endDate = new Date();
+
+    if (taskItem.deadline && taskItem.deadline.includes("T")) {
+      startDate = new Date(taskItem.deadline);
+      endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // +1 tiếng
+    } else {
+      startDate.setDate(startDate.getDate() + 1);
+      startDate.setHours(9, 0, 0, 0); // 9h sáng mai
+      endDate.setHours(10, 0, 0, 0);
+    }
+
+    const formatTime = (d: Date) => d.toISOString().replace(/-|:|\.\d+/g, "");
+
+    // Tham số 'add' là để điền sẵn email khách mời (Assignee)
+    const emails = taskItem.email.length > 0 ? `&add=${taskItem.email.join(",")}` : "";
+
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${formatTime(startDate)}/${formatTime(endDate)}${emails}`;
+  };
+
+  // 🟢 HELPER: Xuất tất cả ra file .ics (cho Outlook/Google Calendar Import)
+  const handleExportToICS = () => {
+    if (tasks.length === 0) return toast.error("Chưa có nhiệm vụ nào để xuất!");
+
+    let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//DemoMeet//Task Manager//EN\n";
+
+    tasks.forEach((task) => {
+      // 1. Thời gian (Mặc định +1 ngày nếu không có deadline)
+      let startDate = new Date();
+      if (task.deadline && task.deadline.includes("T")) {
+        startDate = new Date(task.deadline);
+      } else {
+        startDate.setDate(startDate.getDate() + 1);
+        startDate.setHours(9, 0, 0, 0);
+      }
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 tiếng
+
+      const formatICSDate = (d: Date) => d.toISOString().replace(/-|:|\.\d+/g, "");
+
+      // 2. Tạo Event
+      icsContent += "BEGIN:VEVENT\n";
+      icsContent += `UID:${Date.now()}_${Math.random().toString(36).substr(2, 9)}@demomeet.com\n`;
+      icsContent += `DTSTAMP:${formatICSDate(new Date())}\n`;
+      icsContent += `DTSTART:${formatICSDate(startDate)}\n`;
+      icsContent += `DTEND:${formatICSDate(endDate)}\n`;
+      icsContent += `SUMMARY:[Task] ${task.task}\n`;
+      icsContent += `DESCRIPTION:Nhiệm vụ từ: ${meetingTitle}\\nNgười thực hiện: ${task.email.join(", ")}\n`;
+
+      // 3. Thêm Attendee (Khách mời)
+      task.email.forEach(email => {
+        icsContent += `ATTENDEE;RSVP=TRUE:mailto:${email}\n`;
+      });
+
+      icsContent += "END:VEVENT\n";
+    });
+
+    icsContent += "END:VCALENDAR";
+
+    // 4. Trigger Download
+    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `tasks_${Date.now()}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast.success("Đã tải file lịch (.ics). Hãy mở nó để Import!");
+  };
 
   // 2. Hàm Lưu lại (Save Draft)
   const handleSave = async () => {
@@ -199,6 +280,16 @@ export default function ActionItemPage() {
         </div>
 
         <div className="flex gap-2">
+          {/* Nút Xuất Lịch (MỚI) */}
+          <button
+            onClick={handleExportToICS}
+            className="px-3 py-2 text-indigo-600 bg-indigo-50 border border-indigo-100 font-bold rounded-lg hover:bg-indigo-100 flex items-center gap-2 transition"
+            title="Tải file lịch để Import vào Google Calendar/Outlook"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Xuất Lịch (.ics)</span>
+          </button>
+
           <button
             onClick={handleSave}
             className="px-4 py-2 text-slate-600 bg-white border border-slate-300 font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2"
@@ -360,9 +451,20 @@ export default function ActionItemPage() {
                         setTasks(tasks.filter((_, i) => i !== idx))
                       }
                       className="text-slate-300 hover:text-red-500 p-2"
+                      title="Xóa task"
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>
+                    {/* Nút Calendar */}
+                    <a
+                      href={createCalendarLink(task)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-slate-300 hover:text-indigo-600 p-2 inline-block"
+                      title="Tạo lịch mời & Nhắc việc (Google Calendar)"
+                    >
+                      <ExternalLink className="w-5 h-5" />
+                    </a>
                   </td>
                 </tr>
               ))}
@@ -495,6 +597,15 @@ export default function ActionItemPage() {
                     }}
                     className="w-full mt-1 p-2 border border-slate-200 rounded text-sm"
                   />
+                  {/* Link Calendar Mobile */}
+                  <a
+                    href={createCalendarLink(task)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 mt-3 text-indigo-600 text-xs font-bold"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Tạo lịch nhắc việc
+                  </a>
                 </div>
               </div>
             </div>
