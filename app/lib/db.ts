@@ -6,6 +6,7 @@ import {
 } from "firebase/firestore";
 import { Segment, Speaker, RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "./mockData";
 import { parseTranscriptFile } from "./parser";
+import { MeetingTemplate } from "./templates"; // [MỚI] Import Interface
 
 // Định nghĩa trạng thái
 export type MeetingStatus = 'transcribing' | 'transcribed' | 'summarizing' | 'completed' | 'failed' | 'draft';
@@ -258,4 +259,63 @@ export const getExistingTeams = async (userId: string): Promise<string[]> => {
   const members = await getMembers(userId);
   const teams = members.map(m => m.team).filter(Boolean) as string[];
   return Array.from(new Set(teams)).sort();
+};
+
+// --- PHẦN MỚI: QUẢN LÝ CUSTOM TEMPLATES ---
+
+const getTemplateCollection = (userId: string) => {
+  return collection(db, "users", userId, "templates");
+};
+
+// 1. Lấy danh sách template tùy chỉnh
+export const getCustomTemplates = async (userId: string): Promise<MeetingTemplate[]> => {
+  if (!userId) return [];
+  try {
+    const q = query(getTemplateCollection(userId), orderBy("name"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      isCustom: true,
+      userId
+    } as MeetingTemplate));
+  } catch (error) {
+    console.error("Lỗi lấy custom templates:", error);
+    return [];
+  }
+};
+
+// 2. Lưu hoặc Tạo mới Template
+export const saveCustomTemplate = async (userId: string, template: Partial<MeetingTemplate>) => {
+  if (!userId) return;
+  try {
+    const templateRef = template.id
+      ? doc(db, "users", userId, "templates", template.id)
+      : doc(getTemplateCollection(userId)); // Tự sinh ID new
+
+    const dataToSave = {
+      name: template.name,
+      description: template.description || "",
+      structure: template.structure,
+      updatedAt: Date.now()
+    };
+
+    await setDoc(templateRef, dataToSave, { merge: true });
+    return templateRef.id;
+  } catch (error) {
+    console.error("Lỗi lưu template:", error);
+    throw error;
+  }
+};
+
+// 3. Xóa Template
+export const deleteCustomTemplate = async (userId: string, templateId: string) => {
+  if (!userId || !templateId) return;
+  try {
+    const docRef = doc(db, "users", userId, "templates", templateId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.error("Lỗi xóa template:", error);
+    throw error;
+  }
 };

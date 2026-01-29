@@ -10,7 +10,7 @@ export const uploadAudioToFirebase = async (file: File, userId: string): Promise
   // Lưu vào folder riêng của user
   const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
   const storageRef = ref(storage, `users/${userId}/uploads/${fileName}`);
-  
+
   await uploadBytes(storageRef, file);
   return await getDownloadURL(storageRef);
 };
@@ -25,14 +25,14 @@ export const startTranscriptionJob = async (audioUrl: string): Promise<string> =
     },
     body: JSON.stringify({
       input: {
-        action: "transcribe", 
-        audio_url: audioUrl 
+        action: "transcribe",
+        audio_url: audioUrl
       }
     })
   });
 
   const data = await response.json();
-  if (data.id) return data.id; 
+  if (data.id) return data.id;
   throw new Error("RunPod Error: " + JSON.stringify(data));
 };
 
@@ -41,23 +41,23 @@ export const startTranscriptionJob = async (audioUrl: string): Promise<string> =
 // [SỬA] Dùng Gemini (Next.js API) để trả kết quả NGAY LẬP TỨC
 export const requestSegmentSummary = async (text: string, previousSummary: string = ""): Promise<string> => {
   try {
-      const response = await fetch('/api/gemini', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: text,
-            previousSummary: previousSummary, // Gửi kèm ngữ cảnh
-            mode: "segment" 
-          })
-      });
-      
-      const data = await response.json();
-      if (data.summary) return data.summary;
-      return "";
+    const response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: text,
+        previousSummary: previousSummary, // Gửi kèm ngữ cảnh
+        mode: "segment"
+      })
+    });
+
+    const data = await response.json();
+    if (data.summary) return data.summary;
+    return "";
 
   } catch (e) {
-      console.error("Lỗi Live Summary:", e);
-      return "";
+    console.error("Lỗi Live Summary:", e);
+    return "";
   }
 };
 
@@ -79,13 +79,13 @@ export const requestSegmentSummary = async (text: string, previousSummary: strin
 //               }
 //             })
 //         });
-        
+
 //         const data = await response.json();
 //         // Trả về Job ID để PollingManager theo dõi
 //         if (data.id) return data.id; 
-        
+
 //         throw new Error("Không lấy được Job ID tóm tắt.");
-  
+
 //     } catch (e) {
 //         console.error("Lỗi Full Summary:", e);
 //         throw e;
@@ -93,31 +93,32 @@ export const requestSegmentSummary = async (text: string, previousSummary: strin
 // };
 
 // ✅ MỚI: Gọi Gemini trả về Text luôn
-export const requestSummary = async (text: string): Promise<string> => {
-    try {
-        console.log("📝 Gửi yêu cầu tóm tắt Full sang Gemini...");
-        
-        const response = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              text: text,
-              mode: "full" // Báo hiệu tóm tắt full
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.summary) {
-            return data.summary; // Trả về nội dung tóm tắt ngay
-        }
-        
-        throw new Error("Gemini không trả về kết quả.");
-  
-    } catch (e) {
-        console.error("Lỗi Full Summary:", e);
-        throw e;
+export const requestSummary = async (text: string, templateStructure?: string): Promise<string> => {
+  try {
+    console.log("📝 Gửi yêu cầu tóm tắt Full sang Gemini...");
+
+    const response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: text,
+        mode: "full", // Báo hiệu tóm tắt full
+        templateStructure: templateStructure // [NEW] Truyền cấu trúc template nếu có
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.summary) {
+      return data.summary; // Trả về nội dung tóm tắt ngay
     }
+
+    throw new Error("Gemini không trả về kết quả.");
+
+  } catch (e) {
+    console.error("Lỗi Full Summary:", e);
+    throw e;
+  }
 };
 
 // --- HÀM 4: CHECK TRẠNG THÁI JOB ---
@@ -131,7 +132,7 @@ export const checkJobStatusOnce = async (jobId: string): Promise<any> => {
         "Content-Type": "application/json"
       }
     });
-    return await response.json(); 
+    return await response.json();
   } catch (error) {
     console.error("Lỗi check status:", error);
     return { status: "FAILED", error: "Network error" };

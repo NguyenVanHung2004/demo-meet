@@ -178,14 +178,15 @@ export default function Page() {
   // ✅ [MỚI] Hàm xử lý tóm tắt chạy ngầm (Fire-and-Forget)
   const handleBackgroundSummarize = async (
     meetingId: string,
-    transcriptText: string
+    transcriptText: string,
+    templateStructure?: string // [NEW] Nhận thêm structure
   ) => {
     // 1. Cập nhật trạng thái "Đang tóm tắt" ngay lập tức để Dashboard hiện icon xoay
     await updateMeetingProcess(meetingId, { status: "summarizing" });
     triggerRefresh();
 
     // 2. Chạy bất đồng bộ (KHÔNG await ở đây để không chặn UI)
-    requestSummary(transcriptText)
+    requestSummary(transcriptText, templateStructure)
       .then(async (summary) => {
         // Khi xong -> Lưu vào DB
         await updateMeetingProcess(meetingId, {

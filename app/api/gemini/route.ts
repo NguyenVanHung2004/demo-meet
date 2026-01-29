@@ -36,7 +36,7 @@ async function generateContentSafe(prompt: string) {
 }
 export async function POST(req: Request) {
   try {
-    const { text, mode, dateContext, previousSummary, departments, teams, question, history } = await req.json();
+    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure } = await req.json();
 
     if (!text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
@@ -50,9 +50,9 @@ export async function POST(req: Request) {
       prompt = `
       Bạn là trợ lý AI chuyên trích xuất công việc (Action Item) từ biên bản cuộc họp.
       THÔNG TIN NGỮ CẢNH:
-    - Thời gian diễn ra cuộc họp: ${dateContext || "Hôm nay"} (Hãy dùng ngày này làm mốc để tính toán các từ chỉ thời gian như 'ngày mai', 'thứ 6 tới').
-    - Danh sách Phòng ban (Department): [${deptListStr}]
-    - Danh sách Nhóm (Team): [${teamListStr}]
+      - Thời gian diễn ra cuộc họp: ${dateContext || "Hôm nay"} (Hãy dùng ngày này làm mốc để tính toán các từ chỉ thời gian như 'ngày mai', 'thứ 6 tới').
+      - Danh sách Phòng ban (Department): [${deptListStr}]
+      - Danh sách Nhóm (Team): [${teamListStr}]
       NHIỆM VỤ: Phân tích đoạn hội thoại (Transcript) dưới đây và trích xuất danh sách các nhiệm vụ/công việc cần thực hiện SAU CUỘC HỌP (Action Items).
       
       ⚠️ QUAN TRỌNG - CHỈ TRÍCH XUẤT CÔNG VIỆC SAU CUỘC HỌP:
@@ -149,6 +149,30 @@ export async function POST(req: Request) {
       `;
     } else {
       // [PROMPT NÂNG CẤP] Cho tóm tắt tổng hợp (Full Summary)
+      // Nếu có templateStructure (Người dùng chọn mẫu), dùng nó. Nếu không, dùng mặc định.
+      const structureInstruction = templateStructure || `
+      # BIÊN BẢN TÓM TẮT CUỘC HỌP
+
+      ## 1. TỔNG QUAN
+      - **Mục đích:** (Tóm tắt mục tiêu chính của cuộc họp trong 1-2 dòng)
+
+      ## 2. NỘI DUNG CHÍNH & THẢO LUẬN
+      - **[Chủ đề 1]:**
+        - Diễn giải ý chính và các kết luận thống nhất...
+        - Các thông số/dữ kiện đi kèm (nếu có)...
+
+      ## 3. TRANH LUẬN & GHI CHÚ QUAN TRỌNG
+      *(Ghi lại các ý kiến trái chiều hoặc các điểm nhấn đặc biệt)*
+      - **[Tên/Vai trò]:** [Nội dung quan điểm]
+
+      ## 4. KẾT LUẬN & KẾ HOẠCH HÀNH ĐỘNG
+      **Các quyết định đã chốt:**
+        - [Quyết định 1]
+
+      **Phân công nhiệm vụ (Action Items):**
+        - [ ] **Ai làm?** - [Nhiệm vụ cụ thể] - [Deadline (ghi chính xác ngày/tháng nếu có)]
+      `;
+
       prompt = `
       Bạn là Thư Ký Cấp Cao chuyên nghiệp. Nhiệm vụ của bạn là tổng hợp biên bản cuộc họp từ văn bản thô (transcript), đảm bảo tính chính xác tuyệt đối của thông tin.
 
@@ -164,34 +188,13 @@ export async function POST(req: Request) {
       "${text}"
 
       YÊU CẦU ĐỊNH DẠNG ĐẦU RA (Markdown):
-
-      # BIÊN BẢN TÓM TẮT CUỘC HỌP
-
-      ## 1. TỔNG QUAN
-      - **Mục đích:** (Tóm tắt mục tiêu chính của cuộc họp trong 1-2 dòng)
-
-      ## 2. NỘI DUNG CHÍNH & THẢO LUẬN
-
-      - **[Chủ đề 1]:**
-        - Diễn giải ý chính và các kết luận thống nhất...
-        - Các thông số/dữ kiện đi kèm (nếu có)...
-
-      - **[Chủ đề 2]:**
-        - Diễn giải ý chính và các kết luận thống nhất...
-
-      ## 3. TRANH LUẬN & GHI CHÚ QUAN TRỌNG
-      *(Ghi lại các ý kiến trái chiều hoặc các điểm nhấn đặc biệt)*
-      - **[Tên/Vai trò]:** [Nội dung quan điểm]
-
-      ## 4. KẾT LUẬN & KẾ HOẠCH HÀNH ĐỘNG
-      **Các quyết định đã chốt:**
-        - [Quyết định 1]
-
-      **Phân công nhiệm vụ (Action Items):**
-        - [ ] **Ai làm?** - [Nhiệm vụ cụ thể] - [Deadline (ghi chính xác ngày/tháng nếu có)]
+      Hãy viết biên bản dựa trên cấu trúc (Template) sau đây:
+      
+      ${structureInstruction}
 
       LƯU Ý TRÌNH BÀY:
       - Văn phong khách quan, chuyên nghiệp.
+      - Tuân thủ chặt chẽ cấu trúc đề bài (các mục H1, H2...).
       - Nếu transcript có thông tin mâu thuẫn (VD: Lúc đầu nói A, sau sửa thành B), hãy ghi nhận thông tin cuối cùng đã được chốt lại (B).
       `;
     }
