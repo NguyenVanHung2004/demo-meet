@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, Pause, ChevronLeft, Save, Sparkles, AlignLeft, Trash2, Loader2 } from "lucide-react";
+import { Mic, Pause, ChevronLeft, Save, Sparkles, AlignLeft, Trash2, Loader2, MonitorPlay } from "lucide-react";
 import useDeepgram from "../hooks/useDeepgram";
 import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api"; // [MỚI] Thêm api mới
 import { saveMeeting } from "../lib/db"; // [MỚI]
@@ -36,12 +36,32 @@ export default function LiveRecordingState({
   const [volume, setVolume] = useState(0);
   const [mobileTab, setMobileTab] = useState<'transcript' | 'summary'>('transcript');
   const [isUploading, setIsUploading] = useState(false); // [MỚI] State loading khi upload
+
+  // [FEATURE] Capture System Audio (Persisted)
+  const [captureSystemAudio, setCaptureSystemAudio] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("captureSystemAudio");
+    if (saved === "true") setCaptureSystemAudio(true);
+  }, []);
+
+  const toggleCaptureSystemAudio = () => {
+    const newValue = !captureSystemAudio;
+    setCaptureSystemAudio(newValue);
+    localStorage.setItem("captureSystemAudio", String(newValue));
+  };
+
   const summariesEndRef = useRef<HTMLDivElement>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const animationRef = useRef<number>(0);
+
+  // Refs for Audio Mixing
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const sysStreamRef = useRef<MediaStream | null>(null);
 
   // --- LOGIC TÓM TẮT THÔNG MINH ---
   const bufferTextRef = useRef("");
@@ -227,13 +247,28 @@ export default function LiveRecordingState({
     return () => clearInterval(interval);
   }, [isListening]);
   const setupVisualizer = (stream: MediaStream) => {
-    const AudioContext = (window.AudioContext || (window as any).webkitAudioContext);
-    const audioCtx = new AudioContext();
+    let audioCtx = audioContextRef.current;
+    if (!audioCtx || audioCtx.state === 'closed') {
+      const AudioContext = (window.AudioContext || (window as any).webkitAudioContext);
+      audioCtx = new AudioContext();
+      audioContextRef.current = audioCtx;
+    } else if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+
+    // Ensure we don't have multiple analyzers connected if resumed
+    // For simplicity, we create new analyzer each time, garbage collection handles the rest?
+    // Better: check if we already have one. But refs are tricky here. 
+    // Just creating new one is fine for this scope.
     const analyzer = audioCtx.createAnalyser();
     const source = audioCtx.createMediaStreamSource(stream);
     source.connect(analyzer);
     analyzer.fftSize = 32;
     const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+
+    // Cancel old animation
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+
     const updateVolume = () => {
       analyzer.getByteFrequencyData(dataArray);
       let sum = 0; for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
@@ -242,19 +277,80 @@ export default function LiveRecordingState({
     };
     updateVolume();
   };
+
   const startRecordingSession = async () => {
     try {
       // [CASE 1] NẾU ĐANG PAUSE -> RESUME LẠI
+      // Check if recorder exists and is paused
       if (streamRef.current && mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
+        console.log("Resuming recording...");
         mediaRecorderRef.current.resume(); // Tiếp tục ghi vào file cũ
-        startListening(streamRef.current, timer);
-        setupVisualizer(streamRef.current); // Bật lại sóng nhạc
-        return;
+
+        // Ensure tracks are active
+        const tracks = streamRef.current.getTracks();
+        if (tracks.some(t => t.readyState === 'ended')) {
+          console.warn("Tracks ended unexpectedly, restarting stream...");
+          // If tracks ended, we must restart fully
+          // Fall through to Case 2...
+          // But first cleanup
+          handeFullStop();
+        } else {
+          startListening(streamRef.current, timer);
+          setupVisualizer(streamRef.current); // Bật lại sóng nhạc
+          return;
+        }
       }
 
       // [CASE 2] NẾU LÀ LẦN ĐẦU -> KHỞI TẠO MỚI
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
+      console.log("Starting new recording session. System Audio:", captureSystemAudio);
+      let finalStream: MediaStream;
+
+      if (!captureSystemAudio) {
+        // --- NORMAL MODE (Mic Only) ---
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = stream;
+        finalStream = stream;
+      } else {
+        // --- HYBRID MODE (Mic + System) ---
+        // 1. Get System Audio (Tab/Screen)
+        const sysStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true, // Required to get audio prompt
+          audio: true // Start with system audio request
+        });
+
+        // Check if user actually shared audio
+        const sysAudioTrack = sysStream.getAudioTracks()[0];
+        if (!sysAudioTrack) {
+          alert("Bạn chưa tích vào 'Chia sẻ âm thanh' (Share system audio). Chỉ có hình ảnh được chia sẻ.");
+          sysStream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        sysStreamRef.current = sysStream;
+
+        // 2. Get Mic Audio
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = micStream;
+
+        // 3. Mix them together
+        const AudioContext = (window.AudioContext || (window as any).webkitAudioContext);
+        const audioCtx = new AudioContext();
+        audioContextRef.current = audioCtx;
+
+        const micSource = audioCtx.createMediaStreamSource(micStream);
+        const sysSource = audioCtx.createMediaStreamSource(sysStream);
+        const dest = audioCtx.createMediaStreamDestination();
+
+        micSource.connect(dest);
+        sysSource.connect(dest);
+
+        finalStream = dest.stream;
+      }
+
+      // Explicitly cleanup old streamRef if exists (should have been cleared, but just in case)
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+      }
+      streamRef.current = finalStream;
 
       // [FIX] Explicit MIME type for compatibility
       let mimeType = 'audio/webm;codecs=opus';
@@ -266,7 +362,7 @@ export default function LiveRecordingState({
       }
       console.log("Using MediaRecorder mimeType:", mimeType);
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      const mediaRecorder = new MediaRecorder(finalStream, { mimeType });
       // Đảm bảo không xóa audioChunksRef.current ở đây (bạn đã làm ở bước trước)
 
       mediaRecorder.ondataavailable = (e) => {
@@ -276,28 +372,65 @@ export default function LiveRecordingState({
       mediaRecorder.start(1000);
       mediaRecorderRef.current = mediaRecorder;
 
-      setupVisualizer(stream); // Gọi hàm visualizer đã tách
-      startListening(stream, timer);
-    } catch (err) { alert("Lỗi Micro: " + err); }
+      setupVisualizer(finalStream); // Gọi hàm visualizer đã tách
+      startListening(finalStream, timer);
+    } catch (err) { alert("Lỗi Micro/Permission: " + err); }
   };
 
   const stopRecordingSession = () => {
-    stopListening(); // Tắt Deepgram để tiết kiệm tiền/băng thông
+    // 1. Tắt Deepgram/Socket (Tiết kiệm)
+    stopListening();
 
-    // CHỈ PAUSE RECORDER, KHÔNG STOP HẲN
+    // 2. Pause MediaRecorder (Không stop để resume được)
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.pause();
     }
 
-    // Tắt visualizer
+    // 3. Tắt Visualizer Animation
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     setVolume(0);
 
-    // QUAN TRỌNG: KHÔNG ĐƯỢC GỌI track.stop() Ở ĐÂY
-    // Nếu gọi track.stop(), luồng mic sẽ chết và không resume được.
+    // [FIX QUAN TRỌNG] KHÔNG được stop tracks hay close AudioContext ở đây.
   };
 
-  const handleToggleRecord = () => { isListening ? stopRecordingSession() : startRecordingSession(); };
+  const handeFullStop = () => {
+    console.log("Cleaning up recording session...");
+    // Stop everything clearly
+    if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+
+    streamRef.current?.getTracks().forEach(track => track.stop()); // Stream mixed hoặc single
+    streamRef.current = null;
+
+    // Clean up mixing sources
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(e => console.error(e));
+      audioContextRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(track => track.stop());
+      micStreamRef.current = null;
+    }
+    if (sysStreamRef.current) {
+      sysStreamRef.current.getTracks().forEach(track => track.stop());
+      sysStreamRef.current = null;
+    }
+  }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      handeFullStop();
+    }
+  }, [])
+
+  const handleToggleRecord = () => {
+    if (isListening) {
+      stopRecordingSession();
+    } else {
+      startRecordingSession();
+    }
+  };
 
   const handleClearTranscript = () => {
     if (confirm("Xóa toàn bộ?")) {
@@ -313,9 +446,8 @@ export default function LiveRecordingState({
 
     // 1. Dừng ghi âm
     stopRecordingSession();
-    // Tắt hẳn mọi thứ tại đây
-    if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
-    streamRef.current?.getTracks().forEach(track => track.stop());
+    handeFullStop(); // [MOD] Make sure everything stops
+
     setIsUploading(true);
 
     try {
@@ -399,16 +531,13 @@ export default function LiveRecordingState({
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
-              if (isListening || segments.length > 0) {
-                // Nếu đang ghi âm hoặc đã có dữ liệu -> Gọi hàm Lưu
-                handleSaveAndProcess();
-              } else {
-                // Nếu chưa có gì -> Quay lại bình thường
-                onBack();
-              }
+              // Nếu chưa Save -> Quay lại báo hỏi
+              // Ở đây ta gọi handeFullStop trước khi back để dọn dẹp
+              handeFullStop();
+              onBack();
             }}
             className="p-2 hover:bg-slate-100 rounded-full text-slate-500"
-            disabled={isUploading} // Khóa nút khi đang lưu để tránh lỗi
+            disabled={isUploading}
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
@@ -441,17 +570,42 @@ export default function LiveRecordingState({
       <div className="flex-1 overflow-hidden flex flex-col md:flex-row p-4 gap-4 md:gap-6">
         {/* LEFT COLUMN */}
         <div className="flex-1 flex flex-col gap-4 min-h-0">
-          {/* VISUALIZER */}
-          <div className="bg-slate-900 rounded-2xl p-4 md:p-6 shadow-lg shrink-0 flex items-center justify-between gap-4 md:flex-col md:justify-center md:h-64 transition-all">
+          {/* VISUALIZER & CONTROLS */}
+          <div className="bg-slate-900 rounded-2xl p-4 md:p-6 shadow-lg shrink-0 flex items-center justify-between gap-4 md:flex-col md:justify-center md:h-64 transition-all relative overflow-hidden">
+
+            {/* [FEATURE] System Audio Toggle */}
+            <div className="absolute top-4 right-4 z-10">
+              <button
+                onClick={() => !isListening && toggleCaptureSystemAudio()}
+                disabled={isListening} // Không cho đổi khi đang ghi
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${captureSystemAudio
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-green-500/20 shadow-lg'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
+                  }`}
+                title="Thu âm cả tiếng từ tab Google Meet/Youtube (Cần chọn tab)"
+              >
+                <MonitorPlay className="w-4 h-4" />
+                {captureSystemAudio ? "Đã bật thu Tab" : "Thu âm Tab"}
+              </button>
+            </div>
+
             <div className="flex items-center justify-center gap-1 h-12 md:h-32 flex-1 md:w-full">
               {[...Array(20)].map((_, i) => {
                 const height = isListening ? Math.min(100, Math.max(15, volume * (1 + Math.random()) * 2)) : 5;
                 return <div key={i} className="w-1.5 md:w-2 bg-indigo-500 rounded-full transition-all duration-75" style={{ height: `${height}%` }}></div>
               })}
             </div>
-            <button onClick={handleToggleRecord} className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center text-white shadow-xl border-4 border-slate-800 transition-transform active:scale-95 shrink-0 ${isListening ? 'bg-yellow-500 animate-pulse' : 'bg-red-600'}`}>
-              {isListening ? <Pause className="w-5 h-5 md:w-6 md:h-6" /> : <Mic className="w-5 h-5 md:w-6 md:h-6" />}
-            </button>
+
+            <div className="flex flex-col items-center gap-3">
+              <button onClick={handleToggleRecord} className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center text-white shadow-xl border-4 border-slate-800 transition-transform active:scale-95 shrink-0 ${isListening ? 'bg-yellow-500 animate-pulse' : 'bg-red-600'}`}>
+                {isListening ? <Pause className="w-5 h-5 md:w-6 md:h-6" /> : <Mic className="w-5 h-5 md:w-6 md:h-6" />}
+              </button>
+              {!isListening && (
+                <p className="text-slate-500 text-xs animate-pulse">
+                  {captureSystemAudio ? "Sẵn sàng (Mic + Tab Audio)" : "Sẵn sàng (Mic Only)"}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* TRANSCRIPT */}
