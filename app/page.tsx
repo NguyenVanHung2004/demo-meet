@@ -20,6 +20,7 @@ import {
 } from "./lib/api";
 import { useGlobalUI } from "./context/GlobalUIProvider";
 import { useAuth } from "./context/AuthContext";
+import DriveImportModal from "./components/DriveImportModal"; // [MỚI]
 import LoginState from "./components/LoginState";
 export type AppState =
   | "DASHBOARD"
@@ -34,6 +35,7 @@ export default function Page() {
   const [currentMeeting, setCurrentMeeting] = useState<Meeting | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false); // [MỚI]
   const { toast, confirm } = useGlobalUI(); // [MỚI]
   useEffect(() => {
     const initData = async () => {
@@ -49,6 +51,16 @@ export default function Page() {
     };
     initData();
   }, [user]);
+  // [MỚI] Auto open Drive modal if redirected back from Google
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('drive_connected') === 'true') {
+      setIsDriveModalOpen(true);
+      window.history.replaceState({}, '', window.location.pathname);
+      toast.success("Kết nối Google Drive thành công!");
+    }
+  }, []); // Run once on mount
+
   if (loading) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-white">
@@ -269,8 +281,16 @@ export default function Page() {
           onLive={() => setCurrentState("LIVE_RECORDING")}
           onOpenMeeting={handleViewDetail}
           onReprocess={handleReprocess}
+          onOpenDrive={() => setIsDriveModalOpen(true)}
         />
       )}
+
+      {/* --- MODALS --- */}
+      <DriveImportModal
+        isOpen={isDriveModalOpen}
+        onClose={() => setIsDriveModalOpen(false)}
+        onImportSuccess={triggerRefresh} // [MỚI] Pass refresh handler
+      />
 
       {currentState === "PROCESSING" && (
         <div className="flex flex-col items-center justify-center h-full space-y-6">
