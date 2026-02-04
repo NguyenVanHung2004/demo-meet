@@ -4,21 +4,22 @@
 import { useState, useEffect } from 'react';
 import { Upload, CheckCircle, RefreshCcw, HardDrive, Video, FileVideo } from 'lucide-react';
 import { uploadAudioToFirebase, startTranscriptionJob } from '../lib/api';
-import { saveMeeting, Meeting } from '../lib/db'; // [MỚI]
+import { saveMeeting, Meeting } from '../lib/db';
 import { useAuth } from '../context/AuthContext';
-
-import { useGlobalUI } from '../context/GlobalUIProvider'; // [MỚI]
+import { useGlobalUI } from '../context/GlobalUIProvider';
+import { convertToMp3 } from '../lib/converter';
 
 export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: { isOpen: boolean; onClose: () => void; onImportSuccess: () => void }) {
     const { user } = useAuth();
-    const { toast } = useGlobalUI(); // [MỚI] Import toast
+    const { toast } = useGlobalUI();
 
     const [isConnected, setIsConnected] = useState(false);
-    const [initializing, setInitializing] = useState(true); // [MỚI] Initial check state
+    const [initializing, setInitializing] = useState(true);
     const [files, setFiles] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [importingId, setImportingId] = useState<string | null>(null);
-    const [showAll, setShowAll] = useState(false); // [NEW] Toggle state
+    const [conversionProgress, setConversionProgress] = useState(0);
+    const [showAll, setShowAll] = useState(false);
 
     // Check connection status on mount or open
     useEffect(() => {
@@ -27,7 +28,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
         } else {
             setInitializing(true); // Reset on close
         }
-    }, [isOpen, showAll]); // [NEW] Re-fetch when showAll changes
+    }, [isOpen, showAll]);
 
     // Check if we have a token (by trying to fetch files)
     const checkDriveStatus = async () => {
@@ -49,7 +50,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
             setIsConnected(false);
         } finally {
             setLoading(false);
-            setInitializing(false); // [MỚI] Done checking
+            setInitializing(false);
         }
     };
 
@@ -60,18 +61,38 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
 
     const handleImport = async (file: any) => {
         if (!user) {
-            alert("Vui lòng đăng nhập để import.");
+            toast.error("Vui lòng đăng nhập để import.");
             return;
         }
 
         setImportingId(file.id);
+        setConversionProgress(0); // Reset progress
+
         try {
             // 1. Download from Drive via Proxy (Server)
             const downloadRes = await fetch(`/api/drive/download?fileId=${file.id}`);
             if (!downloadRes.ok) throw new Error("Failed to download from Drive");
 
             const blob = await downloadRes.blob();
-            const fileObj = new File([blob], file.name, { type: blob.type });
+            let fileObj = new File([blob], file.name, { type: blob.type });
+
+            // [MỚI] 1b. Convert to MP3 if it's a Video or non-MP3 Audio
+            const mimeType = file.mimeType || '';
+            const isVideo = mimeType.includes('video');
+            const isNonMp3Audio = mimeType.includes('audio') && !mimeType.includes('mp3');
+
+            if (isVideo || isNonMp3Audio) {
+                toast.info("Đang chuyển đổi sang MP3 để tối ưu...");
+                try {
+                    fileObj = await convertToMp3(fileObj, (progress) => {
+                        setConversionProgress(progress);
+                    });
+                    toast.success("Chuyển đổi xong! Đang upload...");
+                } catch (convErr) {
+                    console.error("Conversion failed", convErr);
+                    toast.warning("Lỗi chuyển đổi, sẽ dùng file gốc.");
+                }
+            }
 
             // 2. Upload to Firebase (Client SDK - Authenticated)
             const firebaseUrl = await uploadAudioToFirebase(fileObj, user.uid);
@@ -79,7 +100,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
             // 3. Trigger Transcription
             const jobId = await startTranscriptionJob(firebaseUrl);
 
-            // 4. Create local DB Record [MỚI]
+            // 4. Create local DB Record
             const tempId = crypto.randomUUID();
             const newMeeting: Meeting = {
                 id: tempId,
@@ -96,15 +117,16 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
             };
             await saveMeeting(newMeeting);
 
-            alert(`Import started! Job ID: ${jobId}`);
-            window.location.reload(); // Reload to update dashboard
+            toast.success("Đã bắt đầu xử lý file!");
+            onImportSuccess();
             onClose();
 
         } catch (e: any) {
             console.error("Import Error:", e);
-            alert("Import Error: " + e.message);
+            toast.error("Lỗi Import: " + e.message);
         } finally {
             setImportingId(null);
+            setConversionProgress(0);
         }
     };
 
@@ -207,7 +229,14 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
                                                     className="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-green-600 hover:text-white hover:border-green-600 transition flex items-center gap-2 group-hover:bg-green-600 group-hover:text-white group-hover:border-green-600"
                                                 >
                                                     {importingId === file.id ? (
-                                                        <>Importing...</>
+                                                        conversionProgress > 0 && conversionProgress < 100 ? (
+                                                            <span className="flex items-center gap-2">
+                                                                <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
+                                                                {conversionProgress}%
+                                                            </span>
+                                                        ) : (
+                                                            <>Importing...</>
+                                                        )
                                                     ) : (
                                                         <>
                                                             <Upload className="w-4 h-4" /> Import
