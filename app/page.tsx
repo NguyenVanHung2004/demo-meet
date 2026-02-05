@@ -21,6 +21,7 @@ import {
 import { useGlobalUI } from "./context/GlobalUIProvider";
 import { useAuth } from "./context/AuthContext";
 import DriveImportModal from "./components/DriveImportModal"; // [MỚI]
+import BotJoinModal from "./components/BotJoinModal"; // [MỚI]
 import LoginState from "./components/LoginState";
 export type AppState =
   | "DASHBOARD"
@@ -36,6 +37,7 @@ export default function Page() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false); // [MỚI]
+  const [isBotModalOpen, setIsBotModalOpen] = useState(false); // [MỚI]
   const { toast, confirm } = useGlobalUI(); // [MỚI]
   useEffect(() => {
     const initData = async () => {
@@ -282,6 +284,7 @@ export default function Page() {
           onOpenMeeting={handleViewDetail}
           onReprocess={handleReprocess}
           onOpenDrive={() => setIsDriveModalOpen(true)}
+          onOpenBot={() => setIsBotModalOpen(true)} // [MỚI]
         />
       )}
 
@@ -290,6 +293,10 @@ export default function Page() {
         isOpen={isDriveModalOpen}
         onClose={() => setIsDriveModalOpen(false)}
         onImportSuccess={triggerRefresh} // [MỚI] Pass refresh handler
+      />
+      <BotJoinModal
+        isOpen={isBotModalOpen}
+        onClose={() => setIsBotModalOpen(false)}
       />
 
       {currentState === "PROCESSING" && (

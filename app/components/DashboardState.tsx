@@ -20,8 +20,9 @@ import {
   LogOut,
   ClipboardList,
   User,
-  Edit3, // [MỚI]
-  FileText as FileTextIcon // [MỚI] Biên bản icon
+  Edit3,
+  FileText as FileTextIcon,
+  Bot // [MỚI]
 } from "lucide-react";
 import {
   getAllMeetings,
@@ -42,7 +43,8 @@ export default function DashboardState({
   onOpenMeeting,
   refreshSignal,
   onReprocess,
-  onOpenDrive
+  onOpenDrive,
+  onOpenBot // [MỚI]
 }: {
   onImport: (file: File) => void;
   onLive: () => void;
@@ -50,9 +52,10 @@ export default function DashboardState({
   onOpenMeeting: (m: Meeting) => void;
   onReprocess: (m: Meeting) => void;
   onOpenDrive: () => void;
+  onOpenBot: () => void; // [MỚI]
   refreshSignal: number;
 }) {
-  const { user, login, logout } = useAuth(); // [MỚI] Lấy thêm logout
+  const { user, login, logout } = useAuth();
   const { toast, confirm } = useGlobalUI();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
@@ -139,7 +142,7 @@ export default function DashboardState({
       type: "danger",
     });
     if (isConfirmed) {
-      // Logic xóa draft cũng tương tự (dù draft không bao giờ vào trash, nhưng cứ handle cho chắc)
+      // Logic xóa draft also
       const meetingToDelete = meetings.find(m => m.id === id);
       if (meetingToDelete?.status === 'draft') {
         const { deleteDraft } = await import("../lib/indexedDB");
@@ -261,7 +264,6 @@ export default function DashboardState({
         </nav>
 
         <div className="mt-auto pt-6 border-t border-slate-800 space-y-4">
-          {/* [MỚI] Nút Đăng xuất Desktop */}
           <button
             onClick={() => logout()}
             className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors group"
@@ -289,7 +291,6 @@ export default function DashboardState({
             )}
           </h1>
           <div className="flex items-center gap-2 md:gap-4">
-            {/* [MỚI] Nút Đăng xuất Mobile (Chỉ hiện trên màn hình nhỏ) */}
             <button
               onClick={() => logout()}
               className="md:hidden p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
@@ -301,7 +302,14 @@ export default function DashboardState({
 
           {/* Desktop Actions */}
           <div className="hidden md:flex gap-2">
-            {/* [MỚI] Drive Button */}
+            {/* [MỚI] Bot Button */}
+            <button
+              onClick={onOpenBot}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
+            >
+              <Bot className="w-4 h-4" />
+              Mời Bot
+            </button>
             <button
               onClick={onOpenDrive}
               className="text-sm font-medium text-green-600 hover:text-green-800 hover:bg-green-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
@@ -351,7 +359,7 @@ export default function DashboardState({
                 </div>
               </div>
 
-              {/* [FIX] Live Card - ĐÃ BỎ class 'md:hidden' để hiện cả trên Desktop & Mobile */}
+              {/* [FIX] Live Card */}
               <div
                 onClick={onLive}
                 className="group border border-dashed border-red-200 bg-white hover:border-red-400 rounded-xl p-4 md:p-6 flex flex-row md:flex-col items-center justify-start md:justify-center gap-4 cursor-pointer transition-all duration-300 shadow-sm active:scale-[0.98]"
@@ -495,7 +503,7 @@ export default function DashboardState({
                               <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {currentTab === "all" ? (
                                   <>
-                                    {/* ✅ [MỚI] Nút xử lý lại (Chỉ hiện nếu trạng thái là completed/transcribed để tránh spam) */}
+                                    {/* ✅ [MỚI] Nút xử lý lại */}
                                     {["completed", "transcribed"].includes(
                                       m.status
                                     ) && (

@@ -5,6 +5,7 @@ import {
   query, where, orderBy, onSnapshot
 } from "firebase/firestore";
 import { Segment, Speaker, RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "./mockData";
+export type { Segment, Speaker }; // [FIX] Re-export for external use
 import { parseTranscriptFile } from "./parser";
 import { MeetingTemplate } from "./templates"; // [MỚI] Import Interface
 
