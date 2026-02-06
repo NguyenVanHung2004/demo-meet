@@ -28,8 +28,27 @@ export async function POST(req: Request) {
             return NextResponse.json({ received: true });
         }
 
-        if (event === 'complete' && data) {
-            const { mp4, transcript, bot_id, speakers } = data;
+        if ((event === 'complete' || event === 'bot.completed') && data) {
+            const { bot_id, speakers } = data;
+            const mp4 = data.mp4;
+            const transcript = data.transcript;
+
+            // [FIX] Support V1 (mp4/transcript) and V2 (video/transcription url)
+            const mp4Url = mp4 || data.video;
+            let transcriptData = transcript;
+
+            // If V2 returns a transcription URL, fetch it
+            if (!transcriptData && data.transcription) {
+                try {
+                    console.log(`[Webhook] Fetching transcript from: ${data.transcription}`);
+                    const tResponse = await fetch(data.transcription);
+                    if (tResponse.ok) {
+                        transcriptData = await tResponse.json();
+                    }
+                } catch (err) {
+                    console.error("[Webhook] Failed to fetch transcript JSON:", err);
+                }
+            }
 
             // 1. Download MP4 File
             const fileName = `meetingbaas_${bot_id.split('-')[0]}.mp4`; // Shorten ID
@@ -43,19 +62,19 @@ export async function POST(req: Request) {
 
             console.log(`[Webhook] Downloading MP4 to ${filePath}...`);
 
-            try {
-                const response = await fetch(mp4);
-                if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
+            if (mp4Url) {
+                try {
+                    const response = await fetch(mp4Url);
+                    if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
 
-                // Convert web ReadableStream to Node WritableStream
-                // @ts-ignore
-                const buffer = Buffer.from(await response.arrayBuffer());
-                fs.writeFileSync(filePath, buffer);
-                console.log("[Webhook] Download success!");
-            } catch (err) {
-                console.error("[Webhook] Error downloading file:", err);
-                // Continue anyway? Use remote URL as fallback if download fails?
-                // Let's fallback to remote mp4 if local fails (though it expires in 2h)
+                    // Convert web ReadableStream to Node WritableStream
+                    // @ts-ignore
+                    const buffer = Buffer.from(await response.arrayBuffer());
+                    fs.writeFileSync(filePath, buffer);
+                    console.log("[Webhook] Download success!");
+                } catch (err) {
+                    console.error("[Webhook] Error downloading file:", err);
+                }
             }
 
             // 2. Process Transcript -> Segments
@@ -72,8 +91,8 @@ export async function POST(req: Request) {
                 return s ? s.id : "SPEAKER_00";
             };
 
-            if (transcript && Array.isArray(transcript)) {
-                transcript.forEach((block: any) => {
+            if (transcriptData && Array.isArray(transcriptData)) {
+                transcriptData.forEach((block: any) => {
                     // Block has { speaker: "Name", words: [...] }
                     // We can combine all words into one text or keep granule?
                     // Let's combine for readability as segments usually act as sentences/paragraphs

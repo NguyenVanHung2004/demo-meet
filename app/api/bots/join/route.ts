@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
         // Tự động nhận diện URL (Localhost vs Vercel vs Production)
         let appUrl = process.env.NEXT_PUBLIC_APP_URL;
-
+        console.log(appUrl);
         // Nếu không có APP_URL thủ công, thử lấy từ biến môi trường Vercel (chưa bao gồm https://)
         if (!appUrl && process.env.VERCEL_URL) {
             appUrl = `https://${process.env.VERCEL_URL}`;
@@ -50,11 +50,15 @@ export async function POST(req: Request) {
                 bot_image: botImage || "https://i.imgur.com/8f1c8C6.png", // Ảnh Bot mặc định
                 recording_mode: "speaker_view", // Hoặc "gallery_view"
                 entry_message: "Hello, I am recording this meeting for notes.", // [FIX] Sửa bot_entry_message -> entry_message
+                // transcription_enabled: true, // [Optional] Nếu API yêu cầu explicit
                 speech_to_text: {
-                    provider: "Default", // Dùng provider mặc định của họ
+                    provider: "Gladia", // Chuyển sang Gladia để có Transcript
+                    // language: "vi", // Tự động nhận diện
                 },
-                automatic_leave: {
-                    waiting_room_timeout: 600, // 10 phút chờ
+                timeout_config: {
+                    waiting_room_timeout: 600,
+                    no_one_joined_timeout: 600,
+                    silence_timeout: 600
                 },
                 webhook_url: webhookUrl, // Quan trọng: Webhook để nhận kết quả
             }),
