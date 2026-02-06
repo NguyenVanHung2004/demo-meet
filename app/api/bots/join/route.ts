@@ -50,17 +50,23 @@ export async function POST(req: Request) {
                 bot_image: botImage || "https://i.imgur.com/8f1c8C6.png", // Ảnh Bot mặc định
                 recording_mode: "speaker_view", // Hoặc "gallery_view"
                 entry_message: "Hello, I am recording this meeting for notes.", // [FIX] Sửa bot_entry_message -> entry_message
-                // transcription_enabled: true, // [Optional] Nếu API yêu cầu explicit
-                speech_to_text: {
-                    provider: "Gladia", // Chuyển sang Gladia để có Transcript
+                transcription_enabled: true, // [Optional] Nếu API yêu cầu explicit
+                transcription_config: {
+                    provider: "gladia", // Chuyển sang Gladia để có Transcript
                     // language: "vi", // Tự động nhận diện
+                },
+                custom_params: {
+                    language_config: {
+                        languages: ["vi"],
+                        code_switching: true
+                    }
                 },
                 timeout_config: {
                     waiting_room_timeout: 600,
                     no_one_joined_timeout: 600,
                     silence_timeout: 600
                 },
-                webhook_url: webhookUrl, // Quan trọng: Webhook để nhận kết quả
+                // webhook_url: webhookUrl, // [DISABLED] User polls for data
             }),
         });
 
@@ -81,7 +87,8 @@ export async function POST(req: Request) {
         }
 
         const data = await response.json();
-        return NextResponse.json({ success: true, botId: data.bot_id });
+        // V2 Response structure: { success: true, data: { bot_id: "..." } }
+        return NextResponse.json({ success: true, botId: data.data.bot_id });
 
     } catch (error: any) {
         console.error("Internal Error:", error);

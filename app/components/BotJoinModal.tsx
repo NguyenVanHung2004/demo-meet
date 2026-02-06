@@ -1,10 +1,12 @@
-
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bot, Link as LinkIcon, X, Loader2, CheckCircle, Video } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useGlobalUI } from '../context/GlobalUIProvider';
+import { db, auth, storage } from "@/app/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { saveMeeting, Meeting } from "@/app/lib/db";
 
 export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const { user } = useAuth();
@@ -12,18 +14,15 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
     const [meetingUrl, setMeetingUrl] = useState("");
     const [loading, setLoading] = useState(false);
     const [botId, setBotId] = useState<string | null>(null);
+    const [status, setStatus] = useState<string>("idle"); // idle, joining, waiting, recording, processing, completed
+    const [statusDetails, setStatusDetails] = useState<string>("Đang đợi kết nối...");
 
     const handleJoin = async () => {
         if (!meetingUrl) return toast.error("Vui lòng nhập link cuộc họp!");
         if (!user) return toast.error("Vui lòng đăng nhập!");
 
-        // Kiểm tra URL sơ bộ
-        if (!meetingUrl.includes("meet.google.com") && !meetingUrl.includes("zoom.us") && !meetingUrl.includes("teams.microsoft")) {
-            // Cảnh báo nhẹ nhưng vẫn cho đi
-            toast.info("Link có vẻ lạ, nhưng Bot sẽ thử vào...");
-        }
-
         setLoading(true);
+        setStatus("joining");
         try {
             const res = await fetch("/api/bots/join", {
                 method: "POST",
@@ -38,17 +37,137 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
             const data = await res.json();
             if (res.ok && data.success) {
                 setBotId(data.botId);
-                toast.success("Bot đã nhận lệnh! Hãy chờ 1-2 phút để Bot vào phòng.");
+                setStatus("waiting");
+                toast.success("Bot đã nhận lệnh! Đang theo dõi trạng thái...");
             } else {
                 toast.error(`Lỗi: ${data.error || "Không thể mời bot"}`);
+                setLoading(false);
+                setStatus("idle");
             }
         } catch (e) {
             console.error(e);
             toast.error("Lỗi kết nối server.");
-        } finally {
             setLoading(false);
+            setStatus("idle");
         }
     };
+
+    // Polling Effect
+    useEffect(() => {
+        if (!botId || status === 'completed') return;
+
+        const checkStatus = async () => {
+            try {
+                if (!user) {
+                    console.log("[Polling] Skipped: No user");
+                    return;
+                }
+
+                console.log("[Polling] Checking:", botId);
+                const res = await fetch(`/api/bots/status?botId=${botId}&userId=${user.uid}`);
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    try {
+                        const err = JSON.parse(text);
+                        console.error("[Polling] Failed JSON:", res.status, err);
+                    } catch (e) {
+                        console.error("[Polling] Failed Raw:", res.status, text);
+                    }
+                    return;
+                }
+
+                const data = await res.json();
+                console.log("[Polling] Data:", data);
+
+                if (data.status === 'failed' || data.error) {
+                    setStatus("idle");
+                    // Hiển thị lỗi từ server nếu có
+                    toast.error(data.error || "Bot không thể tham gia cuộc họp.");
+                    setBotId(null);
+                    return;
+                }
+
+                if (data.status) {
+                    // Update Status Text
+                    if (data.status === 'call_ended' || data.status === 'completed') {
+                        setStatus("completed");
+
+                        // [HYBRID FIX] Server sends data, Client saves it to Firestore
+                        if (data.shouldSave && data.meetingData) {
+                            try {
+                                let finalMeetingData = { ...data.meetingData };
+
+                                // [NEW] Upload Audio lên Firebase Storage (nếu có URL từ S3)
+                                if (finalMeetingData.audioUrl && finalMeetingData.audioUrl.startsWith("http")) {
+                                    setStatusDetails("Đang tải file ghi âm lên Cloud...");
+
+                                    // [CORS FIX] Dùng Proxy để tải file (tránh lỗi Failed to fetch)
+                                    const proxyUrl = `/api/proxy-file?url=${encodeURIComponent(finalMeetingData.audioUrl)}`;
+                                    const response = await fetch(proxyUrl);
+
+                                    if (!response.ok) throw new Error(`Proxy Fetch Error: ${response.status}`);
+
+                                    const blob = await response.blob();
+
+                                    // File path: users/{userId}/uploads/{filename} (Match existing convention)
+                                    const storageRef = ref(storage, `users/${user.uid}/uploads/meetingbaas_${finalMeetingData.id}.mp3`);
+                                    const uploadTask = await uploadBytesResumable(storageRef, blob);
+                                    const downloadURL = await getDownloadURL(uploadTask.ref);
+
+                                    console.log("Uploaded Audio to:", downloadURL);
+                                    finalMeetingData.audioUrl = downloadURL; // Replace S3 URL with Firebase URL
+                                }
+
+                                setStatusDetails("Đang lưu biên bản...");
+                                await saveMeeting(finalMeetingData);
+                                toast.success("Đã kết xuất biên bản thành công!");
+                                setTimeout(() => {
+                                    onClose();
+                                    window.location.reload();
+                                }, 1500);
+                            } catch (error) {
+                                console.error("Save Error:", error);
+                                toast.error("Lỗi khi lưu dữ liệu!");
+                            }
+                        } else if (data.saved) {
+                            // Backup case: maybe server saved it (old logic)
+                            toast.success("Đã xong!");
+                            setTimeout(() => {
+                                onClose();
+                                window.location.reload();
+                            }, 1500);
+                        }
+                    } else if (data.status === 'in_call_recording') {
+                        setStatus("recording");
+                        setStatusDetails("Bot đang ghi âm...");
+                    } else if (data.status === 'joining') {
+                        setStatus("joining");
+                        setStatusDetails("Bot đang vào phòng...");
+                    } else if (data.status === 'transcribing') {
+                        setStatus("waiting");
+                        setStatusDetails("Đang chuyển đổi giọng nói thành văn bản...");
+                    } else if (data.status === 'processing') {
+                        setStatus("waiting");
+                        setStatusDetails("Đang xử lý dữ liệu...");
+                    } else {
+                        setStatusDetails(`Trạng thái: ${data.status}`);
+                    }
+                }
+            } catch (err) {
+                console.error("[Polling] Error:", err);
+            }
+        };
+
+        // Call immediately
+        checkStatus();
+
+        // Then interval
+        const interval = setInterval(checkStatus, 5000);
+
+        return () => clearInterval(interval);
+    }, [botId, status, user, onClose, toast]);
+
 
     if (!isOpen) return null;
 
@@ -66,35 +185,47 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                         </div>
                         <h2 className="text-xl font-bold">Mời Bot Tham Gia</h2>
                     </div>
-                    <p className="text-blue-100 text-sm">Bot sẽ tự động vào phòng họp, ghi âm và gỡ băng cho bạn.</p>
                 </div>
 
                 <div className="p-6 space-y-6">
                     {botId ? (
-                        <div className="text-center space-y-4 py-4">
-                            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
-                                <CheckCircle className="w-8 h-8" />
-                            </div>
+                        <div className="text-center space-y-6 py-4">
+                            {status === 'completed' ? (
+                                <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                                    <CheckCircle className="w-10 h-10" />
+                                </div>
+                            ) : (
+                                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto relative">
+                                    <Loader2 className="w-10 h-10 animate-spin absolute" />
+                                    <Bot className="w-5 h-5" />
+                                </div>
+                            )}
+
                             <div>
-                                <h3 className="text-lg font-bold text-slate-800">Đã gửi yêu cầu thành công!</h3>
-                                <p className="text-slate-500 text-sm mt-1">
-                                    Bot ID: <span className="font-mono text-slate-700 bg-slate-100 px-1 rounded">{botId.split('-')[0]}...</span>
+                                <h3 className="text-xl font-bold text-slate-800">
+                                    {status === 'completed' ? "Hoàn tất!" : "Bot đang làm việc"}
+                                </h3>
+                                <p className="text-slate-500 font-medium mt-2 animate-pulse">
+                                    {statusDetails}
                                 </p>
+                                <p className="text-xs text-slate-400 mt-1 font-mono">ID: {botId.split('-')[0]}</p>
                             </div>
-                            <div className="bg-slate-50 p-4 rounded-xl text-sm text-left border border-slate-100">
-                                <p className="font-bold text-slate-700 mb-2">👉 Bước tiếp theo:</p>
-                                <ul className="list-disc pl-5 space-y-1 text-slate-600">
-                                    <li>Chờ 1-2 phút, Bot sẽ xuất hiện trong phòng họp.</li>
-                                    <li>Chủ phòng (Host) cần <strong>Duyệt (Admit)</strong> cho Bot vào.</li>
-                                    <li>Khi kết thúc họp, kết quả sẽ tự động hiện ở trang chủ.</li>
-                                </ul>
-                            </div>
-                            <button
-                                onClick={onClose}
-                                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition"
-                            >
-                                Đóng cửa sổ
-                            </button>
+
+                            {status === 'recording' && (
+                                <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+                                    <div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />
+                                    Đang Ghi Âm
+                                </div>
+                            )}
+
+                            {status !== 'completed' && (
+                                <button
+                                    onClick={onClose}
+                                    className="text-slate-400 hover:text-slate-600 text-sm hover:underline"
+                                >
+                                    Ẩn xuống nền (Bot vẫn chạy)
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <>
@@ -108,21 +239,14 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                         <input
                                             value={meetingUrl}
                                             onChange={(e) => setMeetingUrl(e.target.value)}
-                                            placeholder="https://meet.google.com/abc-xyz-..."
-                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-medium"
+                                            placeholder="https://meet.google.com/..."
+                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium"
                                         />
                                     </div>
                                 </div>
-
-                                {/* LOCALHOST WARNING */}
-                                {window.location.hostname === 'localhost' && (
-                                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg flex gap-3">
-                                        <div className="text-amber-500 shrink-0 mt-0.5">⚠️</div>
-                                        <p className="text-xs text-amber-700 leading-relaxed">
-                                            <strong>Đang chạy Localhost:</strong> Bot sẽ không thể trả kết quả về đây trừ khi bạn dùng <u>ngrok</u> để public cổng 3000.
-                                        </p>
-                                    </div>
-                                )}
+                                <p className="text-xs text-slate-500 italic">
+                                    * Bot sẽ tự động rời phòng khi kết thúc.
+                                </p>
                             </div>
 
                             <button
