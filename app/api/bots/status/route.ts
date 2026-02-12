@@ -110,108 +110,15 @@ export async function GET(req: Request) {
             // [VERCEL FIX] Không tải file về server -> Trả link S3 cho Client tự xử lý
             const finalAudioUrl = mediaUrl;
 
-            // Map Segments
-            let mappedSegments: Segment[] = [];
+            // [HYBRID] Return raw diarization for Local Processing
+            const diarizationData = botData.diarization;
 
-            // Generate initial speaker list from Bot Data
+            // Generate initial speaker list from Bot Data (Backup)
             let speakerList: Speaker[] = (speakers || []).map((s: any, idx: number) => ({
                 id: `SPEAKER_${idx.toString().padStart(2, '0')}`,
                 name: s.name || `Speaker ${idx + 1}`,
                 color: "bg-indigo-100 text-indigo-700"
             }));
-
-            // Helper to find or add speaker
-            const getSpeakerId = (name: string) => {
-                let sp = speakerList.find(x => x.name === name);
-                if (!sp) {
-                    // Auto-add new speaker if found in transcript but not in bot data
-                    const newId = `SPEAKER_${speakerList.length.toString().padStart(2, '0')}`;
-                    sp = { id: newId, name: name || "Unknown Speaker", color: "bg-gray-100 text-gray-700" };
-                    speakerList.push(sp);
-                }
-                return sp.id;
-            };
-
-            // Parsing Logic
-            // 1. Gladia Raw Format (User Provided): { transcriptions: [ { transcription: { utterances: [...] } } ] }
-            if (transcriptData && Array.isArray(transcriptData.transcriptions) && transcriptData.transcriptions.length > 0) {
-                const utterances = transcriptData.transcriptions[0]?.transcription?.utterances || [];
-
-                utterances.forEach((utt: any) => {
-                    const speakerName = (typeof utt.speaker !== 'undefined') ? `Speaker ${utt.speaker}` : "Unknown Speaker";
-                    mappedSegments.push({
-                        id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-                        speakerId: getSpeakerId(String(utt.speaker) || speakerName),
-                        text: utt.text,
-                        start: utt.start,
-                        end: utt.end,
-                        words: Array.isArray(utt.words) ? utt.words.map((w: any) => ({
-                            word: w.word,
-                            start: w.start,
-                            end: w.end,
-                            confidence: w.confidence
-                        })) : []
-                    });
-                });
-            }
-            // 2. Gladia V1 Format: { result: { utterances: [...] } }
-            else if (transcriptData && transcriptData.result && Array.isArray(transcriptData.result.utterances)) {
-                transcriptData.result.utterances.forEach((utt: any) => {
-                    mappedSegments.push({
-                        id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-                        speakerId: getSpeakerId(utt.speaker),
-                        text: utt.text,
-                        start: utt.start,
-                        end: utt.end,
-                        words: Array.isArray(utt.words) ? utt.words.map((w: any) => ({
-                            word: w.word,
-                            start: w.start,
-                            end: w.end,
-                            confidence: w.confidence
-                        })) : []
-                    });
-                });
-            }
-            // 3. Simple Array Format
-            else if (transcriptData && Array.isArray(transcriptData)) {
-                transcriptData.forEach((block: any) => {
-                    if (!block.words || block.words.length === 0) return;
-                    mappedSegments.push({
-                        id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-                        speakerId: getSpeakerId(block.speaker),
-                        text: block.words.map((w: any) => w.word).join(" "),
-                        start: block.words[0].start,
-                        end: block.words[block.words.length - 1].end,
-                        words: block.words
-                    });
-                });
-            }
-
-            // [NEW] Merge Consecutive Segments from the same Speaker
-            if (mappedSegments.length > 0) {
-                const merged: Segment[] = [];
-                let current = mappedSegments[0];
-
-                for (let i = 1; i < mappedSegments.length; i++) {
-                    const next = mappedSegments[i];
-
-                    // If same speaker and gap is small (e.g., < 2 seconds), merge them
-                    // Or strictly same speaker? Usually same speaker is enough.
-                    if (next.speakerId === current.speakerId) {
-                        current.text += " " + next.text;
-                        current.end = next.end;
-                        // Merge words if they exist
-                        if (next.words && next.words.length > 0) {
-                            current.words = (current.words || []).concat(next.words);
-                        }
-                    } else {
-                        merged.push(current);
-                        current = next;
-                    }
-                }
-                merged.push(current);
-                mappedSegments = merged;
-            }
 
             // Construct Meeting Object (BUT DO NOT SAVE)
             const meetingData: Meeting = {
@@ -219,13 +126,16 @@ export async function GET(req: Request) {
                 userId: userId,
                 title: `Meeting Report ${new Date().toLocaleDateString('vi-VN')}`,
                 createdAt: Date.now(),
-                duration: mappedSegments.length > 0 ? mappedSegments[mappedSegments.length - 1].end : botData.duration_seconds || 0,
-                audioUrl: finalAudioUrl, // [FIX] Trả về link S3 để Client tự upload lên Firebase
-                segments: mappedSegments,
+                duration: botData.duration_seconds || 0,
+                audioUrl: finalAudioUrl,
+                segments: [], // [HYBRID] Will be filled by Python Server
                 speakers: speakerList,
                 summary: "",
                 status: 'transcribed',
-                isDeleted: false
+                isDeleted: false,
+                // [NEW] Attach Diarization for Client to use
+                // @ts-ignore
+                diarization: diarizationData
             };
 
             return NextResponse.json({

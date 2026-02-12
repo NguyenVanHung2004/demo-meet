@@ -138,3 +138,32 @@ export const checkJobStatusOnce = async (jobId: string): Promise<any> => {
     return { status: "FAILED", error: "Network error" };
   }
 };
+
+// --- HÀM 5: HYBRID TRANSCRIPTION (RunPod Serverless) ---
+export const startHybridTranscriptionJob = async (audioUrl: string, diarization: any[]): Promise<string> => {
+  try {
+    console.log("🔌 Calling RunPod for Hybrid Transcription...");
+    const response = await fetch(`https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${RUNPOD_API_KEY}`
+      },
+      body: JSON.stringify({
+        input: {
+          action: "transcribe_hybrid",
+          audio_url: audioUrl,
+          diarization: diarization
+        }
+      })
+    });
+
+    const data = await response.json();
+    if (data.id) return data.id;
+    throw new Error(`RunPod Error: ${JSON.stringify(data)}`);
+
+  } catch (error) {
+    console.warn("⚠️ Hybrid Transcription Failed:", error);
+    throw error;
+  }
+};

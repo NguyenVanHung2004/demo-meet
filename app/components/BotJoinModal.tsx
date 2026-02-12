@@ -117,6 +117,69 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
 
                                     console.log("Uploaded Audio to:", downloadURL);
                                     finalMeetingData.audioUrl = downloadURL; // Replace S3 URL with Firebase URL
+
+                                    // [HYBRID PIPELINE] Gọi Server Python để Transcribe + Diarize
+                                    // Input: URL file + Bot Diarization
+                                    // [HYBRID PIPELINE] Gọi Server Python để Transcribe + Diarize (ASYNC)
+                                    try {
+                                        setStatusDetails("Đang gửi lệnh xử lý sang Server Local...");
+
+                                        // [FIX] Nếu Diarization là URL -> Fetch JSON content trước khi gửi (Dùng Proxy tránh CORS)
+                                        let diarizationPayload = finalMeetingData.diarization;
+                                        if (typeof diarizationPayload === 'string' && diarizationPayload.startsWith('http')) {
+                                            console.log("Fetching Diarization JSON from URL:", diarizationPayload);
+                                            try {
+                                                // Dùng Proxy để bypass CORS
+                                                const proxyUrl = `/api/proxy-file?url=${encodeURIComponent(diarizationPayload)}`;
+                                                const dRes = await fetch(proxyUrl);
+
+                                                if (dRes.ok) {
+                                                    const text = await dRes.text();
+
+                                                    try {
+                                                        // 1. Try parsing as standard JSON Array
+                                                        diarizationPayload = JSON.parse(text);
+                                                    } catch (jsonErr) {
+                                                        // 2. If valid JSON fails, try NDJSON (Newline Delimited JSON)
+                                                        // Example: {"a":1}\n{"b":2}
+                                                        console.log("Standard JSON parse failed, trying NDJSON...");
+                                                        diarizationPayload = text.trim().split('\n')
+                                                            .map(line => {
+                                                                try { return JSON.parse(line); } catch (e) { return null; }
+                                                            })
+                                                            .filter(item => item !== null);
+                                                    }
+
+                                                    console.log("✅ Fetched Diarization:", Array.isArray(diarizationPayload) ? diarizationPayload.length : "Not Array");
+                                                } else {
+                                                    console.warn("❌ Failed to fetch Diarization JSON via Proxy:", dRes.status);
+                                                    diarizationPayload = [];
+                                                }
+                                            } catch (err) {
+                                                console.warn("❌ Diarization Fetch Error:", err);
+                                                diarizationPayload = [];
+                                            }
+                                        }
+
+                                        // Dynamic Import để tránh lỗi SSR
+                                        const { startHybridTranscriptionJob } = await import("../lib/api");
+                                        const jobId = await startHybridTranscriptionJob(downloadURL, diarizationPayload);
+
+                                        if (jobId) {
+                                            console.log("Hybrid Job Started:", jobId);
+                                            finalMeetingData.jobId = jobId;
+                                            finalMeetingData.status = 'transcribing'; // Để PollingManager tự check tiếp
+                                            finalMeetingData.segments = []; // Chưa có segment
+
+                                            toast.success("Đã gửi xử lý AI! Hệ thống sẽ tự cập nhật khi xong.");
+                                        }
+
+                                    } catch (pyErr) {
+                                        console.error("Hybrid Job Failed:", pyErr);
+                                        toast.warning("Server Local lỗi/tắt. Đã lưu audio gốc.");
+                                        // Fallback: Vẫn lưu meeting nhưng ko có job ID -> Trạng thái sẽ là 'uploaded' hoặc giữ nguyên 'completed' nhưng ko có text
+                                        finalMeetingData.status = 'completed';
+                                    }
                                 }
 
                                 setStatusDetails("Đang lưu biên bản...");

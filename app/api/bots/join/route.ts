@@ -50,7 +50,7 @@ export async function POST(req: Request) {
                 bot_image: botImage || "https://png.pngtree.com/png-vector/20201224/ourmid/pngtree-future-intelligent-technology-robot-ai-png-image_2588803.jpg", // Ảnh Bot mặc định
                 recording_mode: "speaker_view", // Hoặc "gallery_view"
                 entry_message: "Xin chào, tôi là Meeting AI Bot, tôi sẽ ghi âm cuộc họp này để tóm tắt lại cho bạn.", // [FIX] Sửa bot_entry_message -> entry_message
-                transcription_enabled: true, // [Optional] Nếu API yêu cầu explicit
+                transcription_enabled: false, // [Optional] Nếu API yêu cầu explicit
                 transcription_config: {
                     provider: "gladia", // Chuyển sang Gladia để có Transcript
                     // language: "vi", // Tự động nhận diện

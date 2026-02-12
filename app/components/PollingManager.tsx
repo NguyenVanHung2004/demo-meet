@@ -50,7 +50,8 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
 
           // [LOGIC CŨ GIỮ NGUYÊN] Xử lý output JSON (Karaoke) hoặc Text
           const rawOutput = jobData.output;
-          const jsonSegments = rawOutput.transcript || (Array.isArray(rawOutput) ? rawOutput : null);
+          // [FIX] Support output.segments format from Hybrid Pipeline
+          const jsonSegments = rawOutput.transcript || rawOutput.segments || (Array.isArray(rawOutput) ? rawOutput : null);
 
           if (jsonSegments && jsonSegments.length > 0) {
             console.log("✅ Polling: Nhận dữ liệu Karaoke (JSON)");
