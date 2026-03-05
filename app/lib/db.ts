@@ -40,6 +40,7 @@ export interface Meeting {
   actionItems?: TaskItem[];
   actionStatus?: ActionItemStatus;
   isMinuteOnly?: boolean; // Flag for imported minutes without audio/transcript
+  language?: "vi" | "en"; // Ngôn ngữ phiên âm: "vi" (mặc định) hoặc "en"
 }
 
 const COLLECTION_NAME = "meetings";

@@ -16,7 +16,7 @@ export const uploadAudioToFirebase = async (file: File, userId: string): Promise
 };
 
 // 2. Gọi RunPod (Chỉ gửi URL, server ko cần sửa gì cả)
-export const startTranscriptionJob = async (audioUrl: string): Promise<string> => {
+export const startTranscriptionJob = async (audioUrl: string, language: "vi" | "en" = "vi"): Promise<string> => {
   const response = await fetch(`https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`, {
     method: 'POST',
     headers: {
@@ -26,7 +26,8 @@ export const startTranscriptionJob = async (audioUrl: string): Promise<string> =
     body: JSON.stringify({
       input: {
         action: "transcribe",
-        audio_url: audioUrl
+        audio_url: audioUrl,
+        language: language
       }
     })
   });
@@ -140,7 +141,7 @@ export const checkJobStatusOnce = async (jobId: string): Promise<any> => {
 };
 
 // --- HÀM 5: HYBRID TRANSCRIPTION (RunPod Serverless) ---
-export const startHybridTranscriptionJob = async (audioUrl: string, diarization: any[]): Promise<string> => {
+export const startHybridTranscriptionJob = async (audioUrl: string, diarization: any[], language: "vi" | "en" = "vi"): Promise<string> => {
   try {
     console.log("🔌 Calling RunPod for Hybrid Transcription...");
     const response = await fetch(`https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`, {
@@ -153,7 +154,8 @@ export const startHybridTranscriptionJob = async (audioUrl: string, diarization:
         input: {
           action: "transcribe_hybrid",
           audio_url: audioUrl,
-          diarization: diarization
+          diarization: diarization,
+          language: language
         }
       })
     });

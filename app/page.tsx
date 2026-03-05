@@ -136,7 +136,7 @@ export default function Page() {
 
   // --- LOGIC ---
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (file: File, language: "vi" | "en" = "vi") => {
     if (!user) return toast.error("Vui lòng đăng nhập!");
 
     const tempId = crypto.randomUUID();
@@ -146,7 +146,7 @@ export default function Page() {
       const url = await uploadAudioToFirebase(file, user.uid);
 
       // 2. Trigger RunPod để lấy Job ID
-      const jobId = await startTranscriptionJob(url);
+      const jobId = await startTranscriptionJob(url, language);
 
       // 3. Lưu Meeting vào Firestore
       // PollingManager sẽ tự quét job này dựa trên status 'transcribing'
@@ -161,7 +161,8 @@ export default function Page() {
         segments: [],
         speakers: [],
         status: 'transcribing',
-        isDeleted: false
+        isDeleted: false,
+        language: language
       };
 
       await saveMeeting(newMeeting);
@@ -250,7 +251,7 @@ export default function Page() {
 
       // 3. [TỐI ƯU] Tái sử dụng URL cũ, KHÔNG CẦN UPLOAD LẠI
       // Chỉ việc gọi RunPod với url đang có sẵn trên Firebase
-      const newJobId = await startTranscriptionJob(meeting.audioUrl);
+      const newJobId = await startTranscriptionJob(meeting.audioUrl, (meeting as any).language ?? "vi");
 
       // 4. Cập nhật lại bản ghi cũ trong Firestore
       // Đưa về trạng thái 'transcribing' để PollingManager bắt đầu làm việc

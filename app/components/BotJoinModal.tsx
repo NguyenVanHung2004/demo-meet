@@ -16,6 +16,7 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
     const [botId, setBotId] = useState<string | null>(null);
     const [status, setStatus] = useState<string>("idle"); // idle, joining, waiting, recording, processing, completed
     const [statusDetails, setStatusDetails] = useState<string>("Đang đợi kết nối...");
+    const [language, setLanguage] = useState<"vi" | "en">("vi");
 
     const handleJoin = async () => {
         if (!meetingUrl) return toast.error("Vui lòng nhập link cuộc họp!");
@@ -163,7 +164,7 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
 
                                         // Dynamic Import để tránh lỗi SSR
                                         const { startHybridTranscriptionJob } = await import("../lib/api");
-                                        const jobId = await startHybridTranscriptionJob(downloadURL, diarizationPayload);
+                                        const jobId = await startHybridTranscriptionJob(downloadURL, diarizationPayload, language);
 
                                         if (jobId) {
                                             console.log("Hybrid Job Started:", jobId);
@@ -307,6 +308,20 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                         />
                                     </div>
                                 </div>
+
+                                {/* Language Selector */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Ngôn ngữ ghi âm</label>
+                                    <select
+                                        value={language}
+                                        onChange={(e) => setLanguage(e.target.value as "vi" | "en")}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700"
+                                    >
+                                        <option value="vi">🇻🇳 Tiếng Việt</option>
+                                        <option value="en">🇬🇧 English</option>
+                                    </select>
+                                </div>
+
                                 <p className="text-xs text-slate-500 italic">
                                     * Bot sẽ tự động rời phòng khi kết thúc.
                                 </p>

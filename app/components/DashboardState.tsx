@@ -46,7 +46,7 @@ export default function DashboardState({
   onOpenDrive,
   onOpenBot // [MỚI]
 }: {
-  onImport: (file: File) => void;
+  onImport: (file: File, language: "vi" | "en") => void;
   onLive: () => void;
   onUseSample: () => void;
   onOpenMeeting: (m: Meeting) => void;
@@ -63,6 +63,7 @@ export default function DashboardState({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const hasShownDraftWarning = useRef(false);
+  const [uploadLanguage, setUploadLanguage] = useState<"vi" | "en">("vi");
 
   const loadMeetings = async () => {
     if (user) {
@@ -335,7 +336,7 @@ export default function DashboardState({
             ref={fileInputRef}
             className="hidden"
             accept="audio/*"
-            onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])}
+            onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0], uploadLanguage)}
           />
 
           {/* ACTION GRID (Chỉ hiện khi ở tab All) */}
@@ -343,19 +344,30 @@ export default function DashboardState({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
               {/* Upload Card */}
               <div
-                onClick={() => fileInputRef.current?.click()}
                 className="group relative border border-dashed border-indigo-200 bg-white hover:border-indigo-400 rounded-xl p-4 md:p-6 flex flex-row md:flex-col items-center justify-start md:justify-center gap-4 cursor-pointer transition-all duration-300 shadow-sm active:scale-[0.98]"
+                onClick={() => fileInputRef.current?.click()}
               >
                 <div className="p-3 bg-indigo-50 text-indigo-600 rounded-full group-hover:scale-110 transition-transform">
                   <UploadCloud className="w-6 h-6 md:w-8 md:h-8" />
                 </div>
-                <div className="text-left md:text-center">
+                <div className="text-left md:text-center flex-1">
                   <span className="font-bold text-slate-700 block text-sm md:text-lg">
                     Tải file lên
                   </span>
                   <span className="text-xs text-slate-400">
                     MP3, WAV (Max 100MB)
                   </span>
+                  {/* Language dropdown - stops propagation to avoid opening file picker immediately */}
+                  <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                    <select
+                      value={uploadLanguage}
+                      onChange={(e) => setUploadLanguage(e.target.value as "vi" | "en")}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1 text-slate-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 w-full md:w-auto"
+                    >
+                      <option value="vi">🇻🇳 Tiếng Việt</option>
+                      <option value="en">🇬🇧 English</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 

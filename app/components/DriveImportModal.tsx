@@ -20,6 +20,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
     const [importingId, setImportingId] = useState<string | null>(null);
     const [conversionProgress, setConversionProgress] = useState(0);
     const [showAll, setShowAll] = useState(false);
+    const [language, setLanguage] = useState<"vi" | "en">("vi");
 
     // Check connection status on mount or open
     useEffect(() => {
@@ -98,7 +99,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
             const firebaseUrl = await uploadAudioToFirebase(fileObj, user.uid);
 
             // 3. Trigger Transcription
-            const jobId = await startTranscriptionJob(firebaseUrl);
+            const jobId = await startTranscriptionJob(firebaseUrl, language);
 
             // 4. Create local DB Record
             const tempId = crypto.randomUUID();
@@ -113,7 +114,8 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
                 segments: [],
                 speakers: [],
                 status: 'transcribing',
-                isDeleted: false
+                isDeleted: false,
+                language: language
             };
             await saveMeeting(newMeeting);
 
@@ -186,6 +188,16 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
                                         <h3 className="font-medium">Recent Recordings</h3>
 
                                         <div className="flex items-center gap-4">
+                                            {/* Language Selector */}
+                                            <select
+                                                value={language}
+                                                onChange={(e) => setLanguage(e.target.value as "vi" | "en")}
+                                                className="text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                                            >
+                                                <option value="vi">🇻🇳 Tiếng Việt</option>
+                                                <option value="en">🇬🇧 English</option>
+                                            </select>
+
                                             {/* [NEW] Show All Toggle */}
                                             <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
                                                 <input
