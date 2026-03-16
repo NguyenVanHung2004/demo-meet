@@ -38,6 +38,7 @@ export default function Page() {
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false); // [MỚI]
   const [isBotModalOpen, setIsBotModalOpen] = useState(false); // [MỚI]
+  const [selectedLiveLanguage, setSelectedLiveLanguage] = useState<"vi" | "en">("vi");
   const { toast, confirm } = useGlobalUI(); // [MỚI]
   useEffect(() => {
     const initData = async () => {
@@ -183,6 +184,11 @@ export default function Page() {
     toast.success("Đã tạo dữ liệu mẫu!");
   };
   // Flow 3: Live Recording (Xử lý tại trình duyệt)
+  const handleLiveStart = (language: "vi" | "en") => {
+    setSelectedLiveLanguage(language);
+    setCurrentState("LIVE_RECORDING");
+  };
+
   // [CẬP NHẬT] Nhận thêm tham số dbSegments từ component con gửi lên
   const handleFinishLive = () => {
     toast.success("Đã lưu ghi âm!");
@@ -281,7 +287,7 @@ export default function Page() {
           refreshSignal={refreshSignal}
           onImport={handleFileUpload}
           onUseSample={handleStartDemo}
-          onLive={() => setCurrentState("LIVE_RECORDING")}
+          onLive={handleLiveStart}
           onOpenMeeting={handleViewDetail}
           onReprocess={handleReprocess}
           onOpenDrive={() => setIsDriveModalOpen(true)}
@@ -309,6 +315,7 @@ export default function Page() {
 
       {currentState === "LIVE_RECORDING" && (
         <LiveRecordingState
+          initialLanguage={selectedLiveLanguage}
           onFinish={handleFinishLive}
           onBack={() => setCurrentState("DASHBOARD")}
         />

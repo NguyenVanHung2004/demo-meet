@@ -25,10 +25,11 @@ const MobileTabBtn = ({ active, onClick, icon: Icon, label }: any) => (
 );
 
 export default function LiveRecordingState({
-  onFinish, onBack
+  onFinish, onBack, initialLanguage = "vi"
 }: {
   onFinish: () => void,
-  onBack: () => void
+  onBack: () => void,
+  initialLanguage?: "vi" | "en"
 }) {
   const { user } = useAuth();
   const [summaries, setSummaries] = useState<SummaryItem[]>([]);
@@ -36,6 +37,7 @@ export default function LiveRecordingState({
   const [volume, setVolume] = useState(0);
   const [mobileTab, setMobileTab] = useState<'transcript' | 'summary'>('transcript');
   const [isUploading, setIsUploading] = useState(false); // [MỚI] State loading khi upload
+  const [language, setLanguage] = useState<"vi" | "en">(initialLanguage);
 
   // [FEATURE] Capture System Audio (Persisted)
   const [captureSystemAudio, setCaptureSystemAudio] = useState(false);
@@ -295,7 +297,7 @@ export default function LiveRecordingState({
           // But first cleanup
           handeFullStop();
         } else {
-          startListening(streamRef.current, timer);
+          startListening(streamRef.current, timer, language);
           setupVisualizer(streamRef.current); // Bật lại sóng nhạc
           return;
         }
@@ -373,7 +375,7 @@ export default function LiveRecordingState({
       mediaRecorderRef.current = mediaRecorder;
 
       setupVisualizer(finalStream); // Gọi hàm visualizer đã tách
-      startListening(finalStream, timer);
+      startListening(finalStream, timer, language);
     } catch (err) { alert("Lỗi Micro/Permission: " + err); }
   };
 
@@ -579,8 +581,8 @@ export default function LiveRecordingState({
                 onClick={() => !isListening && toggleCaptureSystemAudio()}
                 disabled={isListening} // Không cho đổi khi đang ghi
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${captureSystemAudio
-                    ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-green-500/20 shadow-lg'
-                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-green-500/20 shadow-lg'
+                  : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
                   }`}
                 title="Thu âm cả tiếng từ tab Google Meet/Youtube (Cần chọn tab)"
               >

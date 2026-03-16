@@ -77,7 +77,7 @@ export default function useLocalTranscription(
     const serverStartOffsetRef = useRef<number | null>(null);
     // -----------------------------------------------------
 
-    const startListening = async (rawStream: MediaStream, startTimeOffset: number = 0) => {
+    const startListening = async (rawStream: MediaStream, startTimeOffset: number = 0, language: string = "vi") => {
         // 1. CẬP NHẬT THỜI GIAN
         offsetTimeRef.current = startTimeOffset;
         setIsListening(true);
@@ -91,7 +91,8 @@ export default function useLocalTranscription(
         console.log(`🔌 Connecting to ${serverUrl} at offset ${startTimeOffset}s...`);
 
         // 2. SETUP WEBSOCKET
-        const ws = new WebSocket(serverUrl);
+        const finalUrl = `${serverUrl}/?language=${language}`;
+        const ws = new WebSocket(finalUrl);
         socketRef.current = ws;
 
         ws.onopen = () => { console.log("✅ Connected to Local Zipformer Server"); };

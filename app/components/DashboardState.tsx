@@ -47,7 +47,7 @@ export default function DashboardState({
   onOpenBot // [MỚI]
 }: {
   onImport: (file: File, language: "vi" | "en") => void;
-  onLive: () => void;
+  onLive: (language: "vi" | "en") => void;
   onUseSample: () => void;
   onOpenMeeting: (m: Meeting) => void;
   onReprocess: (m: Meeting) => void;
@@ -64,6 +64,7 @@ export default function DashboardState({
   const pathname = usePathname();
   const hasShownDraftWarning = useRef(false);
   const [uploadLanguage, setUploadLanguage] = useState<"vi" | "en">("vi");
+  const [liveLanguage, setLiveLanguage] = useState<"vi" | "en">("vi");
 
   const loadMeetings = async () => {
     if (user) {
@@ -321,7 +322,7 @@ export default function DashboardState({
               Import Drive
             </button>
             <button
-              onClick={onLive}
+              onClick={() => onLive(liveLanguage)}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm shadow-md transition-all active:scale-95"
             >
               <Mic className="w-4 h-4" /> Ghi âm mới
@@ -373,19 +374,30 @@ export default function DashboardState({
 
               {/* [FIX] Live Card */}
               <div
-                onClick={onLive}
+                onClick={() => onLive(liveLanguage)}
                 className="group border border-dashed border-red-200 bg-white hover:border-red-400 rounded-xl p-4 md:p-6 flex flex-row md:flex-col items-center justify-start md:justify-center gap-4 cursor-pointer transition-all duration-300 shadow-sm active:scale-[0.98]"
               >
                 <div className="p-3 bg-red-50 text-red-600 rounded-full group-hover:scale-110 transition-transform">
                   <Mic className="w-6 h-6 md:w-8 md:h-8" />
                 </div>
-                <div className="text-left md:text-center">
+                <div className="text-left md:text-center flex-1">
                   <span className="font-bold text-slate-700 block text-sm md:text-lg">
                     Ghi âm trực tiếp
                   </span>
                   <span className="text-xs text-slate-400">
                     Chuyển giọng nói thành văn bản
                   </span>
+                  {/* Language dropdown for Live Recording */}
+                  <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                    <select
+                      value={liveLanguage}
+                      onChange={(e) => setLiveLanguage(e.target.value as "vi" | "en")}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1 text-slate-600 bg-white focus:outline-none focus:ring-2 focus:ring-red-400 w-full md:w-auto"
+                    >
+                      <option value="vi">🇻🇳 Tiếng Việt</option>
+                      <option value="en">🇬🇧 English</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
