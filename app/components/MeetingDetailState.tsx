@@ -31,6 +31,84 @@ export default function MeetingDetailState({
 
   // State cho menu xuất file
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
+
+  // --- ACTIONS ---
+  const scrollToSegment = (time: number) => {
+    // Tìm segment gần nhất
+    const segment = meeting.segments.find((s: any) => time >= s.start && (s.end ? time < s.end : time < s.start + 10))
+                 || [...meeting.segments].sort((a, b) => Math.abs(a.start - time) - Math.abs(b.start - time))[0];
+
+    const targetTime = segment ? segment.start : time;
+
+    // Cập nhật state để UI highlight segment (Karaoke)
+    setCurrentTime(targetTime);
+    if (audioRef.current) {
+      audioRef.current.currentTime = targetTime;
+    }
+
+    // Thực hiện cuộn chỉ trong container cụ thể
+    const element = document.getElementById(`segment-${targetTime}`);
+    if (element && transcriptContainerRef.current) {
+      const container = transcriptContainerRef.current;
+      const targetScrollTop = element.offsetTop - (container.clientHeight / 4);
+      
+      // Cuộn trực tiếp bằng scrollTo, thử tắt smooth nếu vẫn bị lan truyền
+      container.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: 'smooth' 
+      });
+    }
+  };
+
+  // Helper render text có mốc thời gian
+  const renderTextWithTimestamps = (text: any) => {
+    if (typeof text !== 'string') return text;
+    
+    const parts = text.split(/(\[\d{1,2}:\d{2}\])/g);
+    return parts.map((part, i) => {
+      const match = part.match(/\[(\d{1,2}):(\d{2})\]/);
+      if (match) {
+        const mins = parseInt(match[1]);
+        const secs = parseInt(match[2]);
+        const totalSecs = mins * 60 + secs;
+        return (
+          <span
+            key={i}
+            role="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              scrollToSegment(totalSecs);
+            }}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-mono text-[11px] font-bold transition-colors mx-0.5 border border-indigo-100 shadow-sm cursor-pointer select-none"
+          >
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
+  // Cấu hình custom cho ReactMarkdown
+  const MarkdownComponents = {
+    p: ({ children }: any) => <p className="mb-4 leading-relaxed">{React.Children.map(children, child => renderTextWithTimestamps(child))}</p>,
+    li: ({ children }: any) => <li className="mb-2">{React.Children.map(children, child => renderTextWithTimestamps(child))}</li>,
+    h1: ({ children }: any) => <h1 className="text-xl font-bold text-slate-900 mt-6 mb-3 border-b pb-1">{children}</h1>,
+    h2: ({ children }: any) => <h2 className="text-lg font-bold text-indigo-700 mt-5 mb-2">{children}</h2>,
+    h3: ({ children }: any) => <h3 className="text-base font-bold text-slate-800 mt-4 mb-2">{children}</h3>,
+  };
+
+  // Helper cho HTML Summary
+  const formatHtmlSummary = (html: string) => {
+    if (!html) return "";
+    return html.replace(/\[(\d{1,2}):(\d{2})\]/g, (match, mins, secs) => {
+      const totalSecs = parseInt(mins) * 60 + parseInt(secs);
+      // Sử dụng span thay vì button để tránh tab-focus/scroll behavior
+      return `<span role="button" class="timestamp-btn inline-block cursor-pointer select-none px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-mono text-[11px] font-bold border border-indigo-100 shadow-sm mx-0.5 hover:bg-indigo-100 transition-colors" data-time="${totalSecs}">${match}</span>`;
+    });
+  };
 
   // --- AUDIO CONTROL ---
   useEffect(() => {
@@ -577,8 +655,11 @@ export default function MeetingDetailState({
       <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
 
         {/* COLUMN 1: TRANSCRIPT */}
-        <div className={`flex-1 overflow-y-auto bg-white md:border-r scroll-smooth ${activeTab === 'transcript' ? 'block' : 'hidden md:block'}`}>
-          <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 pb-32">
+        <div 
+          ref={transcriptContainerRef}
+          className={`flex-1 overflow-y-auto bg-white md:border-r ${activeTab === 'transcript' ? 'block' : 'hidden md:block'}`}
+        >
+          <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 pb-32 relative">
             {meeting.segments.map((seg, idx) => {
               // Tạo object speaker chuẩn format cho TranscriptRow
               // 1. Tìm speaker tương ứng trong danh sách meeting.speakers
@@ -594,29 +675,30 @@ export default function MeetingDetailState({
               };
 
               return (
-                <TranscriptRow
-                  key={idx}
-                  segment={seg}
-                  speaker={speakerInfo}
-                  allSpeakers={meeting.speakers} // Truyền danh sách speaker (nếu có)
+                <div key={idx} id={`segment-${seg.start}`}>
+                  <TranscriptRow
+                    segment={seg}
+                    speaker={speakerInfo}
+                    allSpeakers={meeting.speakers} // Truyền danh sách speaker (nếu có)
 
-                  // Truyền biến quan trọng để Karaoke hoạt động
-                  isActive={currentTime >= seg.start && currentTime < (seg.end || seg.start + 10)}
-                  isAudioPlaying={isPlaying}
-                  currentTime={currentTime} // <--- QUAN TRỌNG NHẤT
+                    // Truyền biến quan trọng để Karaoke hoạt động
+                    isActive={currentTime >= seg.start && currentTime < (seg.end || seg.start + 10)}
+                    isAudioPlaying={isPlaying}
+                    currentTime={currentTime} // <--- QUAN TRỌNG NHẤT
 
-                  onTogglePlay={togglePlay}
-                  onSeek={jumpToTime}
+                    onTogglePlay={togglePlay}
+                    onSeek={jumpToTime}
 
-                  // Vì đây là trang Xem (Read-only), ta truyền hàm rỗng cho các chức năng sửa
-                  // Nếu muốn sửa, người dùng sẽ bấm nút "Sửa" trên Header để sang trang EditorState
-                  onTextChange={() => { }}
-                  onSpeakerChange={() => { }}
-                  onSplit={() => { }}
-                  onMerge={() => { }}
-                  onAddRow={() => { }}
-                  onTimeChange={() => { }}
-                />
+                    // Vì đây là trang Xem (Read-only), ta truyền hàm rỗng cho các chức năng sửa
+                    // Nếu muốn sửa, người dùng sẽ bấm nút "Sửa" trên Header để sang trang EditorState
+                    onTextChange={() => { }}
+                    onSpeakerChange={() => { }}
+                    onSplit={() => { }}
+                    onMerge={() => { }}
+                    onAddRow={() => { }}
+                    onTimeChange={() => { }}
+                  />
+                </div>
               );
             })}
 
@@ -633,18 +715,30 @@ export default function MeetingDetailState({
                 <Sparkles className="w-4 h-4" /> AI Tóm tắt
               </h3>
               {meeting.summary ? (
-                meeting.summary.startsWith('<') ? (
-                  // If HTML, render directly
-                  <div
-                    className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none"
-                    dangerouslySetInnerHTML={{ __html: meeting.summary }}
-                  />
-                ) : (
-                  // If Markdown, use ReactMarkdown
-                  <div className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none">
-                    <ReactMarkdown>{meeting.summary}</ReactMarkdown>
-                  </div>
-                )
+                <div 
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.classList.contains('timestamp-btn')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const time = parseInt(target.getAttribute('data-time') || '0');
+                      scrollToSegment(time);
+                    }
+                  }}
+                >
+                  {meeting.summary.startsWith('<') ? (
+                    // If HTML, render directly
+                    <div
+                      className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none"
+                      dangerouslySetInnerHTML={{ __html: formatHtmlSummary(meeting.summary) }}
+                    />
+                  ) : (
+                    // If Markdown, use ReactMarkdown
+                    <div className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none">
+                      <ReactMarkdown components={MarkdownComponents as any}>{meeting.summary}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-slate-400">
                   <Sparkles className="w-12 h-12 mb-2 opacity-20" />

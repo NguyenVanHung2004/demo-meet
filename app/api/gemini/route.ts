@@ -154,20 +154,20 @@ export async function POST(req: Request) {
       # BIÊN BẢN TÓM TẮT CUỘC HỌP
 
       ## 1. TỔNG QUAN
-      - **Mục đích:** (Tóm tắt mục tiêu chính của cuộc họp trong 1-2 dòng)
+      - [00:00] **Mục đích:** (Tóm tắt mục tiêu chính của cuộc họp trong 1-2 dòng)
 
       ## 2. NỘI DUNG CHÍNH & THẢO LUẬN
-      - **[Chủ đề 1]:**
+      - [mm:ss] **[Chủ đề 1]:**
         - Diễn giải ý chính và các kết luận thống nhất...
         - Các thông số/dữ kiện đi kèm (nếu có)...
 
       ## 3. TRANH LUẬN & GHI CHÚ QUAN TRỌNG
       *(Ghi lại các ý kiến trái chiều hoặc các điểm nhấn đặc biệt)*
-      - **[Tên/Vai trò]:** [Nội dung quan điểm]
+      - [mm:ss] **[Tên/Vai trò]:** [Nội dung quan điểm]
 
       ## 4. KẾT LUẬN & KẾ HOẠCH HÀNH ĐỘNG
       **Các quyết định đã chốt:**
-        - [Quyết định 1]
+        - [mm:ss] [Quyết định 1]
 
       **Phân công nhiệm vụ (Action Items):**
         - [ ] **Ai làm?** - [Nhiệm vụ cụ thể] - [Deadline (ghi chính xác ngày/tháng nếu có)]
@@ -183,6 +183,7 @@ export async function POST(req: Request) {
           * *Tuyệt đối không* tự ý làm tròn số (trừ khi được yêu cầu trong văn bản).
           * *Tuyệt đối không* suy đoán hay tự điền số liệu nếu transcript không nhắc đến.
       2.  **Tư duy tổng hợp:** Viết tóm tắt súc tích, tập trung vào kết quả và quyết định, nhưng phải lồng ghép chính xác các dữ kiện số liệu vào ngữ cảnh của câu.
+      3.  **Gắn mốc thời gian (Timestamp):** Đây là yêu cầu BẮT BUỘC. Hãy chèn mốc thời gian bắt đầu của ý kiến hoặc chủ đề đó theo định dạng [mm:ss] (ví dụ: [01:23], [10:05]) vào đầu mỗi gạch đầu dòng hoặc tiêu đề mục lục nếu có thể. Điều này giúp người dùng dễ dàng đối chiếu với bản ghi âm.
 
       DỮ LIỆU ĐẦU VÀO:
       "${text}"
@@ -195,8 +196,10 @@ export async function POST(req: Request) {
       LƯU Ý TRÌNH BÀY:
       - Văn phong khách quan, chuyên nghiệp.
       - Tuân thủ chặt chẽ cấu trúc đề bài (các mục H1, H2...).
+      - Mỗi ý chính hoặc mục thảo luận nên có mốc thời gian [mm:ss] đi kèm.
       - Nếu transcript có thông tin mâu thuẫn (VD: Lúc đầu nói A, sau sửa thành B), hãy ghi nhận thông tin cuối cùng đã được chốt lại (B).
       `;
+
     }
 
     const summary = await generateContentSafe(prompt);

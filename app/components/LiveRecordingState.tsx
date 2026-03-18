@@ -12,6 +12,7 @@ type SummaryItem = {
   id: number;
   content: string;
   isLoading: boolean;
+  timestamp?: number; // [MỚI]
 };
 
 const MobileTabBtn = ({ active, onClick, icon: Icon, label }: any) => (
@@ -93,11 +94,13 @@ export default function LiveRecordingState({
 
     // UI Loading
     const currentId = Date.now();
+    const currentTimer = latestStateRef.current.timer; // Dùng ref để tránh stale closure khi setTimeout gọi
     const previewText = content.length > 50 ? content.substring(0, 50) + "..." : content;
     setSummaries(prev => [...prev, {
       id: currentId,
       content: `⏳ Đang xử lý: "${previewText}"`,
-      isLoading: true
+      isLoading: true,
+      timestamp: currentTimer // Lưu lại mốc thời gian
     }]);
 
     // Reset Buffer
@@ -184,7 +187,10 @@ export default function LiveRecordingState({
           words: s.words || []
         }));
 
-        const finalSummary = summaries.map(s => s.content).join("\n");
+        const finalSummary = summaries
+          .filter(s => !s.isLoading)
+          .map(s => `[${formatTime(s.timestamp || 0)}] ${s.content}`)
+          .join("\n\n");
 
         const { saveDraftMeta, appendAudioChunks } = await import("../lib/indexedDB");
 
@@ -419,6 +425,27 @@ export default function LiveRecordingState({
     }
   }
 
+  // --- ACTIONS ---
+  const scrollToLiveSegment = (time: number) => {
+    // Tìm segment có start gần nhất với time
+    const targetSegment = segments.find(s => {
+      const start = s.words?.[0]?.start || 0;
+      return time >= start && time < (s.words?.[s.words.length - 1]?.end || start + 5);
+    });
+    
+    const startTime = targetSegment?.words?.[0]?.start || time;
+    const element = document.getElementById(`live-seg-${startTime}`);
+    
+    if (element && transcriptEndRef.current?.parentElement) {
+      const container = transcriptEndRef.current.parentElement;
+      const targetScrollTop = element.offsetTop - (container.clientHeight / 4);
+      container.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: 'smooth'
+      });
+    }
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -478,8 +505,11 @@ export default function LiveRecordingState({
         words: s.words || []
       }));
 
-      // Ghép tóm tắt lại thành 1 chuỗi
-      const finalSummary = summaries.map(s => s.content).join("\n");
+      // Ghép tóm tắt lại thành 1 chuỗi, kèm mốc thời gian [mm:ss] để MeetingDetail có thể parse
+      const finalSummary = summaries
+        .filter(s => !s.isLoading)
+        .map(s => `[${formatTime(s.timestamp || 0)}] ${s.content}`)
+        .join("\n\n");
 
       // 4. Lưu vào Firestore với trạng thái COMPLETED (Xong luôn)
       await saveMeeting({
@@ -624,13 +654,18 @@ export default function LiveRecordingState({
             <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans text-sm">
               {/* 1. Render các đoạn hội thoại */}
               {segments.map((seg, idx) => {
+                const startTime = seg.words?.[0]?.start || 0;
                 // [MỚI] Kiểm tra xem đây có phải đoạn cuối cùng không?
                 const isLastSegment = idx === segments.length - 1;
                 // Nếu là đoạn cuối VÀ đang có chữ xám -> Hiển thị nối đuôi luôn
                 const showInterimInline = isLastSegment && interimContent && interimContent.trim().length > 0;
 
                 return (
-                  <div key={idx} className={`flex flex-col gap-1 animate-in fade-in slide-in-from-bottom-2 ${seg.speaker === 0 ? 'items-start' : 'items-end'}`}>
+                  <div 
+                    key={idx} 
+                    id={`live-seg-${startTime}`}
+                    className={`flex flex-col gap-1 animate-in fade-in slide-in-from-bottom-2 ${seg.speaker === 0 ? 'items-start' : 'items-end'}`}
+                  >
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mx-2">
                       Speaker {seg.speaker}
                     </span>
@@ -676,9 +711,20 @@ export default function LiveRecordingState({
           <div className="flex-1 overflow-y-auto p-4 scroll-smooth">
             <div className="space-y-4">
               {summaries.filter(s => !s.isLoading).map((item) => (
-                <div key={item.id} className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                  <div className="mt-1.5 w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
-                  <p className="text-slate-700 text-sm leading-relaxed text-justify">{item.content}</p>
+                <div 
+                  key={item.id} 
+                  onClick={() => item.timestamp !== undefined && scrollToLiveSegment(item.timestamp)}
+                  className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500 group cursor-pointer hover:bg-indigo-50/50 p-2 -mx-2 rounded-xl transition-colors"
+                >
+                  <div className="mt-1.5 w-2 h-2 rounded-full bg-green-500 shrink-0 group-hover:scale-125 transition-transform"></div>
+                  <div className="flex flex-col gap-0.5">
+                    {item.timestamp !== undefined && (
+                      <span className="text-[10px] font-mono font-bold text-indigo-500 uppercase">
+                        [{formatTime(item.timestamp)}]
+                      </span>
+                    )}
+                    <p className="text-slate-700 text-sm leading-relaxed text-justify">{item.content}</p>
+                  </div>
                 </div>
               ))}
               {summaries.filter(s => s.isLoading).map((item) => (
