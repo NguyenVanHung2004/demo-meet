@@ -43,28 +43,44 @@ export default function TranscriptRow({
   const renderKaraokeText = () => {
     // BACKWARD COMPATIBILITY: Nếu dữ liệu cũ không có words -> Hiện text thường
     if (!segment.words || segment.words.length === 0) {
-      return <p className="text-slate-800 leading-relaxed text-sm md:text-base">{segment.text}</p>;
+      return (
+        <p
+          className="text-slate-800 leading-relaxed text-sm md:text-base smart-copy-text"
+          data-smart-copy="true"
+          data-speaker={speaker.name}
+          data-timestamp={formatTime(segment.start)}
+        >
+          {segment.text}
+        </p>
+      );
     }
     return (
-      <p className="leading-relaxed text-slate-800 text-sm md:text-base">
+      <p
+        className="leading-relaxed text-slate-800 text-sm md:text-base smart-copy-text"
+        data-smart-copy="true"
+        data-speaker={speaker.name}
+        data-timestamp={formatTime(segment.start)}
+      >
         {segment.words.map((w: any, idx: number) => {
           // Logic highlight: Thời gian hiện tại nằm trong khoảng bắt đầu và kết thúc của từ
           // Thêm sai số 0.2s để highlight mượt hơn (giữ màu lâu hơn một chút)
           const isHighlight = currentTime >= w.start && currentTime <= (w.end + 0.15);
 
           return (
-            <span
-              key={idx}
-              className={`transition-all duration-150 rounded px-0.5 inline-block
-                ${isHighlight
-                  ? "bg-green-200 text-black font-semibold  shadow-sm ring-1 ring-green-300"
-                  : "hover:bg-slate-100"
-                }
-              `}
-              title={`${w.start.toFixed(2)}s`}
-            >
-              {w.word}{" "}
-            </span>
+            <React.Fragment key={idx}>
+              <span
+                className={`transition-all duration-150 rounded px-0.5 inline-block
+                  ${isHighlight
+                    ? "bg-green-200 text-black font-semibold  shadow-sm ring-1 ring-green-300"
+                    : "hover:bg-slate-100"
+                  }
+                `}
+                title={`${w.start.toFixed(2)}s`}
+                data-word-start={w.start}
+              >
+                {w.word}
+              </span>{" "}
+            </React.Fragment>
           );
         })}
       </p>

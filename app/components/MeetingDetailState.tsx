@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import { Meeting } from "../lib/db";
 import ReactMarkdown from 'react-markdown';
 import {
   Play, Pause, ChevronLeft, Edit3, Calendar,
   Clock, Download, FileText, Sparkles, User, AlignLeft, Share2,
-  FileType, Music, RotateCcw, RotateCw, Gauge
+  FileType, Music, RotateCcw, RotateCw, Gauge, Check
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
@@ -32,12 +33,14 @@ export default function MeetingDetailState({
   // State cho menu xuất file
   const [showExportMenu, setShowExportMenu] = useState(false);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number, y: number } | null>(null);
+  const [showCopySuccess, setShowCopySuccess] = useState(false);
 
   // --- ACTIONS ---
   const scrollToSegment = (time: number) => {
     // Tìm segment gần nhất
     const segment = meeting.segments.find((s: any) => time >= s.start && (s.end ? time < s.end : time < s.start + 10))
-                 || [...meeting.segments].sort((a, b) => Math.abs(a.start - time) - Math.abs(b.start - time))[0];
+      || [...meeting.segments].sort((a, b) => Math.abs(a.start - time) - Math.abs(b.start - time))[0];
 
     const targetTime = segment ? segment.start : time;
 
@@ -52,11 +55,11 @@ export default function MeetingDetailState({
     if (element && transcriptContainerRef.current) {
       const container = transcriptContainerRef.current;
       const targetScrollTop = element.offsetTop - (container.clientHeight / 4);
-      
+
       // Cuộn trực tiếp bằng scrollTo, thử tắt smooth nếu vẫn bị lan truyền
       container.scrollTo({
         top: Math.max(0, targetScrollTop),
-        behavior: 'smooth' 
+        behavior: 'smooth'
       });
     }
   };
@@ -64,7 +67,7 @@ export default function MeetingDetailState({
   // Helper render text có mốc thời gian
   const renderTextWithTimestamps = (text: any) => {
     if (typeof text !== 'string') return text;
-    
+
     const parts = text.split(/(\[\d{1,2}:\d{2}\])/g);
     return parts.map((part, i) => {
       const match = part.match(/\[(\d{1,2}):(\d{2})\]/);
@@ -143,6 +146,142 @@ export default function MeetingDetailState({
       if (Number.isFinite(d)) setDuration(d);
     }
   };
+
+  // Helper logic for extracting smart copy format
+  const getSmartCopyText = (selection: Selection, container: HTMLElement): string | null => {
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+
+    const allSmartTexts = Array.from(container.querySelectorAll('.smart-copy-text')) as HTMLElement[];
+    const selectedSegments = allSmartTexts.filter(el => selection.containsNode(el, true));
+
+    if (selectedSegments.length === 0) return null;
+
+    let resultText = "";
+
+    // Thử lấy thời gian chính xác của từ đầu tiên được bôi đen
+    let preciseStartTimestamp: string | null = null;
+    try {
+      const firstSelectedContainer = selectedSegments[0];
+      if (firstSelectedContainer) {
+        const allSpans = Array.from(firstSelectedContainer.querySelectorAll('span[data-word-start]')) as HTMLElement[];
+        const firstSelectedSpan = allSpans.find(span => selection.containsNode(span, true));
+
+        if (firstSelectedSpan) {
+          const startSecs = parseFloat(firstSelectedSpan.getAttribute('data-word-start') || "0");
+          const m = Math.floor(startSecs / 60);
+          const sec = Math.floor(startSecs % 60);
+          preciseStartTimestamp = `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+        }
+      }
+    } catch(e) {}
+
+    if (selectedSegments.length === 1) {
+      // Trường hợp 1: Copy trong phạm vi 1 segment
+      const el = selectedSegments[0];
+      const speaker = el.getAttribute('data-speaker');
+      const timestamp = preciseStartTimestamp || el.getAttribute('data-timestamp');
+      // Dùng selection.toString() để lấy đúng phần text đang được bôi đen
+      const selectedText = selection.toString().replace(/\s+/g, ' ').trim();
+      resultText = `[${timestamp}] ${speaker}: "${selectedText}"`;
+    } else {
+      // Trường hợp 2: Copy xuyên qua nhiều segment
+      selectedSegments.forEach((el, idx) => {
+        const speaker = el.getAttribute('data-speaker');
+        const timestamp = (idx === 0 && preciseStartTimestamp) ? preciseStartTimestamp : el.getAttribute('data-timestamp');
+        // Chuẩn hóa khoảng trắng để tránh lỗi "mất space"
+        const content = (el.textContent || "").replace(/\s+/g, ' ').trim();
+        resultText += `[${timestamp}] ${speaker}: "${content}"${idx < selectedSegments.length - 1 ? "\n" : ""}`;
+      });
+    }
+
+    // Thêm thông tin nguồn
+    const meetingTitle = meeting.title;
+    const meetingDate = new Date(meeting.createdAt).toLocaleDateString('vi-VN');
+    resultText += `\n\nNguồn: Biên bản họp ${meetingTitle} - ${meetingDate}`;
+
+    return resultText;
+  };
+
+  // --- SMART COPY LOGIC (Auto Copy on MouseUp) ---
+  useEffect(() => {
+    const container = transcriptContainerRef.current;
+    if (!container) return;
+
+    // Khi người dùng thả chuột sau khi bôi đen
+    const handleMouseUp = async () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+        if (!showCopySuccess) setTooltipPos(null);
+        return;
+      }
+
+      if (!container.contains(selection.anchorNode)) {
+        if (!showCopySuccess) setTooltipPos(null);
+        return;
+      }
+
+      // 1. Tính toán vị trí hiển thị Tooltip
+      let newTooltipPos = null;
+      try {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        if (rect.width > 0) {
+          newTooltipPos = {
+            x: rect.left + rect.width / 2,
+            y: rect.top + window.scrollY
+          };
+        }
+      } catch (e) {
+        return;
+      }
+
+      // 2. Thực hiện auto-copy
+      const text = getSmartCopyText(selection, container);
+      if (text && newTooltipPos) {
+        try {
+          // Bắt buộc copy luôn không cần bấm nút
+          await navigator.clipboard.writeText(text);
+          setTooltipPos(newTooltipPos);
+          setShowCopySuccess(true);
+        } catch (err) {
+          console.error("Auto copy failed:", err);
+          setTooltipPos(newTooltipPos);
+          setShowCopySuccess(false); // Hiện nút "Smart Copy" fallback nếu writeText bị chặn
+        }
+      }
+    };
+
+    // Chuột xuống = bắt đầu bôi cái mới => ẩn ngay tooltip cũ
+    const handleMouseDown = () => {
+      setTooltipPos(null);
+      setShowCopySuccess(false);
+    };
+
+    // Ctrl+C thủ công bằng phím
+    const handleCopy = (e: ClipboardEvent) => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+
+      const text = getSmartCopyText(selection, container);
+      if (text) {
+        e.preventDefault();
+        if (e.clipboardData) {
+          e.clipboardData.setData('text/plain', text);
+        }
+        setShowCopySuccess(true);
+      }
+    };
+
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousedown', handleMouseDown);
+    container.addEventListener('copy', handleCopy);
+
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousedown', handleMouseDown);
+      container.removeEventListener('copy', handleCopy);
+    };
+  }, [meeting.id, meeting.title, meeting.createdAt]); // Re-run if meeting info changes
 
   const jumpToTime = (time: number) => {
     if (audioRef.current) {
@@ -655,7 +794,7 @@ export default function MeetingDetailState({
       <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
 
         {/* COLUMN 1: TRANSCRIPT */}
-        <div 
+        <div
           ref={transcriptContainerRef}
           className={`flex-1 overflow-y-auto bg-white md:border-r ${activeTab === 'transcript' ? 'block' : 'hidden md:block'}`}
         >
@@ -711,11 +850,19 @@ export default function MeetingDetailState({
 
             {/* Summary Card */}
             <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-5">
-              <h3 className="text-sm font-bold text-orange-800 uppercase tracking-wider flex items-center gap-2 mb-4 pb-2 border-b border-orange-50">
-                <Sparkles className="w-4 h-4" /> AI Tóm tắt
-              </h3>
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-orange-50">
+                <h3 className="text-sm font-bold text-orange-800 uppercase tracking-wider flex items-center gap-2">
+                  <Sparkles className="w-4 h-4" /> AI Tóm tắt
+                </h3>
+                <Link
+                  href={`/minutes/${meeting.id}`}
+                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 hover:underline uppercase tracking-tight flex items-center gap-1 transition-colors"
+                >
+                  <FileText className="w-3 h-3" /> Xem chi tiết
+                </Link>
+              </div>
               {meeting.summary ? (
-                <div 
+                <div
                   onClick={(e) => {
                     const target = e.target as HTMLElement;
                     if (target.classList.contains('timestamp-btn')) {
@@ -838,6 +985,44 @@ export default function MeetingDetailState({
         </div>
       </div>
 
+      {/* Smart Copy Tooltip */}
+      {tooltipPos && (
+        <div
+          className="fixed z-[100] -translate-x-1/2 -translate-y-full mb-3 shadow-2xl pointer-events-auto"
+          style={{
+            left: tooltipPos.x,
+            top: tooltipPos.y - 12
+          }}
+        >
+          {showCopySuccess ? (
+            <div className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-emerald-500/20 shadow-lg animate-in fade-in zoom-in-95 duration-200 border border-emerald-500">
+              <Check className="w-4 h-4 text-white" />
+              Đã copy
+            </div>
+          ) : (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                // Fallback nếu auto-copy failed
+                const selection = window.getSelection();
+                if (selection && transcriptContainerRef.current) {
+                  const txt = getSmartCopyText(selection, transcriptContainerRef.current);
+                  if (txt) {
+                    await navigator.clipboard.writeText(txt);
+                    setShowCopySuccess(true);
+                  }
+                }
+              }}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all active:scale-95 animate-in fade-in zoom-in-95 duration-200 border border-slate-700"
+            >
+              <Sparkles className="w-4 h-4 text-indigo-400" />
+              Smart Copy
+            </button>
+          )}
+          {/* Mũi tên trỏ xuống */}
+          <div className={`w-2.5 h-2.5 rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1 border-r border-b ${showCopySuccess ? 'bg-emerald-600 border-emerald-500' : 'bg-slate-900 border-slate-700'}`}></div>
+        </div>
+      )}
     </div>
   );
 }
