@@ -18,8 +18,13 @@ import {
     Send,
     Trash2,
     Sparkles,
+    Folder as FolderIcon,
+    FolderPlus,
+    FolderOpen,
+    MoreVertical,
+    Check
 } from "lucide-react";
-import { getAllMeetings, Meeting, saveMeeting } from "../lib/db";
+import { getAllMeetings, Meeting, saveMeeting, Folder, getFolders, saveFolder, updateMeetingFolder } from "../lib/db";
 import { useAuth } from "../context/AuthContext";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { useRouter } from "next/navigation";
@@ -40,6 +45,14 @@ export default function MinutesState() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [showAIChat, setShowAIChat] = useState(false);
 
+    // 🟢 FOLDER STATE
+    const [folders, setFolders] = useState<Folder[]>([]);
+    const [currentFolder, setCurrentFolder] = useState<Folder | null>(null);
+    const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+    const [newFolderName, setNewFolderName] = useState("");
+    const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+    const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+
     const toggleSelection = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         const newSet = new Set(selectedIds);
@@ -48,24 +61,28 @@ export default function MinutesState() {
         setSelectedIds(newSet);
     };
 
-    const loadMeetings = async () => {
+    const loadData = async () => {
         if (!user) return;
         setLoading(true);
         try {
-            const allMeetings = await getAllMeetings(user.uid);
+            const [allMeetings, allFolders] = await Promise.all([
+                getAllMeetings(user.uid),
+                getFolders(user.uid)
+            ]);
             // Filter only meetings with summaries and not deleted
             const withSummaries = allMeetings.filter(m => m.summary && m.summary.trim().length > 0 && !m.isDeleted);
             setMeetings(withSummaries);
+            setFolders(allFolders);
         } catch (error) {
-            console.error("Error loading meetings:", error);
-            toast.error("Không thể tải danh sách biên bản");
+            console.error("Error loading data:", error);
+            toast.error("Không thể tải dữ liệu");
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadMeetings();
+        loadData();
     }, [user]);
 
 
@@ -128,19 +145,70 @@ export default function MinutesState() {
 
             await saveMeeting(newMeeting);
             toast.success("Đã import biên bản thành công!");
-            loadMeetings();
+            loadData();
         } catch (error) {
             console.error("Error importing file:", error);
             toast.error("Lỗi khi import file: " + (error as Error).message);
         }
     };
 
+    const handleCreateFolder = async () => {
+        if (!user || !newFolderName.trim()) return;
+        try {
+            const newFolder: Folder = {
+                id: crypto.randomUUID(),
+                userId: user.uid,
+                name: newFolderName.trim(),
+                createdAt: Date.now()
+            };
+            await saveFolder(user.uid, newFolder);
+            toast.success("Tạo thư mục thành công");
+            setNewFolderName("");
+            setShowNewFolderModal(false);
+            loadData();
+        } catch (e) {
+            toast.error("Lỗi khi tạo thư mục");
+        }
+    };
+
+    const handleMoveToFolder = async (folderId: string | null) => {
+        if (selectedIds.size === 0) return;
+        try {
+            toast.info("Đang chuyển...");
+            const promises = Array.from(selectedIds).map(id => updateMeetingFolder(id, folderId));
+            await Promise.all(promises);
+            toast.success("Đã chuyển biên bản");
+            setSelectedIds(new Set());
+            setShowMoveDropdown(false);
+            loadData();
+        } catch (e) {
+            toast.error("Lỗi khi chuyển thư mục");
+        }
+    };
+
+    const handleDragDropMove = async (meetingId: string, folderId: string) => {
+        try {
+            toast.info("Đang chuyển...");
+            await updateMeetingFolder(meetingId, folderId);
+            toast.success("Đã chuyển biên bản");
+            if (selectedIds.has(meetingId)) {
+                const newSet = new Set(selectedIds);
+                newSet.delete(meetingId);
+                setSelectedIds(newSet);
+            }
+            loadData();
+        } catch (e) {
+            toast.error("Lỗi khi chuyển thư mục");
+        }
+    };
+
     const filteredMeetings = meetings.filter((m) => {
         const query = searchQuery.toLowerCase();
-        return (
-            m.title.toLowerCase().includes(query) ||
-            m.summary?.toLowerCase().includes(query)
-        );
+        const matchesSearch = m.title.toLowerCase().includes(query) || m.summary?.toLowerCase().includes(query);
+        const matchesFolder = currentFolder 
+            ? m.folderId === currentFolder.id 
+            : (!m.folderId || m.folderId === "");
+        return matchesSearch && matchesFolder;
     });
 
     const formatDate = (timestamp: number) => {
@@ -238,12 +306,19 @@ export default function MinutesState() {
 
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={loadMeetings}
+                                onClick={loadData}
                                 disabled={loading}
                                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
                                 title="Làm mới dữ liệu"
                             >
                                 <RefreshCw className={`w-5 h-5 text-slate-600 ${loading ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button
+                                onClick={() => setShowNewFolderModal(true)}
+                                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all active:scale-95"
+                            >
+                                <FolderPlus className="w-4 h-4" />
+                                <span className="hidden sm:inline">Tạo thư mục</span>
                             </button>
                             <button
                                 onClick={() => fileInputRef.current?.click()}
@@ -278,6 +353,63 @@ export default function MinutesState() {
 
             {/* Main Content */}
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                
+                {/* 📂 Folders Section (Only show at root) */}
+                {!loading && !currentFolder && folders.length > 0 && (
+                    <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <FolderIcon className="w-5 h-5 text-indigo-500" />
+                            Thư mục của bạn
+                        </h2>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            {folders.map(folder => (
+                                <div 
+                                    key={folder.id} 
+                                    onClick={() => setCurrentFolder(folder)}
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        setDragOverFolderId(folder.id);
+                                    }}
+                                    onDragLeave={() => setDragOverFolderId(null)}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        setDragOverFolderId(null);
+                                        const meetingId = e.dataTransfer.getData("meetingId");
+                                        if (meetingId) {
+                                            handleDragDropMove(meetingId, folder.id);
+                                        }
+                                    }}
+                                    className={`bg-white p-4 rounded-xl shadow-sm border ${dragOverFolderId === folder.id ? 'border-emerald-500 bg-emerald-50 scale-105' : 'border-slate-200 hover:border-indigo-400'} hover:shadow-md transition-all cursor-pointer flex flex-col items-center text-center group z-10`}
+                                >
+                                    <FolderIcon className={`w-10 h-10 mb-2 transition-colors ${dragOverFolderId === folder.id ? 'text-emerald-500 fill-emerald-100' : 'text-indigo-400 group-hover:text-indigo-500 fill-indigo-50'}`} />
+                                    <span className="font-medium text-slate-700 text-sm line-clamp-1 w-full" title={folder.name}>
+                                        {folder.name}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* 📂 Current Folder Header */}
+                {!loading && currentFolder && (
+                    <div className="mb-6 flex items-center justify-between animate-in fade-in slide-in-from-left-4 duration-500">
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={() => setCurrentFolder(null)}
+                                className="p-2 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors bg-slate-100"
+                                title="Quay lại"
+                            >
+                                <ArrowLeft className="w-4 h-4" />
+                            </button>
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <FolderOpen className="w-6 h-6 text-indigo-500 fill-indigo-50" />
+                                {currentFolder.name}
+                            </h2>
+                        </div>
+                    </div>
+                )}
+
                 {loading ? (
                     <div className="space-y-4">
                         {/* Desktop: Table Skeleton */}
@@ -366,6 +498,11 @@ export default function MinutesState() {
                                     {filteredMeetings.map((meeting) => (
                                         <tr
                                             key={meeting.id}
+                                            draggable
+                                            onDragStart={(e) => {
+                                                e.dataTransfer.setData("meetingId", meeting.id);
+                                                e.dataTransfer.effectAllowed = "move";
+                                            }}
                                             onClick={() => {
                                                 const url = `/minutes/${meeting.id}${searchQuery ? `?highlight=${encodeURIComponent(searchQuery)}` : ''}`;
                                                 router.push(url);
@@ -416,6 +553,11 @@ export default function MinutesState() {
                             {filteredMeetings.map((meeting) => (
                                 <div
                                     key={meeting.id}
+                                    draggable
+                                    onDragStart={(e) => {
+                                        e.dataTransfer.setData("meetingId", meeting.id);
+                                        e.dataTransfer.effectAllowed = "move";
+                                    }}
                                     onClick={() => {
                                         const url = `/minutes/${meeting.id}${searchQuery ? `?highlight=${encodeURIComponent(searchQuery)}` : ''}`;
                                         router.push(url);
@@ -474,9 +616,47 @@ export default function MinutesState() {
                         <Sparkles className="w-4 h-4" />
                         Hỏi AI
                     </button>
+                    
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowMoveDropdown(!showMoveDropdown)}
+                            className="flex items-center gap-2 text-emerald-300 hover:text-white transition-colors font-bold text-sm"
+                        >
+                            <FolderOpen className="w-4 h-4" />
+                            Chuyển vào...
+                        </button>
+                        {showMoveDropdown && folders.length > 0 && (
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 animate-in fade-in slide-in-from-bottom-2 text-slate-800">
+                                <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Chọn thư mục</div>
+                                {folders.map(f => (
+                                    <button
+                                        key={f.id}
+                                        onClick={() => handleMoveToFolder(f.id)}
+                                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors flex items-center gap-2"
+                                    >
+                                        <FolderIcon className="w-4 h-4 text-slate-400" />
+                                        <span className="truncate">{f.name}</span>
+                                    </button>
+                                ))}
+                                <div className="h-px bg-slate-100 my-1"></div>
+                                <button
+                                    onClick={() => handleMoveToFolder(null)}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                                >
+                                    Đưa ra ngoài (Gỡ khỏi thư mục)
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="h-6 w-px bg-slate-700"></div>
+
                     {/* Clear selection */}
                     <button
-                        onClick={() => setSelectedIds(new Set())}
+                        onClick={() => {
+                            setSelectedIds(new Set());
+                            setShowMoveDropdown(false);
+                        }}
                         className="text-slate-500 hover:text-white transition-colors"
                     >
                         <X className="w-4 h-4" />
@@ -499,6 +679,39 @@ ${m.summary}
                     setSelectedIds(new Set());
                 }}
             />
+            {/* 🟢 NEW FOLDER MODAL */}
+            {showNewFolderModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="text-xl font-bold text-slate-800">Tạo thư mục mới</h3>
+                            <button onClick={() => setShowNewFolderModal(false)} className="text-slate-400 hover:bg-slate-100 p-2 rounded-lg transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Tên thư mục</label>
+                                <input
+                                    type="text"
+                                    value={newFolderName}
+                                    onChange={(e) => setNewFolderName(e.target.value)}
+                                    placeholder="Nhập tên thư mục..."
+                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-800"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCreateFolder();
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        <div className="p-6 pt-0 flex justify-end gap-3">
+                            <button onClick={() => setShowNewFolderModal(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Hủy</button>
+                            <button onClick={handleCreateFolder} disabled={!newFolderName.trim()} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-4 py-2 rounded-lg font-medium shadow-md transition-all">Tạo</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

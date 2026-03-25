@@ -41,6 +41,7 @@ export interface Meeting {
   actionStatus?: ActionItemStatus;
   isMinuteOnly?: boolean; // Flag for imported minutes without audio/transcript
   language?: "vi" | "en"; // Ngôn ngữ phiên âm: "vi" (mặc định) hoặc "en"
+  folderId?: string | null; // [MỚI] Thư mục chứa biên bản
 }
 
 const COLLECTION_NAME = "meetings";
@@ -116,6 +117,12 @@ export const deleteMeetingPermanent = async (id: string) => {
 export const updateMeetingTitle = async (id: string, newTitle: string) => {
   const docRef = doc(db, COLLECTION_NAME, id);
   await updateDoc(docRef, { title: newTitle });
+};
+
+// 7.1 Cập nhật folder cho meeting
+export const updateMeetingFolder = async (meetingId: string, folderId: string | null) => {
+  const docRef = doc(db, COLLECTION_NAME, meetingId);
+  await updateDoc(docRef, { folderId: folderId });
 };
 
 // 8. Lấy danh sách đang chạy (Cho PollingManager)
@@ -318,6 +325,57 @@ export const deleteCustomTemplate = async (userId: string, templateId: string) =
     await deleteDoc(docRef);
   } catch (error) {
     console.error("Lỗi xóa template:", error);
+    throw error;
+  }
+};
+// --- PHẦN MỚI: QUẢN LÝ THƯ MỤC (FOLDERS) ---
+
+export interface Folder {
+  id: string;
+  userId: string;
+  name: string;
+  createdAt: number;
+}
+
+const getFolderCollection = (userId: string) => {
+  return collection(db, "users", userId, "folders");
+};
+
+export const saveFolder = async (userId: string, folder: Folder) => {
+  if (!userId) return;
+  try {
+    const folderRef = folder.id
+      ? doc(db, "users", userId, "folders", folder.id)
+      : doc(getFolderCollection(userId));
+    
+    const folderData = { ...folder, id: folderRef.id };
+    await setDoc(folderRef, folderData, { merge: true });
+    return folderData.id;
+  } catch (error) {
+    console.error("Lỗi lưu folder:", error);
+    throw error;
+  }
+};
+
+export const getFolders = async (userId: string): Promise<Folder[]> => {
+  if (!userId) return [];
+  try {
+    const q = query(getFolderCollection(userId), orderBy("createdAt", "desc"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Folder));
+  } catch (error) {
+    console.error("Lỗi lấy danh sách folder:", error);
+    return [];
+  }
+};
+
+export const deleteFolder = async (userId: string, folderId: string) => {
+  if (!userId || !folderId) return;
+  try {
+    const folderRef = doc(db, "users", userId, "folders", folderId);
+    await deleteDoc(folderRef);
+  } catch (error) {
+    console.error("Lỗi xóa folder:", error);
     throw error;
   }
 };
