@@ -283,28 +283,28 @@ export default function MinutesState() {
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
             {/* Header */}
-            <header className="bg-white border-b sticky top-0 z-10 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+            <header className="bg-white border-b sticky top-0 z-40 shadow-sm">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 md:py-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+                        <div className="flex items-center gap-2 md:gap-4 min-w-0">
                             <Link
                                 href="/"
-                                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                                className="p-1.5 md:p-2 hover:bg-slate-100 rounded-lg transition-colors shrink-0"
                             >
                                 <ArrowLeft className="w-5 h-5 text-slate-600" />
                             </Link>
-                            <div>
-                                <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                                    <FileText className="w-7 h-7 text-indigo-600" />
-                                    Biên bản cuộc họp
+                            <div className="min-w-0">
+                                <h1 className="text-lg md:text-2xl font-bold text-slate-800 flex items-center gap-1.5 md:gap-2 truncate">
+                                    <FileText className="w-5 h-5 md:w-7 md:h-7 text-indigo-600 shrink-0" />
+                                    <span className="truncate">Biên bản cuộc họp</span>
                                 </h1>
-                                <p className="text-sm text-slate-500 mt-1">
+                                <p className="text-[10px] md:text-sm text-slate-500 mt-0.5 md:mt-1 truncate hidden sm:block">
                                     Quản lý và chỉnh sửa biên bản các cuộc họp
                                 </p>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
                             <button
                                 onClick={loadData}
                                 disabled={loading}
@@ -315,17 +315,17 @@ export default function MinutesState() {
                             </button>
                             <button
                                 onClick={() => setShowNewFolderModal(true)}
-                                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all active:scale-95"
+                                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium flex items-center gap-1.5 md:gap-2 shadow-sm transition-all active:scale-95 shrink-0"
                             >
                                 <FolderPlus className="w-4 h-4" />
-                                <span className="hidden sm:inline">Tạo thư mục</span>
+                                <span className="text-sm md:text-base hidden sm:inline">Tạo thư mục</span>
                             </button>
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-md transition-all active:scale-95"
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 md:px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 md:gap-2 shadow-md transition-all active:scale-95 shrink-0"
                             >
                                 <Plus className="w-4 h-4" />
-                                Import biên bản
+                                <span className="text-sm md:text-base whitespace-nowrap">Import biên bản</span>
                             </button>
                             <input
                                 ref={fileInputRef}
@@ -606,24 +606,25 @@ export default function MinutesState() {
 
             {/* 🟢 FLOATING ACTION PANEL */}
             {selectedIds.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-6 z-50 animate-in slide-in-from-bottom-4 transition-all hover:scale-105 cursor-default">
-                    <span className="font-semibold text-sm">{selectedIds.size} đã chọn</span>
-                    <div className="h-6 w-px bg-slate-700"></div>
+                <div className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-full shadow-xl flex items-center gap-3 md:gap-6 z-50 animate-in slide-in-from-bottom-4 transition-all hover:scale-105 cursor-default w-[90%] md:w-auto max-w-sm md:max-w-none justify-between md:justify-start">
+                    <span className="font-semibold text-xs md:text-sm whitespace-nowrap"><span className="hidden sm:inline">Đã chọn </span>{selectedIds.size}</span>
+                    <div className="h-4 md:h-6 w-px bg-slate-700"></div>
                     <button
                         onClick={() => setShowAIChat(true)}
-                        className="flex items-center gap-2 text-indigo-300 hover:text-white transition-colors font-bold text-sm"
+                        className="flex items-center gap-1.5 md:gap-2 text-indigo-300 hover:text-white transition-colors font-bold text-xs md:text-sm whitespace-nowrap"
                     >
-                        <Sparkles className="w-4 h-4" />
+                        <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4" />
                         Hỏi AI
                     </button>
                     
                     <div className="relative">
                         <button
                             onClick={() => setShowMoveDropdown(!showMoveDropdown)}
-                            className="flex items-center gap-2 text-emerald-300 hover:text-white transition-colors font-bold text-sm"
+                            className="flex items-center gap-1.5 md:gap-2 text-emerald-300 hover:text-white transition-colors font-bold text-xs md:text-sm whitespace-nowrap"
                         >
-                            <FolderOpen className="w-4 h-4" />
-                            Chuyển vào...
+                            <FolderOpen className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                            <span className="hidden sm:inline">Chuyển vào...</span>
+                            <span className="sm:hidden">Di chuyển</span>
                         </button>
                         {showMoveDropdown && folders.length > 0 && (
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 animate-in fade-in slide-in-from-bottom-2 text-slate-800">
@@ -649,7 +650,7 @@ export default function MinutesState() {
                         )}
                     </div>
 
-                    <div className="h-6 w-px bg-slate-700"></div>
+                    <div className="h-4 md:h-6 w-px bg-slate-700"></div>
 
                     {/* Clear selection */}
                     <button
@@ -657,7 +658,7 @@ export default function MinutesState() {
                             setSelectedIds(new Set());
                             setShowMoveDropdown(false);
                         }}
-                        className="text-slate-500 hover:text-white transition-colors"
+                        className="text-slate-500 hover:text-white transition-colors ml-1 md:ml-0"
                     >
                         <X className="w-4 h-4" />
                     </button>

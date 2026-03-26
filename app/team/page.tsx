@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  ArrowLeft, Plus, Trash2, Edit2, Search, Users, 
-  Briefcase, Building2, Save, X 
+import {
+  ArrowLeft, Plus, Trash2, Edit2, Search, Users,
+  Briefcase, Building2, Save, X, ChevronRight, ChevronDown, User, FolderTree
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useGlobalUI } from "../context/GlobalUIProvider";
@@ -30,10 +30,13 @@ export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  
+
   // State cho Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Partial<Member>>({});
+
+  // State quản lý độ mở của Cây (Tree)
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
   // THÊM: State lưu danh sách gợi ý phòng ban
   const [deptSuggestions, setDeptSuggestions] = useState<string[]>(DEFAULT_DEPARTMENTS);
@@ -65,7 +68,7 @@ export default function TeamPage() {
     try {
       // Lấy danh sách đang có trong DB
       const dbDepts = await getExistingDepartments(user.uid);
-      
+
       // Gộp với danh sách mặc định + Xóa trùng lặp
       const merged = Array.from(new Set([...DEFAULT_DEPARTMENTS, ...dbDepts]));
       setDeptSuggestions(merged.sort());
@@ -87,10 +90,10 @@ export default function TeamPage() {
       await saveMember(user.uid, editingMember as Member);
       toast.success(editingMember.id ? "Đã cập nhật nhân viên" : "Đã thêm nhân viên mới");
       setIsModalOpen(false);
-      
+
       // Reload cả list member và list gợi ý phòng ban (nhỡ có phòng ban mới)
-      fetchMembers(); 
-      fetchDepartmentSuggestions(); 
+      fetchMembers();
+      fetchDepartmentSuggestions();
     } catch (error) {
       console.error(error);
       toast.error("Lỗi khi lưu dữ liệu");
@@ -116,59 +119,100 @@ export default function TeamPage() {
   };
 
   // 4. Mở Modal
-  const openModal = (member?: Member) => {
+  const openModal = (member?: Member | null, defaultDept?: string, defaultTeam?: string) => {
     if (member) {
       setEditingMember(member);
     } else {
       setEditingMember({
-        name: "", 
-        email: "", 
-        department: "", // Để trống để user tự nhập hoặc chọn
-        team: "" 
-      }); 
+        name: "",
+        email: "",
+        department: defaultDept || "",
+        team: defaultTeam || ""
+      });
     }
     setIsModalOpen(true);
   };
 
-  const filteredMembers = members.filter(m => 
-    m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    m.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const query = searchTerm.toLowerCase();
+  const filteredMembers = members.filter(m =>
+    m.name.toLowerCase().includes(query) ||
+    m.email.toLowerCase().includes(query) ||
+    m.department?.toLowerCase().includes(query) ||
+    m.team?.toLowerCase().includes(query)
   );
+
+  // Nhóm data thành Tree (Cây)
+  const groupedData = React.useMemo(() => {
+    const groups: Record<string, Record<string, Member[]>> = {};
+
+    filteredMembers.forEach(member => {
+      const dept = member.department || "Khác (Chưa phân phòng)";
+      const team = member.team || "Chung";
+
+      if (!groups[dept]) groups[dept] = {};
+      if (!groups[dept][team]) groups[dept][team] = [];
+
+      groups[dept][team].push(member);
+    });
+
+    return groups;
+  }, [filteredMembers]);
+
+  // Handle auto-expand on search
+  useEffect(() => {
+    if (searchTerm.trim().length > 0) {
+      const allKeys = new Set<string>();
+      Object.keys(groupedData).forEach(dept => {
+        allKeys.add(dept);
+        Object.keys(groupedData[dept]).forEach(team => {
+          allKeys.add(`${dept}::${team}`);
+        });
+      });
+      setExpandedNodes(allKeys);
+    }
+  }, [searchTerm, groupedData]);
+
+  const toggleNode = (nodeId: string) => {
+    const newSet = new Set(expandedNodes);
+    if (newSet.has(nodeId)) newSet.delete(nodeId);
+    else newSet.add(nodeId);
+    setExpandedNodes(newSet);
+  };
 
   if (loading) return <div className="p-8 text-center">Đang tải...</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
       {/* HEADER - Giữ nguyên */}
-      <header className="bg-white border-b px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <button 
+      <header className="bg-white border-b px-4 py-3 md:px-6 md:py-4 flex items-center justify-between sticky top-0 z-10 gap-2">
+        <div className="flex items-center gap-2 md:gap-4 min-w-0">
+          <button
             onClick={() => router.push("/")}
-            className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition"
+            className="p-1.5 md:p-2 hover:bg-slate-100 rounded-full text-slate-500 transition shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h1 className="text-xl font-bold flex items-center gap-2">
-              <Users className="w-6 h-6 text-indigo-600" />
-              Quản lý Nhân sự
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-xl font-bold flex items-center gap-1.5 md:gap-2 truncate">
+              <Users className="w-5 h-5 md:w-6 md:h-6 text-indigo-600 shrink-0" />
+              <span className="truncate">Quản lý Nhân sự</span>
             </h1>
-            <p className="text-xs text-slate-500">Danh bạ dùng để giao việc tự động</p>
+            <p className="text-[10px] md:text-xs text-slate-500 truncate sm:block">Danh bạ dùng để giao việc tự động</p>
           </div>
         </div>
         <button
           onClick={() => openModal()}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 text-sm shadow-sm transition"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 md:px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 md:gap-2 text-sm shadow-sm transition shrink-0"
         >
-          <Plus className="w-4 h-4" /> Thêm nhân viên
+          <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Thêm</span><span className="hidden lg:inline"> nhân sự</span>
         </button>
       </header>
 
-      {/* CONTENT - Giữ nguyên */}
-      <main className="max-w-5xl mx-auto p-6">
+      {/* CONTENT */}
+      <main className="max-w-5xl mx-auto p-3 sm:p-4 md:p-6">
         {/* Search Bar */}
         <div className="mb-6 relative">
-          <input 
+          <input
             type="text"
             placeholder="Tìm theo tên hoặc email..."
             className="w-full pl-10 p-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
@@ -177,48 +221,118 @@ export default function TeamPage() {
           />
         </div>
 
-        {/* List Member - Giữ nguyên */}
+        {/* List Member - Tree View */}
         {isLoadingData ? (
           <div className="text-center py-12 text-slate-400">Đang tải danh sách...</div>
         ) : filteredMembers.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-            <Users className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-            <p className="text-slate-500 mb-4">Chưa có nhân viên nào.</p>
-            <button onClick={() => openModal()} className="text-indigo-600 font-medium hover:underline">
-              Thêm nhân viên đầu tiên ngay
-            </button>
+            <FolderTree className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+            <p className="text-slate-500 mb-4">Chưa có nhân sự nào khớp với tìm kiếm.</p>
+            {!searchTerm && (
+              <button onClick={() => openModal()} className="text-indigo-600 font-medium hover:underline">
+                Tạo dữ liệu nhân sự đầu tiên ngay
+              </button>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredMembers.map((member) => (
-              <div key={member.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-start gap-4 hover:border-indigo-300 transition-colors group">
-                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-bold text-lg shrink-0">
-                  {member.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-slate-800 truncate">{member.name}</h3>
-                  <p className="text-sm text-slate-500 truncate mb-2">{member.email}</p>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="bg-slate-100 px-2 py-1 rounded flex items-center gap-1 text-slate-600">
-                      <Building2 className="w-3 h-3" /> {member.department}
-                    </span>
-                    {member.team && (
-                      <span className="bg-blue-50 px-2 py-1 rounded flex items-center gap-1 text-blue-600">
-                        <Briefcase className="w-3 h-3" /> {member.team}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            {Object.entries(groupedData).sort(([a], [b]) => a.localeCompare(b)).map(([deptName, teams]) => {
+              const isDeptExpanded = expandedNodes.has(deptName);
+              const deptMemberCount = Object.values(teams).flat().length;
+
+              return (
+                <div key={deptName} className="border-b border-slate-100 last:border-0">
+                  {/* Department Node */}
+                  <div
+                    className="flex items-center justify-between p-4 bg-slate-50 hover:bg-indigo-50/50 cursor-pointer transition-colors group"
+                    onClick={() => toggleNode(deptName)}
+                  >
+                    <div className="flex items-center gap-2 md:gap-3 min-w-0 pr-2">
+                      <button className="text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0">
+                        {isDeptExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                      </button>
+                      <Building2 className="w-5 h-5 md:w-6 md:h-6 text-indigo-500 shrink-0" />
+                      <h2 className="text-base md:text-lg font-bold text-slate-800 truncate">{deptName}</h2>
+                      <span className="bg-slate-200 text-slate-600 text-[10px] md:text-xs px-2 py-0.5 rounded-full font-medium shrink-0">
+                        {deptMemberCount} nhân sự
                       </span>
-                    )}
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openModal(null, deptName !== "Khác (Chưa phân phòng)" ? deptName : "", ""); }}
+                      className="opacity-100 md:opacity-0 group-hover:opacity-100 p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all flex items-center gap-1 text-sm font-medium shrink-0"
+                    >
+                      <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Thêm</span>
+                    </button>
                   </div>
+
+                  {/* Teams (Children of Dept) */}
+                  {isDeptExpanded && (
+                    <div className="pr-2 md:pl-6 bg-white overflow-hidden">
+                      {Object.entries(teams).sort(([a], [b]) => a.localeCompare(b)).map(([teamName, membersInTeam]) => {
+                        const teamNodeId = `${deptName}::${teamName}`;
+                        const isTeamExpanded = expandedNodes.has(teamNodeId);
+
+                        return (
+                          <div key={teamNodeId} className="border-l-2 border-slate-100 ml-2 md:ml-5">
+                            {/* Team Node */}
+                            <div
+                              className="flex items-center justify-between p-2 md:p-3 hover:bg-slate-50 cursor-pointer transition-colors group"
+                              onClick={() => toggleNode(teamNodeId)}
+                            >
+                              <div className="flex items-center gap-1 md:gap-2 min-w-0 pr-2 pb-0.5 pl-1">
+                                <button className="text-slate-300 group-hover:text-slate-500 transition-colors shrink-0">
+                                  {isTeamExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                </button>
+                                <Briefcase className="w-4 h-4 md:w-5 md:h-5 text-emerald-500 shrink-0" />
+                                <h3 className="font-semibold text-sm md:text-base text-slate-700 truncate">{teamName}</h3>
+                                <span className="text-slate-400 text-[10px] md:text-xs ml-1 shrink-0">({membersInTeam.length})</span>
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openModal(null, deptName !== "Khác (Chưa phân phòng)" ? deptName : "", teamName !== "Chung" ? teamName : "");
+                                }}
+                                className="opacity-100 md:opacity-0 group-hover:opacity-100 p-1 md:p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-all shrink-0"
+                                title="Thêm vào team này"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Members (Children of Team) */}
+                            {isTeamExpanded && (
+                              <div className="pl-4 md:pl-8 pb-3 space-y-1">
+                                {membersInTeam.map(member => (
+                                  <div key={member.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg group transition-colors">
+                                    <div className="flex items-center gap-2 md:gap-3 min-w-0 pr-2">
+                                      <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0 border border-slate-200">
+                                        {member.name.charAt(0).toUpperCase()}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="font-medium text-slate-800 text-xs md:text-sm truncate">{member.name}</div>
+                                        <div className="text-[10px] md:text-xs text-slate-500 truncate">{member.email}</div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                      <button onClick={() => openModal(member)} className="p-1 md:p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Sửa">
+                                        <Edit2 className="w-3 h-3 md:w-4 md:h-4" />
+                                      </button>
+                                      <button onClick={() => handleDelete(member.id)} className="p-1 md:p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Xóa">
+                                        <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => openModal(member)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => handleDelete(member.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
@@ -229,36 +343,36 @@ export default function TeamPage() {
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b flex justify-between items-center">
               <h2 className="text-lg font-bold">
-                {editingMember.id ? "Sửa thông tin" : "Thêm nhân viên mới"}
+                {editingMember.id ? "Sửa thông tin" : "Thêm nhân sự mới"}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <form onSubmit={handleSave} className="p-6 space-y-4">
               {/* Tên - Giữ nguyên */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Họ và Tên *</label>
-                <input 
+                <input
                   required
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   placeholder="VD: Nguyễn Văn A"
                   value={editingMember.name || ""}
-                  onChange={e => setEditingMember({...editingMember, name: e.target.value})}
+                  onChange={e => setEditingMember({ ...editingMember, name: e.target.value })}
                 />
               </div>
 
               {/* Email - Giữ nguyên */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Email (Google) *</label>
-                <input 
+                <input
                   required
                   type="email"
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   placeholder="nhanvien@congty.com"
                   value={editingMember.email || ""}
-                  onChange={e => setEditingMember({...editingMember, email: e.target.value})}
+                  onChange={e => setEditingMember({ ...editingMember, email: e.target.value })}
                 />
               </div>
 
@@ -266,15 +380,15 @@ export default function TeamPage() {
                 {/* --- PHẦN SỬA ĐỔI: COMBOBOX PHÒNG BAN --- */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Phòng ban *</label>
-                  
+
                   {/* Input nhập liệu bình thường nhưng có thêm list="..." */}
-                  <input 
+                  <input
                     required
                     list="department-suggestions" // Link với datalist bên dưới
                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     placeholder="Chọn hoặc nhập..."
                     value={editingMember.department || ""}
-                    onChange={e => setEditingMember({...editingMember, department: e.target.value})}
+                    onChange={e => setEditingMember({ ...editingMember, department: e.target.value })}
                   />
 
                   {/* Danh sách gợi ý ẩn */}
@@ -288,24 +402,24 @@ export default function TeamPage() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Team (Optional)</label>
-                  <input 
+                  <input
                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     placeholder="VD: Mobile"
                     value={editingMember.team || ""}
-                    onChange={e => setEditingMember({...editingMember, team: e.target.value})}
+                    onChange={e => setEditingMember({ ...editingMember, team: e.target.value })}
                   />
                 </div>
               </div>
 
               <div className="pt-4 flex gap-3">
-                <button 
+                <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 py-3 text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition"
                 >
                   Hủy
                 </button>
-                <button 
+                <button
                   type="submit"
                   className="flex-1 py-3 text-white font-bold bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-200 transition flex justify-center items-center gap-2"
                 >
