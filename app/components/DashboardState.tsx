@@ -22,7 +22,8 @@ import {
   User,
   Edit3,
   FileText as FileTextIcon,
-  Bot // [MỚI]
+  Bot, // [MỚI]
+  Database
 } from "lucide-react";
 import {
   getAllMeetings,
@@ -253,6 +254,15 @@ export default function DashboardState({
               }`}
           >
             <FileTextIcon className="w-4 h-4" /> Biên bản họp
+          </Link>
+          <Link
+            href="/training"
+            className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${pathname === "/training"
+              ? "bg-indigo-600 text-white shadow-md transform translate-x-1"
+              : "hover:bg-slate-800 hover:text-white"
+              }`}
+          >
+            <Database className="w-4 h-4" /> Dữ liệu huấn luyện
           </Link>
           <div
             onClick={() => setCurrentTab("trash")}
@@ -714,6 +724,14 @@ export default function DashboardState({
           >
             <FileTextIcon className="w-5 h-5" />
             <span className="text-[10px] font-bold">Biên bản</span>
+          </Link>
+          <Link
+            href="/training"
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition ${pathname === "/training" ? "text-indigo-600" : "text-slate-400"
+              }`}
+          >
+            <Database className="w-5 h-5" />
+            <span className="text-[10px] font-bold">Training</span>
           </Link>
 
           <button

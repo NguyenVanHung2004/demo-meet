@@ -384,6 +384,25 @@ export default function EditorState({
       await saveMeeting(finalMeeting);
       toast.success("Đã lưu thành công!");
 
+      // [TRAINING DATA] Fire-and-forget — không block UX
+      if (initialData.status === 'completed' && user) {
+        (async () => {
+          try {
+            const { collectAndUploadSamples } = await import("../lib/trainingData");
+            await collectAndUploadSamples(
+              segments,
+              initialData.segments,
+              audioSrc,
+              initialData.language ?? "vi",
+              initialData.id
+            );
+          } catch (e) {
+            console.error("[Training] Collection failed:", e);
+          }
+        })();
+      }
+
+
       // Nếu vừa finalize draft xong -> Back về dashboard để refresh
       if (initialData.status === 'draft') {
         setTimeout(onBack, 1000);
