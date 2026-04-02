@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Database, Play, Pause, DownloadCloud, Clock, Info } from "lucide-react";
+import { ArrowLeft, Database, Play, Pause, DownloadCloud, Clock, Info, Rocket } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getAllTrainingSamples, TrainingDataSample } from "../lib/trainingData";
 
@@ -12,6 +12,7 @@ export default function TrainingDataPage() {
 
   const [samples, setSamples] = useState<TrainingDataSample[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isTraining, setIsTraining] = useState(false);
 
   // Audio playback state
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -60,6 +61,24 @@ export default function TrainingDataPage() {
     });
   };
 
+  const handleTrainModel = async () => {
+    setIsTraining(true);
+    try {
+      const res = await fetch('/api/finetune', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Đã gửi lệnh Finetune lên Runpod thành công!\nJob ID: " + data.jobId);
+      } else {
+        alert("Lỗi: " + data.error);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Đã có lỗi xảy ra khi gọi Finetune API");
+    } finally {
+      setIsTraining(false);
+    }
+  };
+
   if (loading) return <div className="p-8 text-center bg-slate-50 min-h-screen">Đang xác thực...</div>;
 
   return (
@@ -90,7 +109,7 @@ export default function TrainingDataPage() {
           {/* Button export JSONL nếu sau này cần */}
           <button
             onClick={() => {
-              const dataStr = samples.map(s => JSON.stringify(s)).join("\\n");
+              const dataStr = samples.map(s => JSON.stringify(s)).join("\n");
               const blob = new Blob([dataStr], { type: "application/jsonl" });
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a");
@@ -98,9 +117,19 @@ export default function TrainingDataPage() {
               a.download = `training_data_${Date.now()}.jsonl`;
               a.click();
             }}
-            className="bg-slate-800 hover:bg-slate-900 text-white px-3 md:px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 md:gap-2 text-sm shadow-sm transition"
+            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 md:px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 md:gap-2 text-sm shadow-sm transition"
           >
             <DownloadCloud className="w-4 h-4" /> <span className="hidden sm:inline">Export JSONL</span>
+          </button>
+          <button
+            onClick={handleTrainModel}
+            disabled={isTraining || samples.length === 0}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 md:px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 md:gap-2 text-sm shadow-sm transition"
+          >
+            <Rocket className="w-4 h-4" /> 
+            <span className="hidden sm:inline">
+              {isTraining ? "Đang gửi..." : "Gửi Train (Runpod)"}
+            </span>
           </button>
         </div>
       </header>
