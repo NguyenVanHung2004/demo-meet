@@ -30,6 +30,9 @@ export default function MeetingDetailState({
   const audioRef = useRef<HTMLAudioElement>(null);
   const [activeTab, setActiveTab] = useState<'transcript' | 'summary'>('transcript');
 
+  // [MỚI] State lọc speaker
+  const [filteredSpeakerId, setFilteredSpeakerId] = useState<string | null>(null);
+
   // State cho menu xuất file
   const [showExportMenu, setShowExportMenu] = useState(false);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
@@ -137,7 +140,31 @@ export default function MeetingDetailState({
   };
 
   const handleTimeUpdate = () => {
-    if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+    if (!audioRef.current) return;
+    
+    // [MỚI] Tự động bỏ qua đoạn nói của người khác
+    if (filteredSpeakerId && isPlaying) {
+      const time = audioRef.current.currentTime;
+      // Tìm xem hiện tại đang ở segment nào (dự phòng thêm 2s nếu end bị undefined)
+      const currentSeg = meeting.segments.find(s => time >= s.start && time < (s.end || s.start + 2));
+      
+      if (currentSeg && currentSeg.speakerId === filteredSpeakerId) {
+        // Đang nằm trong câu nói của người được lọc -> Bình thường
+      } else {
+        // Đang ở đoạn của người khác HOẶC đang ở khoảng trắng (gap)
+        // Tìm câu gần nhất của người được lọc ở tương lai
+        const nextTargetSeg = meeting.segments.find(s => s.start > time && s.speakerId === filteredSpeakerId);
+        if (nextTargetSeg) {
+          audioRef.current.currentTime = nextTargetSeg.start;
+        } else {
+          // Nếu không còn câu nào của người này nữa -> Tạm dừng
+          audioRef.current.pause();
+          setIsPlaying(false);
+        }
+      }
+    }
+    
+    setCurrentTime(audioRef.current.currentTime);
   };
 
   const handleLoadedMetadata = () => {
@@ -798,6 +825,28 @@ export default function MeetingDetailState({
           ref={transcriptContainerRef}
           className={`flex-1 overflow-y-auto bg-white md:border-r ${activeTab === 'transcript' ? 'block' : 'hidden md:block'}`}
         >
+          {/* BADGES FILTER */}
+          <div className="px-4 py-3 md:px-8 border-b flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-hide sticky top-0 bg-white/95 backdrop-blur z-20 shadow-sm">
+             <span className="text-xs font-bold text-slate-500 uppercase flex items-center mr-2">
+               <User className="w-3.5 h-3.5 mr-1" /> Người nói:
+             </span>
+             <button 
+                onClick={() => setFilteredSpeakerId(null)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${!filteredSpeakerId ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+             >
+                Tất cả
+             </button>
+             {meeting.speakers.map(speaker => (
+                <button
+                  key={speaker.id}
+                  onClick={() => setFilteredSpeakerId(filteredSpeakerId === speaker.id ? null : speaker.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${filteredSpeakerId === speaker.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                >
+                  {speaker.name}
+                </button>
+             ))}
+          </div>
+
           <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 pb-32 relative">
             {meeting.segments.map((seg, idx) => {
               // Tạo object speaker chuẩn format cho TranscriptRow
@@ -814,7 +863,11 @@ export default function MeetingDetailState({
               };
 
               return (
-                <div key={idx} id={`segment-${seg.start}`}>
+                <div 
+                  key={idx} 
+                  id={`segment-${seg.start}`}
+                  className={filteredSpeakerId && seg.speakerId !== filteredSpeakerId ? 'opacity-30 grayscale transition-all duration-300' : 'transition-all duration-300'}
+                >
                   <TranscriptRow
                     segment={seg}
                     speaker={speakerInfo}
