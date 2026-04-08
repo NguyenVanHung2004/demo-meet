@@ -42,6 +42,7 @@ export interface Meeting {
   isMinuteOnly?: boolean; // Flag for imported minutes without audio/transcript
   language?: "vi" | "en"; // Ngôn ngữ phiên âm: "vi" (mặc định) hoặc "en"
   folderId?: string | null; // [MỚI] Thư mục chứa biên bản
+  shareToken?: string;    // [MỚI] Token chia sẻ công khai
 }
 
 const COLLECTION_NAME = "meetings";
@@ -95,6 +96,25 @@ export const getMeetingById = async (id: string): Promise<Meeting | undefined> =
   }
 };
 
+// 3.1 Lấy cuộc họp qua Share Token hoặc ID (Cho view Khách)
+export const getMeetingByShareId = async (shareId: string): Promise<Meeting | undefined> => {
+  try {
+    // Ưu tiên tìm bằng shareToken
+    const q = query(collection(db, COLLECTION_NAME), where("shareToken", "==", shareId));
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+      return snapshot.docs[0].data() as Meeting;
+    }
+
+    // Fallback: Tìm bằng ID trực tiếp (nếu chưa có token hoặc token == ID)
+    return await getMeetingById(shareId);
+  } catch (error) {
+    console.error("Lỗi lấy từ share link:", error);
+    return undefined;
+  }
+};
+
 // 4. Cập nhật process (Thay đổi 1 phần dữ liệu)
 export const updateMeetingProcess = async (id: string, updates: Partial<Meeting>) => {
   const docRef = doc(db, COLLECTION_NAME, id);
@@ -123,6 +143,15 @@ export const updateMeetingTitle = async (id: string, newTitle: string) => {
 export const updateMeetingFolder = async (meetingId: string, folderId: string | null) => {
   const docRef = doc(db, COLLECTION_NAME, meetingId);
   await updateDoc(docRef, { folderId: folderId });
+};
+
+// 7.2 Tạo Token Chia sẻ
+export const generateMeetingShareToken = async (id: string) => {
+  // Tạo token ngẫu nhiên đẹp, dài khoảng 16 ký tự: rand-rand
+  const token = Math.random().toString(36).substring(2, 10) + '-' + Math.random().toString(36).substring(2, 10);
+  const docRef = doc(db, COLLECTION_NAME, id);
+  await updateDoc(docRef, { shareToken: token });
+  return token;
 };
 
 // 8. Lấy danh sách đang chạy (Cho PollingManager)

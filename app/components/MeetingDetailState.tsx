@@ -12,17 +12,21 @@ import {
 import { saveAs } from "file-saver";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 import TranscriptRow from "./TranscriptRow";
+import { useGlobalUI } from "../context/GlobalUIProvider";
 export default function MeetingDetailState({
   meeting,
   audioSrc,
   onBack,
-  onEdit
+  onEdit,
+  isReadOnly = false
 }: {
   meeting: Meeting,
   audioSrc: string,
   onBack: () => void,
-  onEdit: () => void
+  onEdit: () => void,
+  isReadOnly?: boolean;
 }) {
+  const { toast } = useGlobalUI();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(meeting.duration || 0);
@@ -761,6 +765,33 @@ export default function MeetingDetailState({
         </div>
 
         <div className="flex gap-2 shrink-0 relative">
+          {/* NÚT CHIA SẺ (Chỉ Admin mới thấy) */}
+          {!isReadOnly && (
+             <button
+                onClick={async () => {
+                   import('../lib/db').then(async ({ generateMeetingShareToken }) => {
+                     let shareId = meeting.shareToken;
+                     // Nếu chưa có token, sinh token mới
+                     if (!shareId) {
+                        try {
+                           shareId = await generateMeetingShareToken(meeting.id);
+                           meeting.shareToken = shareId; // Update state local tạm thời
+                        } catch(e) {
+                           console.error("Lỗi sinh share token", e);
+                           shareId = meeting.id; // Fallback
+                        }
+                     }
+                     const shareUrl = `${window.location.origin}/share/${shareId}`;
+                     navigator.clipboard.writeText(shareUrl);
+                     toast.success("Đã copy link chia sẻ: " + shareUrl);
+                   });
+                }}
+                className="px-3 py-2 md:px-4 md:py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-medium rounded-lg shadow-sm flex items-center gap-2 transition"
+             >
+                <Share2 className="w-4 h-4" /> <span className="hidden md:inline">Chia sẻ</span>
+             </button>
+          )}
+
           {/* EXPORT DROPDOWN */}
           <div className="relative">
             <button
@@ -777,6 +808,7 @@ export default function MeetingDetailState({
                   <button onClick={handleDownloadAudio} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700 font-medium border-b border-slate-50">
                     <Music className="w-4 h-4 text-pink-500" /> Audio
                   </button>
+                  {/* Bản Transcript Chỉ Khách (Visitor) hoặc Admin đều có thể tải. Hoặc bạn có thể giấu đi cho Khách tuỳ ý */}
                   <button onClick={handleExport} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700 border-b border-slate-50">
                     <FileText className="w-4 h-4 text-slate-400" /> Nội dung thô (.txt)
                   </button>
@@ -790,12 +822,16 @@ export default function MeetingDetailState({
               </>
             )}
           </div>
-          <button
-            onClick={onEdit}
-            className="px-3 py-2 md:px-5 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-md shadow-indigo-200 flex items-center gap-2 transition"
-          >
-            <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">Sửa</span>
-          </button>
+          
+          {/* NÚT SỬA (Chỉ Admin) */}
+          {!isReadOnly && (
+            <button
+              onClick={onEdit}
+              className="px-3 py-2 md:px-5 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-md shadow-indigo-200 flex items-center gap-2 transition"
+            >
+              <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">Sửa</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -907,12 +943,14 @@ export default function MeetingDetailState({
                 <h3 className="text-sm font-bold text-orange-800 uppercase tracking-wider flex items-center gap-2">
                   <Sparkles className="w-4 h-4" /> AI Tóm tắt
                 </h3>
-                <Link
-                  href={`/minutes/${meeting.id}`}
-                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 hover:underline uppercase tracking-tight flex items-center gap-1 transition-colors"
-                >
-                  <FileText className="w-3 h-3" /> Xem chi tiết
-                </Link>
+                {!isReadOnly && (
+                  <Link
+                    href={`/minutes/${meeting.id}`}
+                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 hover:underline uppercase tracking-tight flex items-center gap-1 transition-colors"
+                  >
+                    <FileText className="w-3 h-3" /> Xem chi tiết
+                  </Link>
+                )}
               </div>
               {meeting.summary ? (
                 <div
@@ -943,7 +981,9 @@ export default function MeetingDetailState({
                 <div className="flex flex-col items-center justify-center py-10 text-slate-400">
                   <Sparkles className="w-12 h-12 mb-2 opacity-20" />
                   <p className="text-sm italic">Chưa có tóm tắt nào.</p>
-                  <button onClick={onEdit} className="mt-3 text-xs text-indigo-600 hover:underline font-medium">Tạo ngay trong Edit</button>
+                  {!isReadOnly && (
+                    <button onClick={onEdit} className="mt-3 text-xs text-indigo-600 hover:underline font-medium">Tạo ngay trong Edit</button>
+                  )}
                 </div>
               )}
             </div>
