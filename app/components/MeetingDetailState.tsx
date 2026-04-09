@@ -355,7 +355,8 @@ export default function MeetingDetailState({
       content += `------------------------------------------------\n\n`;
 
       if (meeting.summary) {
-        content += `[TÓM TẮT AI]\n${meeting.summary}\n\n`;
+        const cleanSummary = meeting.summary.replace(/\[\d{1,2}:\d{2}(:\d{2})?\]\s*/g, '');
+        content += `[TÓM TẮT AI]\n${cleanSummary}\n\n`;
         content += `------------------------------------------------\n\n`;
       }
 
@@ -424,7 +425,8 @@ export default function MeetingDetailState({
 
       // --- CONTENT PARSER ---
       lines.forEach(line => {
-        const text = line.trim();
+        // Xóa các mốc thời gian dạng [00:00] hoặc [00:00:00]
+        const text = line.trim().replace(/\[\d{1,2}:\d{2}(:\d{2})?\]\s*/g, '');
         if (!text) return;
 
         if (text.startsWith('# ')) {
@@ -660,8 +662,8 @@ export default function MeetingDetailState({
       {/* --- HIDDEN CONTENT FOR PDF EXPORT --- */}
       <div
         id="export-summary-content"
-        className="fixed top-0 left-[-9999px] w-[800px] p-16 -z-50 opacity-0"
-        style={{ backgroundColor: '#ffffff', color: '#000000', fontFamily: 'Arial, Helvetica, sans-serif' }}
+        className="fixed top-0 left-[-9999px] w-[800px] -z-50 opacity-0"
+        style={{ backgroundColor: '#ffffff', color: '#000000', fontFamily: 'Arial, Helvetica, sans-serif', padding: '60px', boxSizing: 'border-box' }}
       >
         <div>
           {/* Header File PDF */}
@@ -743,7 +745,7 @@ export default function MeetingDetailState({
                 strong: ({ node, ...props }) => <strong style={{ color: '#000000', fontWeight: 'bold' }} {...props} />
               }}
             >
-              {meeting.summary || "Chưa có nội dung tóm tắt."}
+              {meeting.summary ? meeting.summary.replace(/\[\d{1,2}:\d{2}(:\d{2})?\]\s*/g, '') : "Chưa có nội dung tóm tắt."}
             </ReactMarkdown>
           </div>
         </div>
