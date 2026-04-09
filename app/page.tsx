@@ -39,6 +39,7 @@ export default function Page() {
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false); // [MỚI]
   const [isBotModalOpen, setIsBotModalOpen] = useState(false); // [MỚI]
   const [selectedLiveLanguage, setSelectedLiveLanguage] = useState<"vi" | "en">("vi");
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null); // [MỚI] State theo dõi tiến trình upload
   const { toast, confirm } = useGlobalUI(); // [MỚI]
   useEffect(() => {
     const initData = async () => {
@@ -141,11 +142,14 @@ export default function Page() {
     if (!user) return toast.error("Vui lòng đăng nhập!");
 
     const tempId = crypto.randomUUID();
-    toast.info("Đang tải lên server...");
+    setUploadProgress(0);
     try {
       // 1. Upload lên Firebase Storage
-      const url = await uploadAudioToFirebase(file, user.uid);
+      const url = await uploadAudioToFirebase(file, user.uid, (progress) => {
+        setUploadProgress(progress);
+      });
 
+      setUploadProgress(null);
       // 2. Trigger RunPod để lấy Job ID
       const jobId = await startTranscriptionJob(url, language);
 
@@ -174,6 +178,7 @@ export default function Page() {
     } catch (error) {
       console.error("Lỗi upload:", error);
       toast.error("Có lỗi xảy ra: " + (error as Error).message);
+      setUploadProgress(null);
     }
   };
   // Flow 2: Demo Data
@@ -305,6 +310,26 @@ export default function Page() {
         isOpen={isBotModalOpen}
         onClose={() => setIsBotModalOpen(false)}
       />
+
+      {/* --- UPLOAD PROGRESS WIDGET (NON-BLOCKING) --- */}
+      {uploadProgress !== null && (
+        <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-[100] animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-72 md:w-80 p-5">
+            <div className="flex items-center gap-4 mb-3">
+              <div className="w-8 h-8 flex-shrink-0 border-2 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+              <div className="flex-1">
+                <h3 className="text-slate-800 font-bold text-sm">Đang tải file lên...</h3>
+                <p className="text-slate-500 text-xs">Vui lòng không tắt trang</p>
+              </div>
+              <div className="text-sm font-bold text-indigo-600">{uploadProgress}%</div>
+            </div>
+            
+            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden shadow-inner">
+              <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full transition-all duration-300 rounded-full" style={{ width: `${uploadProgress}%` }}></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {currentState === "PROCESSING" && (
         <div className="flex flex-col items-center justify-center h-full space-y-6">

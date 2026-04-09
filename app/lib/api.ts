@@ -1,18 +1,38 @@
 // app/lib/api.ts
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { storage } from "./firebase";
 const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
 const RUNPOD_ENDPOINT_ID = process.env.NEXT_PUBLIC_RUNPOD_ENDPOINT_ID;
 
 // --- HÀM 1: GỠ BĂNG (Audio -> Text) - Dùng RunPod Async --
 // 1. Upload file lên Firebase (Thay thế Vercel Blob)
-export const uploadAudioToFirebase = async (file: File, userId: string): Promise<string> => {
-  // Lưu vào folder riêng của user
-  const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
-  const storageRef = ref(storage, `users/${userId}/uploads/${fileName}`);
+export const uploadAudioToFirebase = (
+  file: File, 
+  userId: string,
+  onProgress?: (progress: number) => void
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+    const storageRef = ref(storage, `users/${userId}/uploads/${fileName}`);
 
-  await uploadBytes(storageRef, file);
-  return await getDownloadURL(storageRef);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+        if (onProgress) onProgress(progress);
+      },
+      (error) => {
+        console.error("Firebase Upload Error:", error);
+        reject(error);
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        resolve(downloadURL);
+      }
+    );
+  });
 };
 
 // 2. Gọi RunPod (Chỉ gửi URL, server ko cần sửa gì cả)

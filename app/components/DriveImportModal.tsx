@@ -19,6 +19,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
     const [loading, setLoading] = useState(false);
     const [importingId, setImportingId] = useState<string | null>(null);
     const [conversionProgress, setConversionProgress] = useState(0);
+    const [uploadProgress, setUploadProgress] = useState(0); // [MỚI]
     const [showAll, setShowAll] = useState(false);
     const [language, setLanguage] = useState<"vi" | "en">("vi");
 
@@ -68,7 +69,8 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
 
         setImportingId(file.id);
         setConversionProgress(0); // Reset progress
-
+        setUploadProgress(0); // [MỚI] Reset
+        
         try {
             // 1. Download from Drive via Proxy (Server)
             const downloadRes = await fetch(`/api/drive/download?fileId=${file.id}`);
@@ -96,7 +98,9 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
             }
 
             // 2. Upload to Firebase (Client SDK - Authenticated)
-            const firebaseUrl = await uploadAudioToFirebase(fileObj, user.uid);
+            const firebaseUrl = await uploadAudioToFirebase(fileObj, user.uid, (progress) => {
+                setUploadProgress(progress);
+            });
 
             // 3. Trigger Transcription
             const jobId = await startTranscriptionJob(firebaseUrl, language);
@@ -129,6 +133,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
         } finally {
             setImportingId(null);
             setConversionProgress(0);
+            setUploadProgress(0);
         }
     };
 
@@ -244,10 +249,18 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
                                                         conversionProgress > 0 && conversionProgress < 100 ? (
                                                             <span className="flex items-center gap-2">
                                                                 <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
-                                                                {conversionProgress}%
+                                                                Đang chuyển đổi {conversionProgress}%
+                                                            </span>
+                                                        ) : uploadProgress > 0 && uploadProgress < 100 ? (
+                                                            <span className="flex items-center gap-2">
+                                                                <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
+                                                                Đang tải lên {uploadProgress}%
                                                             </span>
                                                         ) : (
-                                                            <>Importing...</>
+                                                            <span className="flex items-center gap-2">
+                                                                <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
+                                                                Đang xử lý...
+                                                            </span>
                                                         )
                                                     ) : (
                                                         <>
