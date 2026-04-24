@@ -47,7 +47,7 @@ export default function OnboardingTour() {
             element: '#tour-record',
             popover: {
               title: 'Ghi âm trực tiếp',
-              description: 'Bạn có thể ghi âm trực tiếp cuộc họp ngay tại đây. AI sẽ hiển thị văn bản theo thời gian thực (Karaoke).',
+              description: 'Bạn có thể ghi âm trực tiếp cuộc họp ngay tại đây. AI sẽ hiển thị văn bản theo thời gian thực.',
               side: 'bottom', align: 'start'
             }
           },
