@@ -5,7 +5,10 @@ import GlobalUIProvider from "./context/GlobalUIProvider";
 import { AuthProvider } from "./context/AuthContext";
 
 // [QUAN TRỌNG] Thêm "vietnamese" vào đây
-const inter = Inter({ subsets: ["latin", "vietnamese"] });
+const inter = Inter({ 
+  subsets: ["latin", "vietnamese"],
+  variable: '--font-inter'
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,6 +25,8 @@ export const metadata: Metadata = {
   description: "Ghi biên bản và tóm tắt cuộc họp",
 };
 
+import OnboardingTour from "./components/OnboardingTour";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -31,10 +36,11 @@ export default function RootLayout({
     <html lang="vi">
       <body
         suppressHydrationWarning={true}
-        className={inter.className}
+        className={`${inter.variable} font-sans`}
       >
          <AuthProvider>
           <GlobalUIProvider>
+            <OnboardingTour />
             {children}
           </GlobalUIProvider>
         </AuthProvider>

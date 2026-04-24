@@ -221,7 +221,7 @@ export default function DashboardState({
           <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shadow-lg hover:rotate-12 transition-transform">
             AI
           </div>
-          <span className="tracking-tight">MeetNote</span>
+          <span className="tracking-tight text-xl">Smart Meeting</span>
         </div>
 
         <nav className="space-y-2">
@@ -293,7 +293,7 @@ export default function DashboardState({
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* HEADER */}
         <header className="bg-white border-b px-4 py-3 md:px-8 md:py-4 flex justify-between items-center shrink-0 sticky top-0 z-20">
-          <h1 className="text-lg md:text-2xl font-bold text-slate-800 flex items-center gap-2">
+          <h1 id="tour-welcome" className="text-lg md:text-2xl font-bold text-slate-800 flex items-center gap-2">
             {currentTab === "all" ? (
               "Danh sách cuộc họp"
             ) : (
@@ -316,6 +316,7 @@ export default function DashboardState({
           <div className="hidden md:flex gap-2">
             {/* [MỚI] Bot Button */}
             <button
+              id="tour-bot"
               onClick={onOpenBot}
               className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
             >
@@ -323,6 +324,7 @@ export default function DashboardState({
               Mời Bot
             </button>
             <button
+              id="tour-drive"
               onClick={onOpenDrive}
               className="text-sm font-medium text-green-600 hover:text-green-800 hover:bg-green-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
             >
@@ -355,6 +357,7 @@ export default function DashboardState({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
               {/* Upload Card */}
               <div
+                id="tour-upload"
                 className="group relative border border-dashed border-indigo-200 bg-white hover:border-indigo-400 rounded-xl p-4 md:p-6 flex flex-row md:flex-col items-center justify-start md:justify-center gap-4 cursor-pointer transition-all duration-300 shadow-sm active:scale-[0.98]"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -384,6 +387,7 @@ export default function DashboardState({
 
               {/* [FIX] Live Card */}
               <div
+                id="tour-record"
                 onClick={() => onLive(liveLanguage)}
                 className="group border border-dashed border-red-200 bg-white hover:border-red-400 rounded-xl p-4 md:p-6 flex flex-row md:flex-col items-center justify-start md:justify-center gap-4 cursor-pointer transition-all duration-300 shadow-sm active:scale-[0.98]"
               >
@@ -414,7 +418,7 @@ export default function DashboardState({
           )}
 
           {/* MEETING LIST */}
-          <div className="space-y-3">
+          <div id="tour-list" className="space-y-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                 {filteredMeetings.length} Cuộc họp

@@ -18,6 +18,7 @@
     "@tiptap/starter-kit": "^3.17.0",
     "@vercel/blob": "^2.0.0",
     "docx": "^9.5.1",
+    "driver.js": "^1.4.0",
     "file-saver": "^2.0.5",
     "firebase": "^12.7.0",
     "html2canvas": "npm:html2canvas-pro@^1.5.13",

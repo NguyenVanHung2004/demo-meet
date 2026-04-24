@@ -10,10 +10,10 @@ export default function LoginState() {
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-slate-50 font-sans selection:bg-indigo-100">
-      
+
       {/* 1. BACKGROUND DECORATION (Hiệu ứng nền) */}
       <div className="absolute inset-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-200 via-slate-50 to-white opacity-70"></div>
-      
+
       {/* Các khối màu bay bay (Blobs) */}
       <div className="absolute -top-24 -left-24 w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
       <div className="absolute top-1/2 -right-24 w-96 h-96 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
@@ -22,20 +22,20 @@ export default function LoginState() {
       {/* 2. MAIN CARD */}
       <div className="relative z-10 w-full max-w-md p-4">
         <div className="bg-white/70 backdrop-blur-2xl border border-white/50 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-          
+
           {/* Header Line */}
           <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
 
           <div className="p-8 md:p-10 text-center">
-            
+
             {/* Logo App */}
             <div className="mx-auto w-20 h-20 bg-gradient-to-tr from-indigo-600 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 mb-8 transform hover:scale-105 transition-transform duration-300">
-               <NotebookPen className="w-10 h-10 text-white" />
+              <NotebookPen className="w-10 h-10 text-white" />
             </div>
 
             {/* Title & Slogan */}
             <h1 className="text-3xl font-extrabold text-slate-800 mb-2 tracking-tight">
-              MeetNote AI
+              Smart Meeting Assistant
             </h1>
             <p className="text-slate-500 mb-8 text-sm md:text-base leading-relaxed">
               Biến cuộc họp thành văn bản & tóm tắt thông minh chỉ trong vài giây.
@@ -43,16 +43,16 @@ export default function LoginState() {
 
             {/* Feature Badges (Trang trí thêm cho uy tín) */}
             <div className="flex justify-center gap-4 mb-10">
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold uppercase tracking-wider">
-                    <BrainCircuit className="w-3 h-3" /> AI Powered
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold uppercase tracking-wider">
-                    <Zap className="w-3 h-3" /> Fast
-                </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold uppercase tracking-wider">
+                <BrainCircuit className="w-3 h-3" /> AI Powered
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold uppercase tracking-wider">
+                <Zap className="w-3 h-3" /> Fast
+              </div>
             </div>
 
             {/* Google Login Button */}
-            <button 
+            <button
               onClick={() => login()}
               className="w-full group relative flex items-center justify-center gap-3 px-6 py-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-indigo-300 hover:bg-slate-50 transition-all duration-200 active:scale-[0.98]"
             >
@@ -73,10 +73,10 @@ export default function LoginState() {
             </p>
           </div>
         </div>
-        
+
         {/* Footer Text */}
         <div className="mt-6 text-center text-slate-400 text-xs font-medium">
-            © 2025 MeetNote AI. Product by You.
+          © 2025 Smart Meeting Assistant. Product by You.
         </div>
       </div>
     </div>

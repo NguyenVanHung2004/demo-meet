@@ -30,6 +30,8 @@ export type AppState =
   | "LIVE_RECORDING"
   | "MEETING_DETAIL";
 
+
+
 export default function Page() {
   const { user, loading } = useAuth();
   const [currentState, setCurrentState] = useState<AppState>("DASHBOARD");
@@ -285,6 +287,7 @@ export default function Page() {
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
+
       <PollingManager onUpdate={triggerRefresh} />
 
       {currentState === "DASHBOARD" && (

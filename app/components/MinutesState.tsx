@@ -294,7 +294,7 @@ export default function MinutesState() {
                                 <ArrowLeft className="w-5 h-5 text-slate-600" />
                             </Link>
                             <div className="min-w-0">
-                                <h1 className="text-lg md:text-2xl font-bold text-slate-800 flex items-center gap-1.5 md:gap-2 truncate">
+                                <h1 id="tour-minutes-title" className="text-lg md:text-2xl font-bold text-slate-800 flex items-center gap-1.5 md:gap-2 truncate">
                                     <FileText className="w-5 h-5 md:w-7 md:h-7 text-indigo-600 shrink-0" />
                                     <span className="truncate">Biên bản cuộc họp</span>
                                 </h1>
@@ -314,6 +314,7 @@ export default function MinutesState() {
                                 <RefreshCw className={`w-5 h-5 text-slate-600 ${loading ? 'animate-spin' : ''}`} />
                             </button>
                             <button
+                                id="tour-minutes-folder"
                                 onClick={() => setShowNewFolderModal(true)}
                                 className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium flex items-center gap-1.5 md:gap-2 shadow-sm transition-all active:scale-95 shrink-0"
                             >
@@ -321,6 +322,7 @@ export default function MinutesState() {
                                 <span className="text-sm md:text-base hidden sm:inline">Tạo thư mục</span>
                             </button>
                             <button
+                                id="tour-minutes-import"
                                 onClick={() => fileInputRef.current?.click()}
                                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 md:px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 md:gap-2 shadow-md transition-all active:scale-95 shrink-0"
                             >
@@ -338,7 +340,7 @@ export default function MinutesState() {
                     </div>
 
                     {/* Search Bar */}
-                    <div className="mt-4 relative">
+                    <div id="tour-minutes-search" className="mt-4 relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                         <input
                             type="text"
@@ -357,7 +359,7 @@ export default function MinutesState() {
                 {/* 📂 Folders Section (Only show at root) */}
                 {!loading && !currentFolder && folders.length > 0 && (
                     <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <h2 id="tour-minutes-folders" className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                             <FolderIcon className="w-5 h-5 text-indigo-500" />
                             Thư mục của bạn
                         </h2>
@@ -487,7 +489,7 @@ export default function MinutesState() {
                             <table className="w-full text-left">
                                 <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
                                     <tr>
-                                        <th className="px-6 py-4">Tên cuộc họp</th>
+                                        <th id="tour-minutes-select" className="px-6 py-4">Tên cuộc họp</th>
                                         <th className="px-6 py-4">Ngày tạo</th>
                                         <th className="px-6 py-4">Thời lượng</th>
                                         <th className="px-6 py-4">Nội dung</th>
@@ -510,7 +512,10 @@ export default function MinutesState() {
                                             className="group hover:bg-indigo-50/50 cursor-pointer transition-colors"
                                         >
                                             <td className="px-6 py-4">
-                                                <button onClick={(e) => toggleSelection(meeting.id, e)} className="text-slate-400 hover:text-indigo-600 transition-colors">
+                                                <button 
+                                                    onClick={(e) => toggleSelection(meeting.id, e)} 
+                                                    className="tour-checkbox-btn text-slate-400 hover:text-indigo-600 transition-colors"
+                                                >
                                                     {selectedIds.has(meeting.id) ? <CheckSquare className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5" />}
                                                 </button>
                                             </td>
@@ -606,7 +611,7 @@ export default function MinutesState() {
 
             {/* 🟢 FLOATING ACTION PANEL */}
             {selectedIds.size > 0 && (
-                <div className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-full shadow-xl flex items-center gap-3 md:gap-6 z-50 animate-in slide-in-from-bottom-4 transition-all hover:scale-105 cursor-default w-[90%] md:w-auto max-w-sm md:max-w-none justify-between md:justify-start">
+                <div id="tour-minutes-ai-panel" className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-full shadow-xl flex items-center gap-3 md:gap-6 z-50 animate-in slide-in-from-bottom-4 transition-all hover:scale-105 cursor-default w-[90%] md:w-auto max-w-sm md:max-w-none justify-between md:justify-start">
                     <span className="font-semibold text-xs md:text-sm whitespace-nowrap"><span className="hidden sm:inline">Đã chọn </span>{selectedIds.size}</span>
                     <div className="h-4 md:h-6 w-px bg-slate-700"></div>
                     <button
