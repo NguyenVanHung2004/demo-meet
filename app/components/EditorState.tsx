@@ -392,7 +392,7 @@ export default function EditorState({
             await collectAndUploadSamples(
               segments,
               initialData.segments,
-              audioSrc,
+              finalMeeting.audioUrl || audioSrc,
               initialData.language ?? "vi",
               initialData.id
             );

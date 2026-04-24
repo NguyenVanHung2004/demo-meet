@@ -167,13 +167,28 @@ export async function collectAndUploadSamples(
   language: string,
   meetingId: string
 ): Promise<TrainingDataSample[]> {
-  // Fetch audio qua server proxy để bypass CORS
-  // (browser fetch() bị CORS chặn với Firebase Storage URL,
-  //  nhưng /api/proxy-file fetch server-side không bị hạn chế)
-  const proxyUrl = `/api/proxy-file?url=${encodeURIComponent(audioSrc)}`;
-  const response = await fetch(proxyUrl);
+  console.log(`[Training] Processing ${correctedSegments.length} segments...`);
 
-  const arrayBuffer = await response.arrayBuffer();
+  // 1. Fetch audio
+  let arrayBuffer: ArrayBuffer;
+  try {
+    // Nếu là blob: hoặc đường dẫn relative (demo data) thì fetch trực tiếp
+    if (audioSrc.startsWith('blob:') || audioSrc.startsWith('/')) {
+      const response = await fetch(audioSrc);
+      if (!response.ok) throw new Error(`Direct fetch failed: ${response.statusText}`);
+      arrayBuffer = await response.arrayBuffer();
+    } else {
+      // Fetch audio qua server proxy để bypass CORS cho Firebase Storage
+      const proxyUrl = `/api/proxy-file?url=${encodeURIComponent(audioSrc)}`;
+      const response = await fetch(proxyUrl);
+      if (!response.ok) throw new Error(`Proxy fetch failed: ${response.statusText}`);
+      arrayBuffer = await response.arrayBuffer();
+    }
+  } catch (err) {
+    console.error("[Training] Failed to fetch audio:", err);
+    return [];
+  }
+
   const audioCtx = new AudioContext();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
@@ -218,6 +233,7 @@ export async function collectAndUploadSamples(
   // Lưu metadata Firestore tập trung
   if (results.length > 0) {
     await saveTrainingSamples(results);
+    console.log(`[Training] Successfully uploaded ${results.length} samples.`);
   }
 
   return results;
