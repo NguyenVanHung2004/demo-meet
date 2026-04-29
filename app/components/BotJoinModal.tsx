@@ -325,6 +325,9 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                 <p className="text-xs text-slate-500 italic">
                                     * Bot sẽ tự động rời phòng khi kết thúc.
                                 </p>
+                                <div className="text-[11px] sm:text-xs text-slate-600 bg-blue-50 p-3 rounded-xl border border-blue-100 leading-relaxed mt-2">
+                                    <span className="font-semibold text-blue-700">Lưu ý cho Google Workspace/Edu:</span> Nếu bot không thể tham gia, quản trị viên có thể cần cấp quyền. <a href="https://guide.fireflies.ai/articles/7581948912-how-to-invite-fireflies-to-google-meet-meetings" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">Xem hướng dẫn</a>
+                                </div>
                             </div>
 
                             <button
