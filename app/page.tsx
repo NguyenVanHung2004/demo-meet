@@ -250,9 +250,11 @@ export default function Page() {
     }
 
     // 2. Hỏi xác nhận
+    const lang = meeting.language || "vi";
+    const langLabel = lang === "en" ? "Tiếng Anh (English)" : "Tiếng Việt";
     const isConfirmed = await confirm({
-      title: "Xử lý lại?",
-      message: "Hệ thống sẽ chạy lại AI cho file này. Dữ liệu cũ (Segments/Summary) sẽ bị ghi đè. Bạn có chắc chắn?",
+      title: `Xử lý lại (${langLabel})?`,
+      message: `Hệ thống sẽ chạy lại AI bằng ${langLabel} cho file này. Dữ liệu cũ (Segments/Summary) sẽ bị ghi đè. Bạn có chắc chắn?`,
       confirmText: "Chạy lại",
       type: "info"
     });

@@ -538,11 +538,11 @@ export default function DashboardState({
                             </td>
                             <td className="px-6 py-4">{getStatusBadge(m)}</td>
                             <td className="px-6 py-4 text-right">
-                              <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex justify-end gap-2 transition-opacity">
                                 {currentTab === "all" ? (
                                   <>
                                     {/* ✅ [MỚI] Nút xử lý lại */}
-                                    {["completed", "transcribed"].includes(
+                                    {["completed", "transcribed", "failed"].includes(
                                       m.status
                                     ) && (
                                         <button
@@ -627,9 +627,10 @@ export default function DashboardState({
                             {currentTab === "all" && (
                               <button
                                 onClick={(e) => handleMoveToTrash(e, m.id)}
-                                className="p-1 text-slate-300 hover:text-red-500 -mt-1 -mr-2"
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 rounded-full transition -mt-1 -mr-2"
+                                title="Xóa vào thùng rác"
                               >
-                                <MoreVertical className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             )}
                           </div>
@@ -648,7 +649,7 @@ export default function DashboardState({
                             {getStatusBadge(m)}
                             {currentTab === "all" && (
                               <div className="flex gap-2">
-                                {["completed", "transcribed"].includes(
+                                {["completed", "transcribed", "failed"].includes(
                                   m.status
                                 ) && (
                                     <button
@@ -656,9 +657,10 @@ export default function DashboardState({
                                         e.stopPropagation();
                                         onReprocess(m);
                                       }}
-                                      className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg"
+                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 rounded-lg transition font-medium"
                                     >
-                                      <Wand2 className="w-3 h-3" />
+                                      <Wand2 className="w-3.5 h-3.5" />
+                                      <span className="text-xs">Xử lý lại</span>
                                     </button>
                                   )}
                               </div>

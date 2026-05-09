@@ -523,6 +523,7 @@ export default function LiveRecordingState({
         // [QUAN TRỌNG] Không có jobId, trạng thái là completed
         jobId: undefined,
         status: 'completed',
+        language: language, // [FIX] Lưu ngôn ngữ để sau này xử lý lại chuẩn
 
         segments: finalSegments, // Lưu text live
         summary: finalSummary,   // Lưu summary live
