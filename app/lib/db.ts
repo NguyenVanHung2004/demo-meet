@@ -408,3 +408,77 @@ export const deleteFolder = async (userId: string, folderId: string) => {
     throw error;
   }
 };
+
+// --- PHẦN MỚI: QUẢN LÝ LIVE SESSIONS ---
+
+export interface LiveSession {
+  id: string;
+  hostId: string;
+  title: string;
+  language?: "vi" | "en";
+  segments: Segment[];
+  summary: string;
+  status: "live" | "ended";
+  startedAt: number;
+}
+
+const LIVE_COLLECTION = "live_sessions";
+
+// 1. Khởi tạo một phiên live
+export const createLiveSession = async (session: LiveSession) => {
+  try {
+    const docRef = doc(db, LIVE_COLLECTION, session.id);
+    const cleanData = JSON.parse(JSON.stringify(session));
+    
+    // Thêm trường expireAt (24h sau) để Firebase TTL tự động dọn dẹp (tính năng xóa rác)
+    cleanData.expireAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await setDoc(docRef, cleanData);
+    console.log("Đã khởi tạo Live Session:", session.id);
+  } catch (error) {
+    console.error("Lỗi tạo Live Session:", error);
+    throw error;
+  }
+};
+
+// 2. Cập nhật dữ liệu live (Segments và Summary)
+export const updateLiveSession = async (sessionId: string, segments: Segment[], summary: string) => {
+  try {
+    const docRef = doc(db, LIVE_COLLECTION, sessionId);
+    // Deep copy để tránh lỗi Reference của React/Firebase
+    const cleanSegments = JSON.parse(JSON.stringify(segments));
+    await updateDoc(docRef, {
+      segments: cleanSegments,
+      summary: summary
+    });
+  } catch (error) {
+    console.error("Lỗi cập nhật Live Session:", error);
+  }
+};
+
+// 3. Kết thúc phiên live
+export const endLiveSession = async (sessionId: string) => {
+  if (!sessionId) return;
+  try {
+    const docRef = doc(db, LIVE_COLLECTION, sessionId);
+    await updateDoc(docRef, { status: "ended" });
+  } catch (error) {
+    console.error("Lỗi kết thúc Live Session:", error);
+  }
+};
+
+// 4. Lắng nghe dữ liệu live (Dành cho Viewer)
+export const subscribeToLiveSession = (sessionId: string, onUpdate: (data: LiveSession | null) => void) => {
+  const docRef = doc(db, LIVE_COLLECTION, sessionId);
+  
+  return onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      onUpdate(docSnap.data() as LiveSession);
+    } else {
+      onUpdate(null);
+    }
+  }, (error) => {
+    console.error("Lỗi lắng nghe Live Session:", error);
+    onUpdate(null);
+  });
+};

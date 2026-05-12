@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, Pause, ChevronLeft, Save, Sparkles, AlignLeft, Trash2, Loader2, MonitorPlay } from "lucide-react";
+import { Mic, Pause, ChevronLeft, Save, Sparkles, AlignLeft, Trash2, Loader2, MonitorPlay, Link as LinkIcon, CheckCircle2 } from "lucide-react";
 import useDeepgram from "../hooks/useDeepgram";
 import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api"; // [MỚI] Thêm api mới
-import { saveMeeting } from "../lib/db"; // [MỚI]
+import { saveMeeting, createLiveSession, updateLiveSession, endLiveSession } from "../lib/db"; // [MỚI]
 import { useAuth } from "../context/AuthContext"; // [MỚI]
 import useLocalTranscription from "../hooks/useLocalTranscription";
 
@@ -39,6 +39,11 @@ export default function LiveRecordingState({
   const [mobileTab, setMobileTab] = useState<'transcript' | 'summary'>('transcript');
   const [isUploading, setIsUploading] = useState(false); // [MỚI] State loading khi upload
   const [language, setLanguage] = useState<"vi" | "en">(initialLanguage);
+
+  // [MỚI] Live Session Sync
+  const [liveSessionId, setLiveSessionId] = useState<string | null>(null);
+  const liveSessionIdRef = useRef<string | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   // [FEATURE] Capture System Audio (Persisted)
   const [captureSystemAudio, setCaptureSystemAudio] = useState(false);
@@ -206,6 +211,15 @@ export default function LiveRecordingState({
           isDeleted: false
         });
 
+        // [MỚI] Sync dữ liệu lên Firebase Live Session
+        if (liveSessionIdRef.current) {
+          await updateLiveSession(
+            liveSessionIdRef.current,
+            finalSegments,
+            finalSummary
+          );
+        }
+
         // B. Save Audio Chunks (Incremental)
         const currentChunks = audioChunksRef.current;
         const newChunks = currentChunks.slice(lastSavedChunkIndexRef.current);
@@ -219,7 +233,7 @@ export default function LiveRecordingState({
       } catch (e) {
         console.error("Auto-save failed:", e);
       }
-    }, 10000); // 10s
+    }, 5000); // 5s
 
     return () => clearInterval(interval);
   }, [user]);
@@ -311,6 +325,25 @@ export default function LiveRecordingState({
 
       // [CASE 2] NẾU LÀ LẦN ĐẦU -> KHỞI TẠO MỚI
       console.log("Starting new recording session. System Audio:", captureSystemAudio);
+
+      // [MỚI] Khởi tạo Live Session trên Firebase
+      if (!liveSessionIdRef.current && user) {
+        const newSessionId = `live-${crypto.randomUUID().substring(0, 8)}`;
+        setLiveSessionId(newSessionId);
+        liveSessionIdRef.current = newSessionId;
+        
+        await createLiveSession({
+          id: newSessionId,
+          hostId: user.uid,
+          title: `Live Meeting ${new Date().toLocaleString('vi-VN')}`,
+          language: language,
+          segments: [],
+          summary: "",
+          status: "live",
+          startedAt: Date.now()
+        });
+      }
+
       let finalStream: MediaStream;
 
       if (!captureSystemAudio) {
@@ -403,6 +436,12 @@ export default function LiveRecordingState({
 
   const handeFullStop = () => {
     console.log("Cleaning up recording session...");
+    
+    // [MỚI] Đánh dấu end nếu đang live
+    if (liveSessionIdRef.current) {
+      endLiveSession(liveSessionIdRef.current).catch(e => console.error(e));
+    }
+
     // Stop everything clearly
     if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
     mediaRecorderRef.current = null;
@@ -579,9 +618,26 @@ export default function LiveRecordingState({
             <span className="text-sm md:text-base font-mono font-bold text-slate-700">{formatTime(timer)}</span>
           </div>
         </div>
-        <button
-          onClick={handleSaveAndProcess}
-          disabled={isUploading}
+        
+        <div className="flex items-center gap-2 md:gap-3">
+          {liveSessionId && (
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/live/${liveSessionId}`;
+                navigator.clipboard.writeText(url);
+                setIsCopied(true);
+                setTimeout(() => setIsCopied(false), 2000);
+              }}
+              className="px-3 py-1.5 md:px-4 md:py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-medium text-sm flex items-center gap-2 shadow-sm transition-all"
+            >
+              {isCopied ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <LinkIcon className="w-4 h-4" />}
+              <span className="hidden md:inline">{isCopied ? "Đã copy link" : "Share Live"}</span>
+            </button>
+          )}
+          
+          <button
+            onClick={handleSaveAndProcess}
+            disabled={isUploading}
           className={`px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2 shadow-lg transition-all ${isUploading ? 'opacity-70 cursor-wait' : ''}`}
         >
           {isUploading ? (
@@ -596,7 +652,8 @@ export default function LiveRecordingState({
               <span className="md:hidden">Lưu</span>
             </>
           )}
-        </button>
+          </button>
+        </div>
       </div>
 
       {/* BODY */}
