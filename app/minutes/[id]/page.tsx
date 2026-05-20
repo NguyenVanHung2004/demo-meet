@@ -109,9 +109,10 @@ export default function MinuteDetailPage() {
         if (highlightQuery && !loading) {
             // Đợi render xong
             setTimeout(() => {
-                const marks = document.querySelectorAll('mark');
-                setMatchCount(marks.length);
-                if (marks.length > 0) {
+                const marks = document.querySelectorAll('mark[data-match-index]');
+                const uniqueIndices = new Set(Array.from(marks).map(m => m.getAttribute('data-match-index')));
+                setMatchCount(uniqueIndices.size);
+                if (uniqueIndices.size > 0) {
                     setCurrentMatchIndex(0);
                 }
             }, 800);
@@ -131,12 +132,17 @@ export default function MinuteDetailPage() {
 
     // 🟢 APPLY ACTIVE STYLE EFFECT (Runs after render/state change)
     useEffect(() => {
-        const marks = document.querySelectorAll('mark');
+        const marks = document.querySelectorAll('mark[data-match-index]');
         if (marks.length === 0) return;
 
-        marks.forEach((m, i) => {
-            if (i === currentMatchIndex) {
-                m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        let scrolled = false;
+        marks.forEach((m) => {
+            const index = parseInt(m.getAttribute('data-match-index') || "0", 10);
+            if (index === currentMatchIndex) {
+                if (!scrolled) {
+                    m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    scrolled = true;
+                }
                 m.className = "bg-indigo-600 text-white ring-2 ring-indigo-300 shadow-sm scale-110 transition-transform rounded-sm px-0.5";
             } else {
                 m.className = "bg-yellow-200 text-slate-900 rounded-sm px-0.5 transition-colors";
@@ -148,8 +154,23 @@ export default function MinuteDetailPage() {
     const getHighlightedContent = (htmlContent: string, query: string | null) => {
         if (!query || !query.trim()) return htmlContent;
         try {
-            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![^<]*>)`, 'gi');
-            return htmlContent.replace(regex, '<mark class="bg-yellow-200 text-slate-900 rounded-sm px-0.5">$1</mark>');
+            const cleanQuery = query.trim().normalize('NFC');
+            const tokens = cleanQuery.split(/\s+/);
+            
+            // Xây dựng regex tìm đúng cụm từ, bỏ qua các thẻ HTML/khoảng trắng nằm giữa các chữ.
+            // VD: "Ngọc mở" sẽ match được "Ngọc</strong> mở"
+            const pattern = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('(?:\\s|<[^>]*>|&nbsp;)+');
+            const regex = new RegExp(`(${pattern})(?![^<]*>)`, 'gi');
+
+            let matchIndex = 0;
+            return htmlContent.normalize('NFC').replace(regex, (match) => {
+                const currentIdx = matchIndex++;
+                // Chỉ bọc thẻ <mark> vào những đoạn chữ, giữ nguyên các thẻ HTML bên trong match
+                return match.replace(/(^|>)([^<]+)(<|$)/g, (m, p1, p2, p3) => {
+                    if (p2.trim().length === 0) return m; // Bỏ qua nếu chỉ là khoảng trắng
+                    return `${p1}<mark data-match-index="${currentIdx}" class="bg-yellow-200 text-slate-900 rounded-sm px-0.5">${p2}</mark>${p3}`;
+                });
+            });
         } catch (e) {
             return htmlContent;
         }

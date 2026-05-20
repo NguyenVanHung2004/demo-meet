@@ -202,9 +202,34 @@ export default function MinutesState() {
         }
     };
 
+    const cleanText = (text: string) => {
+        if (!text) return "";
+        return text
+            // HTML Entities
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            // Thêm dấu cách trước khi xóa block tags để tránh chữ bị dính vào nhau (VD: </p><p> -> khoảng cách)
+            .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, ' </$1>')
+            .replace(/<br\s*\/?>/gi, ' ')
+            // Xóa HTML tags
+            .replace(/<[^>]*>/g, '')
+            // Xóa Markdown
+            .replace(/#{1,6}\s/g, '')
+            .replace(/\*\*(.+?)\*\*/g, '$1')
+            .replace(/\*(.+?)\*/g, '$1')
+            .replace(/^[-*+]\s/gm, '')
+            // Xóa khoảng trắng thừa
+            .replace(/\s+/g, ' ')
+            .trim();
+    };
+
     const filteredMeetings = meetings.filter((m) => {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch = m.title.toLowerCase().includes(query) || m.summary?.toLowerCase().includes(query);
+        const query = searchQuery.trim().toLowerCase().normalize('NFC');
+        const titleMatch = m.title.toLowerCase().normalize('NFC').includes(query);
+        const summaryMatch = cleanText(m.summary || "").toLowerCase().normalize('NFC').includes(query);
+        const matchesSearch = titleMatch || summaryMatch;
         const matchesFolder = currentFolder 
             ? m.folderId === currentFolder.id 
             : (!m.folderId || m.folderId === "");
@@ -227,15 +252,7 @@ export default function MinutesState() {
 
     const getSummaryPreview = (summary: string) => {
         const maxLength = 150;
-        // Strip HTML tags and Markdown syntax
-        let plainText = summary
-            .replace(/<[^>]*>/g, '')  // Remove HTML tags
-            .replace(/#{1,6}\s/g, '')  // Remove # headings
-            .replace(/\*\*(.+?)\*\*/g, '$1')  // Remove **bold**
-            .replace(/\*(.+?)\*/g, '$1')  // Remove *italic*
-            .replace(/^[-*+]\s/gm, '')  // Remove list markers
-            .replace(/\s+/g, ' ')  // Normalize whitespace
-            .trim();
+        let plainText = cleanText(summary);
         if (plainText.length <= maxLength) return plainText;
         return plainText.substring(0, maxLength) + "...";
     };
@@ -245,18 +262,11 @@ export default function MinutesState() {
         if (!query.trim()) return getSummaryPreview(content);
 
         // 1. Clean content (giống preview)
-        const plainText = content
-            .replace(/<[^>]*>/g, '')
-            .replace(/#{1,6}\s/g, '')
-            .replace(/\*\*(.+?)\*\*/g, '$1')
-            .replace(/\*(.+?)\*/g, '$1')
-            .replace(/^[-*+]\s/gm, '')
-            .replace(/\s+/g, ' ')
-            .trim();
+        const plainText = cleanText(content);
 
         // 2. Tìm vị trí match case-insensitive
-        const lowerText = plainText.toLowerCase();
-        const lowerQuery = query.toLowerCase().trim();
+        const lowerText = plainText.toLowerCase().normalize('NFC');
+        const lowerQuery = query.toLowerCase().trim().normalize('NFC');
         const index = lowerText.indexOf(lowerQuery);
 
         // Nếu không tìm thấy (có thể match ở title), trả về preview thường
