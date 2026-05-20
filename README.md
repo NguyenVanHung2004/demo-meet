@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Meeting Assistant (demo-meet)
 
-## Getting Started
+A smart, modern web application built with **Next.js** to record, transcribe, edit, and summarize your meetings automatically. Designed to boost productivity by turning long meeting recordings into actionable insights and accurate transcripts.
 
-First, run the development server:
+## 🚀 Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **🎙️ Real-time & Local Audio Transcription:** Record audio and generate accurate transcripts using local/cloud ASR models.
+- **✨ AI-Powered Summarization:** Leverage Google Generative AI (Gemini) to automatically generate meeting minutes, action items, and summaries based on customizable templates.
+- **📝 Advanced Transcript Editor:**
+  - **Karaoke-style Highlighting:** Words are highlighted in real-time as the audio plays.
+  - **Edit & Format:** Correct transcriptions seamlessly without losing time synchronization.
+  - **Split & Merge:** Easily split a sentence into two or merge consecutive sentences with intuitive keyboard shortcuts (`Enter` / `Backspace`).
+  - **Speaker Management:** Assign, rename, and manage speakers effortlessly.
+- **📄 Export Options:** Export your transcripts and summarized minutes to multiple formats including `DOCX`, `PDF`, and plain text.
+- **☁️ Cloud Sync & Sharing:** Powered by Firebase, keeping your meetings securely stored and easily shareable in read-only mode.
+- **🎯 Guided Onboarding:** Built-in interactive product tours using `driver.js`.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🛠️ Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Framework:** [Next.js](https://nextjs.org/) (React 19)
+- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/)
+- **Backend & Database:** [Firebase](https://firebase.google.com/) (Auth, Firestore, Storage)
+- **AI & Processing:**
+  - `@google/generative-ai` (LLM integration)
+  - `@deepgram/sdk` (Speech-to-text integration)
+  - `@ffmpeg/ffmpeg` (In-browser audio processing)
+- **Rich Text Editor:** TipTap
+- **Icons:** Lucide React
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📦 Getting Started
 
-## Learn More
+### Prerequisites
 
-To learn more about Next.js, take a look at the following resources:
+- Node.js (v18+)
+- npm or yarn
+- Firebase Project setup
+- API Keys for Google Generative AI and Deepgram (if applicable)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Installation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **Clone the repository (or download the source):**
+   ```bash
+   git clone <repository-url>
+   cd demo-meet
+   ```
 
-## Deploy on Vercel
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+3. **Set up Environment Variables:**
+   Create a `.env.local` file in the root directory and add your keys (update according to your actual configuration):
+   ```env
+   NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_firebase_project_id
+   NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+4. **Run the Development Server:**
+   ```bash
+   npm run dev
+   ```
+
+5. **Open the App:**
+   Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
+
+## 💡 Keyboard Shortcuts (Editor)
+
+- **`Enter`**: Split the current transcript segment at the cursor position.
+- **`Backspace` (at start of line)**: Merge the current segment with the one above it.
+- **Double Click**: Quick edit any transcript text.
+
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are welcome!
+
+## 📄 License
+
+This project is created as part of a thesis/graduation project (Khoa luận). 

@@ -245,7 +245,7 @@ export default function EditorState({
   const handleUpdateText = (segId: string, newText: string) => {
     setSegments(prev => prev.map(s =>
       s.id === segId
-        ? { ...s, text: newText, words: [] } // <--- Thêm words: [] vào đây
+        ? { ...s, text: newText } // Xóa words: [] để giữ lại karaoke nếu người dùng hoàn tác text
         : s
     ));
   };
@@ -258,36 +258,61 @@ export default function EditorState({
     const original = segments[idx];
 
     // 1. Tính toán thời điểm cắt (Split Time)
-    const duration = original.end - original.start;
-    const splitRatio = original.text.length > 0 ? cursorIndex / original.text.length : 0.5;
-    const newMidTime = original.start + (duration * splitRatio);
-
-    // 2. Chia mảng Words (Karaoke) làm 2 phần
-    // Logic: Từ nào có thời gian bắt đầu < thời điểm cắt -> Về dòng 1, ngược lại về dòng 2
+    // Nếu có mảng words, ta sẽ tìm chính xác điểm cắt dựa vào cursorIndex
     let words1: any[] = [];
     let words2: any[] = [];
+    let newMidTime = original.start + ((original.end - original.start) * 0.5);
+    
+    let text1 = original.text.slice(0, cursorIndex).trim();
+    let text2 = original.text.slice(cursorIndex).trim();
 
     if (original.words && original.words.length > 0) {
-      words1 = original.words.filter((w: any) => w.start < newMidTime);
-      words2 = original.words.filter((w: any) => w.start >= newMidTime);
+      let charCount = 0;
+      let splitIdx = original.words.length;
+      
+      for (let i = 0; i < original.words.length; i++) {
+        const wordLen = original.words[i].word.length;
+        // Chia đôi word: nếu cursor quá nửa từ thì đẩy từ đó lên dòng trên, ngược lại xuống dòng dưới
+        if (charCount + (wordLen / 2) > cursorIndex) {
+          splitIdx = i;
+          break;
+        }
+        charCount += wordLen + 1; // +1 cho space
+      }
+
+      words1 = original.words.slice(0, splitIdx);
+      words2 = original.words.slice(splitIdx);
+
+      if (words2.length > 0) {
+        newMidTime = words2[0].start;
+      } else if (words1.length > 0) {
+        newMidTime = words1[words1.length - 1].end;
+      }
+
+      // Snap text theo word để tránh desync
+      text1 = words1.length > 0 ? words1.map((w: any) => w.word).join(" ") : text1;
+      text2 = words2.length > 0 ? words2.map((w: any) => w.word).join(" ") : text2;
+    } else {
+      const splitRatio = original.text.length > 0 ? cursorIndex / original.text.length : 0.5;
+      newMidTime = original.start + ((original.end - original.start) * splitRatio);
     }
 
-    // 3. Tạo Segment 1 (Cập nhật words mới)
+    // 3. Tạo Segment 1
     const newSeg1 = {
       ...original,
-      text: original.text.slice(0, cursorIndex).trim(),
+      text: text1,
       end: newMidTime,
-      words: words1 // <--- QUAN TRỌNG: Cập nhật words đã cắt
+      words: words1
     };
 
-    // 4. Tạo Segment 2 (Cập nhật words mới)
+    // 4. Tạo Segment 2
     const newSeg2 = {
       id: Date.now().toString(),
       speakerId: original.speakerId,
       start: newMidTime,
       end: original.end,
-      text: original.text.slice(cursorIndex).trim(),
-      words: words2 // <--- QUAN TRỌNG: Gán words phần còn lại
+      text: text2,
+      words: words2
     };
 
     const newSegments = [...segments];
@@ -339,9 +364,18 @@ export default function EditorState({
       const current = { ...updated[idx] };
       current.start = newStart;
       if (current.start >= current.end) current.end = current.start + 2;
-      if (idx > 0 && updated[idx - 1].end > current.start) updated[idx - 1].end = current.start;
       updated[idx] = current;
-      return updated.sort((a, b) => a.start - b.start);
+      
+      // Sắp xếp lại mảng theo start time
+      updated.sort((a, b) => a.start - b.start);
+      
+      // Fix các đoạn bị chồng lấn thời gian
+      for (let i = 0; i < updated.length - 1; i++) {
+        if (updated[i].end > updated[i+1].start) {
+          updated[i].end = updated[i+1].start;
+        }
+      }
+      return updated;
     });
   };
 

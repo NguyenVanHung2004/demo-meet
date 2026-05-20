@@ -125,7 +125,7 @@ export default function useLocalTranscription(
 
     const handleServerResponse = (data: any) => {
         // [QUAN TRỌNG] Kiểm tra cờ is_final từ server
-        // Server mình vừa sửa sẽ gửi { ..., "is_final": false } cho text xám
+        // Server sẽ gửi { ..., "is_final": false } cho text xám
         // và { ..., "is_final": true } cho text chốt.
         const isFinalPacket = data.is_final;
 

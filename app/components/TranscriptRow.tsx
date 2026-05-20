@@ -41,8 +41,14 @@ export default function TranscriptRow({
   // Helper: Chuyển giây -> MM:SS
 
   const renderKaraokeText = () => {
-    // BACKWARD COMPATIBILITY: Nếu dữ liệu cũ không có words -> Hiện text thường
-    if (!segment.words || segment.words.length === 0) {
+    // Nếu text bị sửa thủ công khác với các từ trong mảng words, ta sẽ chỉ hiện text thường
+    // (Bỏ qua khoảng trắng thừa để so sánh chính xác hơn)
+    const originalText = segment.words ? segment.words.map((w: any) => w.word).join(" ") : "";
+    const isEdited = segment.words && segment.words.length > 0 && 
+                     segment.text.replace(/\s+/g, ' ').trim() !== originalText.replace(/\s+/g, ' ').trim();
+
+    // BACKWARD COMPATIBILITY & EDIT FALLBACK
+    if (!segment.words || segment.words.length === 0 || isEdited) {
       return (
         <p
           className="text-slate-800 leading-relaxed text-sm md:text-base smart-copy-text"
@@ -128,11 +134,13 @@ export default function TranscriptRow({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSplit(segment.id, target.selectionStart);
+      setIsEditing(false); // Thoát chế độ sửa để tránh kẹt focus ở dòng cũ
     }
     if (e.key === 'Backspace' && target.selectionStart === 0 && target.selectionEnd === 0) {
       // Chỉ cho phép gộp nếu không bôi đen
       e.preventDefault();
       onMerge(segment.id);
+      setIsEditing(false);
     }
   };
 
