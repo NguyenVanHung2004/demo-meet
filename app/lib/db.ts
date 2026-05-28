@@ -56,8 +56,21 @@ export const saveMeeting = async (meeting: Meeting) => {
     const cleanData = JSON.parse(JSON.stringify(meeting));
     await setDoc(docRef, cleanData);
   } catch (error) {
-    console.error("Lỗi lưu meeting:", error);
-    throw error;
+    console.warn("⚠️ Lỗi lưu meeting (có thể do limit 1MB). Đang thử giảm dung lượng...", error);
+    try {
+      const docRef = doc(db, COLLECTION_NAME, meeting.id);
+      // Lược bỏ mảng words khỏi segments để tránh lỗi vượt quá 1MB
+      const lightSegments = meeting.segments.map((s: any) => {
+        const { words, ...rest } = s;
+        return rest;
+      });
+      const lightMeeting = { ...meeting, segments: lightSegments };
+      const cleanData = JSON.parse(JSON.stringify(lightMeeting));
+      await setDoc(docRef, cleanData);
+    } catch (fallbackError) {
+      console.error("Vẫn lỗi sau khi giảm dung lượng:", fallbackError);
+      throw fallbackError; // Bắn lỗi ra để EditorState.tsx catch được
+    }
   }
 };
 
@@ -452,7 +465,21 @@ export const updateLiveSession = async (sessionId: string, segments: Segment[], 
       summary: summary
     });
   } catch (error) {
-    console.error("Lỗi cập nhật Live Session:", error);
+    console.warn("⚠️ Lỗi cập nhật Live Session (có thể do limit 1MB). Đang thử giảm dung lượng...", error);
+    try {
+      const docRef = doc(db, LIVE_COLLECTION, sessionId);
+      const lightSegments = segments.map((s: any) => {
+        const { words, ...rest } = s;
+        return rest;
+      });
+      const cleanLightSegments = JSON.parse(JSON.stringify(lightSegments));
+      await updateDoc(docRef, {
+        segments: cleanLightSegments,
+        summary: summary
+      });
+    } catch (fallbackError) {
+      console.error("Vẫn lỗi sau khi giảm dung lượng Live Session:", fallbackError);
+    }
   }
 };
 

@@ -7,6 +7,7 @@ import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api"; // [M
 import { saveMeeting, createLiveSession, updateLiveSession, endLiveSession } from "../lib/db"; // [MỚI]
 import { useAuth } from "../context/AuthContext"; // [MỚI]
 import useLocalTranscription from "../hooks/useLocalTranscription";
+import { useGlobalUI } from "../context/GlobalUIProvider"; // [MỚI]
 
 type SummaryItem = {
   id: number;
@@ -39,11 +40,15 @@ export default function LiveRecordingState({
   const [mobileTab, setMobileTab] = useState<'transcript' | 'summary'>('transcript');
   const [isUploading, setIsUploading] = useState(false); // [MỚI] State loading khi upload
   const [language, setLanguage] = useState<"vi" | "en">(initialLanguage);
+  const [remainingMinutesWarning, setRemainingMinutesWarning] = useState<number | null>(null); // [MỚI] State hiển thị số phút còn lại
 
   // [MỚI] Live Session Sync
   const [liveSessionId, setLiveSessionId] = useState<string | null>(null);
   const liveSessionIdRef = useRef<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+
+  const { toast } = useGlobalUI();
+  const isSizeWarningShownRef = useRef(false);
 
   // [FEATURE] Capture System Audio (Persisted)
   const [captureSystemAudio, setCaptureSystemAudio] = useState(false);
@@ -197,6 +202,35 @@ export default function LiveRecordingState({
           .map(s => `[${formatTime(s.timestamp || 0)}] ${s.content}`)
           .join("\n\n");
 
+        // [MỚI] Ước tính dung lượng của toàn bộ dữ liệu sẽ lưu (Segments + Summary)
+        const payloadSize = new Blob([JSON.stringify({ segments: finalSegments, summary: finalSummary })]).size;
+
+        let sizeForCalculation = payloadSize;
+        let bytesPerMinute = 15000; // Tốc độ tiêu thụ mặc định (có mảng words)
+        let isLightMode = false;
+
+        // Nếu dung lượng thật chạm ngưỡng 850KB, Firebase sẽ lưu bằng Fallback (bỏ words)
+        // Nên ở frontend ta cũng mô phỏng việc bỏ words để tính số phút cho chuẩn
+        if (payloadSize > 850000) {
+          isLightMode = true;
+          const lightSegments = finalSegments.map(s => {
+            const { words, ...rest } = s;
+            return rest;
+          });
+          sizeForCalculation = new Blob([JSON.stringify({ segments: lightSegments, summary: finalSummary })]).size;
+          bytesPerMinute = 3000; // Tốc độ tiêu thụ bộ nhớ siêu thấp khi chỉ lưu Text
+        }
+
+        const remainingBytes = 1048576 - sizeForCalculation; // Giới hạn 1MB
+        const remainingMinutes = Math.max(0, Math.floor(remainingBytes / bytesPerMinute));
+
+        setRemainingMinutesWarning(remainingMinutes > 999 ? 999 : remainingMinutes);
+
+        if (isLightMode && !isSizeWarningShownRef.current) {
+          isSizeWarningShownRef.current = true;
+          toast.warning(`Dung lượng lớn: Hệ thống đã tự động tắt hiệu ứng đổi màu chữ chạy theo giọng nói để tiết kiệm bộ nhớ. Bạn có thể yên tâm thu âm thêm khoảng ${remainingMinutes} phút nữa!`);
+        }
+
         const { saveDraftMeta, appendAudioChunks } = await import("../lib/indexedDB");
 
         await saveDraftMeta({
@@ -331,7 +365,7 @@ export default function LiveRecordingState({
         const newSessionId = `live-${crypto.randomUUID().substring(0, 8)}`;
         setLiveSessionId(newSessionId);
         liveSessionIdRef.current = newSessionId;
-        
+
         await createLiveSession({
           id: newSessionId,
           hostId: user.uid,
@@ -436,7 +470,7 @@ export default function LiveRecordingState({
 
   const handeFullStop = () => {
     console.log("Cleaning up recording session...");
-    
+
     // [MỚI] Đánh dấu end nếu đang live
     if (liveSessionIdRef.current) {
       endLiveSession(liveSessionIdRef.current).catch(e => console.error(e));
@@ -471,10 +505,10 @@ export default function LiveRecordingState({
       const start = s.words?.[0]?.start || 0;
       return time >= start && time < (s.words?.[s.words.length - 1]?.end || start + 5);
     });
-    
+
     const startTime = targetSegment?.words?.[0]?.start || time;
     const element = document.getElementById(`live-seg-${startTime}`);
-    
+
     if (element && transcriptEndRef.current?.parentElement) {
       const container = transcriptEndRef.current.parentElement;
       const targetScrollTop = element.offsetTop - (container.clientHeight / 4);
@@ -617,8 +651,21 @@ export default function LiveRecordingState({
             <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Thời gian</span>
             <span className="text-sm md:text-base font-mono font-bold text-slate-700">{formatTime(timer)}</span>
           </div>
+          {remainingMinutesWarning !== null && (
+            <div
+              className={`ml-2 md:ml-4 flex flex-col border-l pl-3 md:pl-4 transition-colors cursor-help ${remainingMinutesWarning < 15 ? 'border-red-200' : 'border-slate-200'}`}
+              title="Khi cuộc họp kéo dài quá con số còn lại, hệ thống sẽ bỏ một số trường khi lưu cuộc họp, giúp tăng thời gian cuộc họp. Điều này dẫn đến khi xem lại cuộc họp sẽ không có hiệu ứng đổi màu chữ chạy theo giọng nói."
+            >
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${remainingMinutesWarning < 15 ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
+                {remainingMinutesWarning < 15 ? 'Sắp đầy bộ nhớ' : 'Dự kiến'}
+              </span>
+              <span className={`text-xs font-medium ${remainingMinutesWarning < 15 ? 'text-red-600' : 'text-slate-500'}`}>
+                Còn ~{remainingMinutesWarning} phút
+              </span>
+            </div>
+          )}
         </div>
-        
+
         <div className="flex items-center gap-2 md:gap-3">
           {liveSessionId && (
             <button
@@ -634,24 +681,24 @@ export default function LiveRecordingState({
               <span className="hidden md:inline">{isCopied ? "Đã copy link" : "Share Live"}</span>
             </button>
           )}
-          
+
           <button
             onClick={handleSaveAndProcess}
             disabled={isUploading}
-          className={`px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2 shadow-lg transition-all ${isUploading ? 'opacity-70 cursor-wait' : ''}`}
-        >
-          {isUploading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Đang lưu...</span>
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" />
-              <span className="hidden md:inline">Dừng & Lưu</span>
-              <span className="md:hidden">Lưu</span>
-            </>
-          )}
+            className={`px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2 shadow-lg transition-all ${isUploading ? 'opacity-70 cursor-wait' : ''}`}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Đang lưu...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span className="hidden md:inline">Dừng & Lưu</span>
+                <span className="md:hidden">Lưu</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -719,8 +766,8 @@ export default function LiveRecordingState({
                 const showInterimInline = isLastSegment && interimContent && interimContent.trim().length > 0;
 
                 return (
-                  <div 
-                    key={idx} 
+                  <div
+                    key={idx}
                     id={`live-seg-${startTime}`}
                     className={`flex flex-col gap-1 animate-in fade-in slide-in-from-bottom-2 ${seg.speaker === 0 ? 'items-start' : 'items-end'}`}
                   >
@@ -769,8 +816,8 @@ export default function LiveRecordingState({
           <div className="flex-1 overflow-y-auto p-4 scroll-smooth">
             <div className="space-y-4">
               {summaries.filter(s => !s.isLoading).map((item) => (
-                <div 
-                  key={item.id} 
+                <div
+                  key={item.id}
                   onClick={() => item.timestamp !== undefined && scrollToLiveSegment(item.timestamp)}
                   className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500 group cursor-pointer hover:bg-indigo-50/50 p-2 -mx-2 rounded-xl transition-colors"
                 >
