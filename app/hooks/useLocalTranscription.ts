@@ -56,8 +56,8 @@ export type TranscriptSegment = {
 export default function useLocalTranscription(
     onFinal?: (data: any) => void
 ) {
-    const serverUrl = "wss://realtime-processing-server.io.vn";
-    // const serverUrl = "ws://localhost:6006";
+    const serverUrl = process.env.NEXT_PUBLIC_REALTIME_PROCESSING_SERVER || "wss://realtime-processing-server.io.vn";
+    // const serverUrl = "ws://localhost:6006";`
     // --- STATE ---
     const [segments, setSegments] = useState<TranscriptSegment[]>([]);
     const [interimContent, setInterimContent] = useState<string>("");
