@@ -708,10 +708,10 @@ export default function LiveRecordingState({
         {/* LEFT COLUMN */}
         <div className="flex-1 flex flex-col gap-4 min-h-0">
           {/* VISUALIZER & CONTROLS */}
-          <div className="bg-slate-900 rounded-2xl p-4 md:p-6 shadow-lg shrink-0 flex items-center justify-between gap-4 md:flex-col md:justify-center md:h-64 transition-all relative overflow-hidden">
+          <div className="bg-slate-900 rounded-2xl p-4 pt-14 md:p-6 shadow-lg shrink-0 flex items-center justify-between gap-4 md:flex-col md:justify-center md:h-64 transition-all relative overflow-hidden">
 
             {/* [FEATURE] System Audio Toggle */}
-            <div className="absolute top-4 right-4 z-10">
+            <div className="absolute top-3 right-4 md:top-4 md:right-4 z-10">
               <button
                 onClick={() => !isListening && toggleCaptureSystemAudio()}
                 disabled={isListening} // Không cho đổi khi đang ghi
