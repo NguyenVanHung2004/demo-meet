@@ -47,6 +47,28 @@ export default function LiveRecordingState({
   const liveSessionIdRef = useRef<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
+  // [MỚI] Wake Lock API để giữ sáng màn hình
+  const wakeLockRef = useRef<any>(null);
+
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        console.log('Screen Wake Lock active');
+      }
+    } catch (err) {
+      console.warn(`Wake Lock error: ${err}`);
+    }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().then(() => {
+        wakeLockRef.current = null;
+      });
+    }
+  };
+
   const { toast } = useGlobalUI();
   const isSizeWarningShownRef = useRef(false);
 
@@ -166,6 +188,17 @@ export default function LiveRecordingState({
     const hasInterim = interimContent && interimContent.trim().length > 0;
     isInterimActiveRef.current = !!hasInterim;
   }, [interimContent]);
+
+  // [MỚI] Yêu cầu lại quyền sáng màn hình nếu user thoát ra vào lại app
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && isListening) {
+        await requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isListening]);
 
   // --- AUTO-SAVE LOGIC (ZIPFORMER BRANCH) ---
   const draftIdRef = useRef<string>(crypto.randomUUID());
@@ -449,12 +482,14 @@ export default function LiveRecordingState({
 
       setupVisualizer(finalStream); // Gọi hàm visualizer đã tách
       startListening(finalStream, timer, language);
+      requestWakeLock(); // [MỚI] Bật giữ sáng màn hình
     } catch (err) { alert("Lỗi Micro/Permission: " + err); }
   };
 
   const stopRecordingSession = () => {
     // 1. Tắt Deepgram/Socket (Tiết kiệm)
     stopListening();
+    releaseWakeLock(); // [MỚI] Giải phóng quyền sáng màn hình
 
     // 2. Pause MediaRecorder (Không stop để resume được)
     if (mediaRecorderRef.current?.state === "recording") {
@@ -470,6 +505,7 @@ export default function LiveRecordingState({
 
   const handeFullStop = () => {
     console.log("Cleaning up recording session...");
+    releaseWakeLock(); // [MỚI] Chắc chắn giải phóng khi unmount hoặc stop hẳn
 
     // [MỚI] Đánh dấu end nếu đang live
     if (liveSessionIdRef.current) {
