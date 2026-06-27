@@ -66,6 +66,12 @@ export default function DashboardState({
   const hasShownDraftWarning = useRef(false);
   const [uploadLanguage, setUploadLanguage] = useState<"vi" | "en">("vi");
   const [liveLanguage, setLiveLanguage] = useState<"vi" | "en">("vi");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]); // [MỚI]
+
+  const handleTabChange = (tab: DashboardTab) => {
+    setCurrentTab(tab);
+    setSelectedIds([]);
+  };
 
   const loadMeetings = async () => {
     if (user) {
@@ -157,6 +163,67 @@ export default function DashboardState({
     }
   };
 
+  const handleEmptyTrash = async () => {
+    const isConfirmed = await confirm({
+      title: "Dọn dẹp thùng rác?",
+      message: "Tất cả cuộc họp trong thùng rác sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
+      confirmText: "Xóa tất cả",
+      type: "danger",
+    });
+    if (isConfirmed) {
+      const trashMeetings = meetings.filter(m => m.isDeleted);
+      for (const m of trashMeetings) {
+        if (m.status === 'draft') {
+          const { deleteDraft } = await import("../lib/indexedDB");
+          await deleteDraft(m.id);
+        } else {
+          await deleteMeetingPermanent(m.id);
+        }
+      }
+      setSelectedIds([]);
+      loadMeetings();
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    const isConfirmed = await confirm({
+      title: `Xóa ${selectedIds.length} mục đã chọn?`,
+      message: "Hành động này không thể hoàn tác.",
+      confirmText: "Xóa",
+      type: "danger",
+    });
+    if (isConfirmed) {
+      for (const id of selectedIds) {
+        const m = meetings.find(meeting => meeting.id === id);
+        if (m) {
+          if (m.status === 'draft') {
+            const { deleteDraft } = await import("../lib/indexedDB");
+            await deleteDraft(m.id);
+          } else {
+            await deleteMeetingPermanent(m.id);
+          }
+        }
+      }
+      setSelectedIds([]);
+      loadMeetings();
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredMeetings.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredMeetings.map(m => m.id));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
   // --- HELPER: Badge ---
   const getStatusBadge = (m: Meeting) => {
     switch (m.status) {
@@ -226,7 +293,7 @@ export default function DashboardState({
 
         <nav className="space-y-2">
           <div
-            onClick={() => setCurrentTab("all")}
+            onClick={() => handleTabChange("all")}
             className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${currentTab === "all"
               ? "bg-indigo-600 text-white shadow-md transform translate-x-1"
               : "hover:bg-slate-800 hover:text-white"
@@ -265,7 +332,7 @@ export default function DashboardState({
             <Database className="w-4 h-4" /> Dữ liệu huấn luyện
           </Link>
           <div
-            onClick={() => setCurrentTab("trash")}
+            onClick={() => handleTabChange("trash")}
             className={`px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 transition-all font-medium ${currentTab === "trash"
               ? "bg-red-900/40 text-red-200 border border-red-900/50"
               : "hover:bg-slate-800 hover:text-white"
@@ -423,6 +490,24 @@ export default function DashboardState({
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                 {filteredMeetings.length} Cuộc họp
               </h3>
+              {currentTab === "trash" && filteredMeetings.length > 0 && (
+                <div className="flex gap-2">
+                  {selectedIds.length > 0 && (
+                    <button
+                      onClick={handleDeleteSelected}
+                      className="text-xs text-red-600 font-medium hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-colors shadow-sm"
+                    >
+                      Xóa đã chọn ({selectedIds.length})
+                    </button>
+                  )}
+                  <button
+                    onClick={handleEmptyTrash}
+                    className="text-xs text-white bg-red-600 hover:bg-red-700 font-medium px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                  >
+                    Dọn sạch thùng rác
+                  </button>
+                </div>
+              )}
             </div>
 
 
@@ -488,6 +573,16 @@ export default function DashboardState({
                   <table className="w-full text-left">
                     <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
                       <tr>
+                        {currentTab === "trash" && (
+                          <th className="px-4 py-4 w-12">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.length === filteredMeetings.length && filteredMeetings.length > 0}
+                              onChange={toggleSelectAll}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            />
+                          </th>
+                        )}
                         <th className="px-6 py-4">Tên cuộc họp</th>
                         <th className="px-6 py-4">Thời lượng</th>
                         <th className="px-6 py-4">Ngày tạo</th>
@@ -513,6 +608,16 @@ export default function DashboardState({
                               : "bg-slate-50 opacity-70"
                               }`}
                           >
+                            {currentTab === "trash" && (
+                              <td className="px-4 py-4 w-12" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedIds.includes(m.id)}
+                                  onChange={() => toggleSelect(m.id)}
+                                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                />
+                              </td>
+                            )}
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
                                 <div
@@ -609,6 +714,16 @@ export default function DashboardState({
                         className={`bg-white p-4 rounded-xl shadow-sm border border-slate-200 active:scale-[0.98] transition-all flex items-start gap-3 ${!isInteractive && "opacity-75 bg-slate-50"
                           }`}
                       >
+                        {currentTab === "trash" && (
+                          <div onClick={(e) => e.stopPropagation()} className="pt-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(m.id)}
+                              onChange={() => toggleSelect(m.id)}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-5 h-5 cursor-pointer"
+                            />
+                          </div>
+                        )}
                         <div
                           className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm ${m.status === "failed"
                             ? "bg-red-100 text-red-600"
@@ -695,7 +810,7 @@ export default function DashboardState({
         {/* --- MOBILE BOTTOM NAVIGATION --- */}
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t flex items-center justify-around pb-safe pt-2 z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] h-16">
           <button
-            onClick={() => setCurrentTab("all")}
+            onClick={() => handleTabChange("all")}
             className={`flex flex-col items-center gap-1 p-2 w-16 transition-colors ${currentTab === "all"
               ? "text-indigo-600"
               : "text-slate-400 hover:text-slate-600"
@@ -741,7 +856,7 @@ export default function DashboardState({
           </Link>
 
           <button
-            onClick={() => setCurrentTab("trash")}
+            onClick={() => handleTabChange("trash")}
             className={`flex flex-col items-center gap-1 p-2 w-16 transition-colors ${currentTab === "trash"
               ? "text-red-600"
               : "text-slate-400 hover:text-slate-600"
