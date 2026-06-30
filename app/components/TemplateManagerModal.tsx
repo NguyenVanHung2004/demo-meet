@@ -130,11 +130,10 @@ export default function TemplateManagerModal({
                   <button
                     key={t.id}
                     onClick={() => setSelectedTemplate(t)}
-                    className={`w-full text-left p-3 rounded-lg border transition-all text-sm ${
-                      selectedTemplate.id === t.id
-                        ? "bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200"
-                        : "bg-white border-slate-200 hover:border-indigo-300"
-                    }`}
+                    className={`w-full text-left p-3 rounded-lg border transition-all text-sm ${selectedTemplate.id === t.id
+                      ? "bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200"
+                      : "bg-white border-slate-200 hover:border-indigo-300"
+                      }`}
                   >
                     <div className="font-bold text-slate-700">{t.name}</div>
                     <div className="text-xs text-slate-500 mt-1 line-clamp-2">{t.description}</div>
@@ -151,11 +150,10 @@ export default function TemplateManagerModal({
                   <div key={t.id} className="group relative">
                     <button
                       onClick={() => setSelectedTemplate(t)}
-                      className={`w-full text-left p-3 rounded-lg border transition-all text-sm ${
-                        selectedTemplate.id === t.id
-                          ? "bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200"
-                          : "bg-white border-slate-200 hover:border-indigo-300"
-                      }`}
+                      className={`w-full text-left p-3 rounded-lg border transition-all text-sm ${selectedTemplate.id === t.id
+                        ? "bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200"
+                        : "bg-white border-slate-200 hover:border-indigo-300"
+                        }`}
                     >
                       <div className="font-bold text-indigo-700">{t.name}</div>
                       <div className="text-xs text-slate-500 mt-1 line-clamp-2">{t.description}</div>
@@ -273,9 +271,8 @@ export default function TemplateManagerModal({
                 <div className="mt-6 flex justify-end">
                   <button
                     onClick={() => onSelectTemplate(selectedTemplate)}
-                    className={`px-6 py-3 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 ${
-                      actionIcon === "sparkles" ? "bg-orange-600 hover:bg-orange-700" : "bg-indigo-600 hover:bg-indigo-700"
-                    }`}
+                    className={`px-6 py-3 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 ${actionIcon === "sparkles" ? "bg-orange-600 hover:bg-orange-700" : "bg-indigo-600 hover:bg-indigo-700"
+                      }`}
                   >
                     {actionIcon === "sparkles" ? <Sparkles className="w-5 h-5" /> : <Check className="w-5 h-5" />}
                     {actionText}
