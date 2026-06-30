@@ -7,26 +7,33 @@ import ReactMarkdown from 'react-markdown';
 import {
   Play, Pause, ChevronLeft, Edit3, Calendar,
   Clock, Download, FileText, Sparkles, User, AlignLeft, Share2,
-  FileType, Music, RotateCcw, RotateCw, Gauge, Check
+  FileType, Music, RotateCcw, RotateCw, Gauge, Check,
+  LayoutTemplate, X, Plus, Trash2
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
-import TranscriptRow from "./TranscriptRow";
 import { useGlobalUI } from "../context/GlobalUIProvider";
+import { useAuth } from "../context/AuthContext";
+import { MeetingTemplate } from "../lib/templates";
+import TemplateManagerModal from "./TemplateManagerModal";
+import TranscriptRow from "./TranscriptRow";
 export default function MeetingDetailState({
   meeting,
   audioSrc,
   onBack,
   onEdit,
+  onSummarize,
   isReadOnly = false
 }: {
   meeting: Meeting,
   audioSrc: string,
   onBack: () => void,
   onEdit: () => void,
+  onSummarize?: (id: string, text: string, templateStructure?: string) => void,
   isReadOnly?: boolean;
 }) {
-  const { toast } = useGlobalUI();
+  const { toast, confirm } = useGlobalUI();
+  const { user } = useAuth();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(meeting.duration || 0);
@@ -36,6 +43,21 @@ export default function MeetingDetailState({
 
   // [MỚI] State lọc speaker
   const [filteredSpeakerId, setFilteredSpeakerId] = useState<string | null>(null);
+
+  // --- TEMPLATE STATE ---
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+
+  const handleSummarizeRequest = (template: MeetingTemplate) => {
+    if (!onSummarize) return;
+    const fullText = meeting.segments.map((s: any) => {
+      const name = meeting.speakers.find((sp: any) => sp.id === s.speakerId)?.name || `Speaker ${s.speakerId.split('_')[1] || '00'}`;
+      return `[${name}]: ${s.text}`;
+    }).join("\n");
+    onSummarize(meeting.id, fullText, template.structure);
+    toast.info(`Đang tóm tắt theo mẫu: ${template.name}...`);
+    setShowTemplateModal(false);
+    onBack();
+  };
 
   // State cho menu xuất file
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -145,13 +167,13 @@ export default function MeetingDetailState({
 
   const handleTimeUpdate = () => {
     if (!audioRef.current) return;
-    
+
     // [MỚI] Tự động bỏ qua đoạn nói của người khác
     if (filteredSpeakerId && isPlaying) {
       const time = audioRef.current.currentTime;
       // Tìm xem hiện tại đang ở segment nào (dự phòng thêm 2s nếu end bị undefined)
       const currentSeg = meeting.segments.find(s => time >= s.start && time < (s.end || s.start + 2));
-      
+
       if (currentSeg && currentSeg.speakerId === filteredSpeakerId) {
         // Đang nằm trong câu nói của người được lọc -> Bình thường
       } else {
@@ -167,7 +189,7 @@ export default function MeetingDetailState({
         }
       }
     }
-    
+
     setCurrentTime(audioRef.current.currentTime);
   };
 
@@ -204,7 +226,7 @@ export default function MeetingDetailState({
           preciseStartTimestamp = `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
         }
       }
-    } catch(e) {}
+    } catch (e) { }
 
     if (selectedSegments.length === 1) {
       // Trường hợp 1: Copy trong phạm vi 1 segment
@@ -769,29 +791,29 @@ export default function MeetingDetailState({
         <div className="flex gap-2 shrink-0 relative">
           {/* NÚT CHIA SẺ (Chỉ Admin mới thấy) */}
           {!isReadOnly && (
-             <button
-                onClick={async () => {
-                   import('../lib/db').then(async ({ generateMeetingShareToken }) => {
-                     let shareId = meeting.shareToken;
-                     // Nếu chưa có token, sinh token mới
-                     if (!shareId) {
-                        try {
-                           shareId = await generateMeetingShareToken(meeting.id);
-                           meeting.shareToken = shareId; // Update state local tạm thời
-                        } catch(e) {
-                           console.error("Lỗi sinh share token", e);
-                           shareId = meeting.id; // Fallback
-                        }
-                     }
-                     const shareUrl = `${window.location.origin}/share/${shareId}`;
-                     navigator.clipboard.writeText(shareUrl);
-                     toast.success("Đã copy link chia sẻ: " + shareUrl);
-                   });
-                }}
-                className="px-3 py-2 md:px-4 md:py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-medium rounded-lg shadow-sm flex items-center gap-2 transition"
-             >
-                <Share2 className="w-4 h-4" /> <span className="hidden md:inline">Chia sẻ</span>
-             </button>
+            <button
+              onClick={async () => {
+                import('../lib/db').then(async ({ generateMeetingShareToken }) => {
+                  let shareId = meeting.shareToken;
+                  // Nếu chưa có token, sinh token mới
+                  if (!shareId) {
+                    try {
+                      shareId = await generateMeetingShareToken(meeting.id);
+                      meeting.shareToken = shareId; // Update state local tạm thời
+                    } catch (e) {
+                      console.error("Lỗi sinh share token", e);
+                      shareId = meeting.id; // Fallback
+                    }
+                  }
+                  const shareUrl = `${window.location.origin}/share/${shareId}`;
+                  navigator.clipboard.writeText(shareUrl);
+                  toast.success("Đã copy link chia sẻ: " + shareUrl);
+                });
+              }}
+              className="px-3 py-2 md:px-4 md:py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-medium rounded-lg shadow-sm flex items-center gap-2 transition"
+            >
+              <Share2 className="w-4 h-4" /> <span className="hidden md:inline">Chia sẻ</span>
+            </button>
           )}
 
           {/* EXPORT DROPDOWN */}
@@ -824,7 +846,17 @@ export default function MeetingDetailState({
               </>
             )}
           </div>
-          
+
+          {/* NÚT TÓM TẮT LẠI */}
+          {!isReadOnly && onSummarize && (
+            <button
+              onClick={() => setShowTemplateModal(true)}
+              className="px-3 py-2 md:px-5 md:py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 font-medium rounded-lg shadow-sm border border-orange-200 flex items-center gap-2 transition"
+            >
+              <Sparkles className="w-4 h-4" /> <span className="hidden md:inline">Tóm tắt lại</span>
+            </button>
+          )}
+
           {/* NÚT SỬA (Chỉ Admin) */}
           {!isReadOnly && (
             <button
@@ -865,24 +897,24 @@ export default function MeetingDetailState({
         >
           {/* BADGES FILTER */}
           <div className="px-4 py-3 md:px-8 border-b flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-hide sticky top-0 bg-white/95 backdrop-blur z-20 shadow-sm">
-             <span className="text-xs font-bold text-slate-500 uppercase flex items-center mr-2">
-               <User className="w-3.5 h-3.5 mr-1" /> Người nói:
-             </span>
-             <button 
-                onClick={() => setFilteredSpeakerId(null)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${!filteredSpeakerId ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-             >
-                Tất cả
-             </button>
-             {meeting.speakers.map(speaker => (
-                <button
-                  key={speaker.id}
-                  onClick={() => setFilteredSpeakerId(filteredSpeakerId === speaker.id ? null : speaker.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${filteredSpeakerId === speaker.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                >
-                  {speaker.name}
-                </button>
-             ))}
+            <span className="text-xs font-bold text-slate-500 uppercase flex items-center mr-2">
+              <User className="w-3.5 h-3.5 mr-1" /> Người nói:
+            </span>
+            <button
+              onClick={() => setFilteredSpeakerId(null)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${!filteredSpeakerId ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+            >
+              Tất cả
+            </button>
+            {meeting.speakers.map(speaker => (
+              <button
+                key={speaker.id}
+                onClick={() => setFilteredSpeakerId(filteredSpeakerId === speaker.id ? null : speaker.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${filteredSpeakerId === speaker.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+              >
+                {speaker.name}
+              </button>
+            ))}
           </div>
 
           <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 pb-32 relative">
@@ -901,8 +933,8 @@ export default function MeetingDetailState({
               };
 
               return (
-                <div 
-                  key={idx} 
+                <div
+                  key={idx}
                   id={`segment-${seg.start}`}
                   className={filteredSpeakerId && seg.speakerId !== filteredSpeakerId ? 'opacity-30 grayscale transition-all duration-300' : 'transition-all duration-300'}
                 >
@@ -1118,6 +1150,15 @@ export default function MeetingDetailState({
           <div className={`w-2.5 h-2.5 rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1 border-r border-b ${showCopySuccess ? 'bg-emerald-600 border-emerald-500' : 'bg-slate-900 border-slate-700'}`}></div>
         </div>
       )}
+
+      {/* ------------------- TEMPLATE MANAGER MODAL ------------------- */}
+      <TemplateManagerModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onSelectTemplate={handleSummarizeRequest}
+        actionText="Tóm tắt lại theo mẫu này"
+        actionIcon="sparkles"
+      />
     </div>
   );
 }

@@ -357,6 +357,7 @@ export default function Page() {
           audioSrc={audioUrl}
           onBack={handleBackToDashboard}
           onEdit={handleSwitchToEdit}
+          onSummarize={handleBackgroundSummarize}
         />
       )}
 
