@@ -29,7 +29,7 @@ export default function MeetingDetailState({
   audioSrc: string,
   onBack: () => void,
   onEdit: () => void,
-  onSummarize?: (id: string, text: string, templateStructure?: string) => void,
+  onSummarize?: (meeting: Meeting, text: string, templateStructure?: string) => void,
   isReadOnly?: boolean;
 }) {
   const { toast, confirm } = useGlobalUI();
@@ -53,7 +53,7 @@ export default function MeetingDetailState({
       const name = meeting.speakers.find((sp: any) => sp.id === s.speakerId)?.name || `Speaker ${s.speakerId.split('_')[1] || '00'}`;
       return `[${name}]: ${s.text}`;
     }).join("\n");
-    onSummarize(meeting.id, fullText, template.structure);
+    onSummarize(meeting, fullText, template.structure);
     toast.info(`Đang tóm tắt theo mẫu: ${template.name}...`);
     setShowTemplateModal(false);
     onBack();

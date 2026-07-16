@@ -204,11 +204,12 @@ export default function Page() {
   };
 
   const handleBackgroundSummarize = async (
-    meetingId: string,
+    meeting: Meeting,
     transcriptText: string,
-    templateStructure?: string // [NEW] Nhận thêm structure
+    templateStructure?: string
   ) => {
-    const isDraft = meetingId.startsWith("draft");
+    const isDraft = meeting.status === 'draft';
+    const meetingId = meeting.id;
 
     // 1. Nếu là bản nháp -> Upload lên Cloud trước
     if (isDraft) {
