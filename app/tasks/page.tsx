@@ -55,7 +55,8 @@ export default function TaskManagerPage() {
   const [extractedTasks, setExtractedTasks] = useState<TaskItem[]>([]);
   const [showDialog, setShowDialog] = useState(false);
   // 🟢 HÀM XỬ LÝ TÓM TẮT (Truyền vào EditorState)
-  const handleSummarize = async (meetingId: string, fullText: string) => {
+  const handleSummarize = async (meeting: Meeting, fullText: string) => {
+    const meetingId = meeting.id;
     try {
       toast.info("Đang gửi yêu cầu tóm tắt...");
 
