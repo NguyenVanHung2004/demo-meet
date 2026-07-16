@@ -60,6 +60,7 @@ export default function DashboardState({
   const { toast, confirm } = useGlobalUI();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
   const [currentTab, setCurrentTab] = useState<DashboardTab>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
@@ -160,6 +161,45 @@ export default function DashboardState({
         await deleteMeetingPermanent(id);
       }
       loadMeetings();
+    }
+  };
+
+  const handleFinalizeDraft = async (e: React.MouseEvent, m: Meeting) => {
+    e.stopPropagation();
+    try {
+      setIsFinalizing(m.id);
+      toast.info("Đang đồng bộ bản nháp lên cloud...");
+
+      const { getDraftFull, deleteDraft } = await import("../lib/indexedDB");
+      const draft = await getDraftFull(m.id);
+      if (!draft) {
+        toast.error("Không tìm thấy dữ liệu bản nháp!");
+        return;
+      }
+
+      const file = new File([draft.audioBlob], `${m.title}.webm`, { type: 'audio/webm' });
+
+      const { uploadAudioToFirebase } = await import("../lib/api");
+      const cloudUrl = await uploadAudioToFirebase(file, user?.uid || '');
+
+      const finalMeeting = {
+        ...draft.meta,
+        audioUrl: cloudUrl,
+        status: 'completed' as const,
+        jobId: undefined
+      };
+
+      const { saveMeeting } = await import("../lib/db");
+      await saveMeeting(finalMeeting);
+      await deleteDraft(m.id);
+
+      toast.success("Đã gửi lên server thành công!");
+      loadMeetings();
+    } catch (err) {
+      console.error(err);
+      toast.error("Lỗi gửi lên server! " + (err as Error).message);
+    } finally {
+      setIsFinalizing(null);
     }
   };
 
@@ -692,6 +732,19 @@ export default function DashboardState({
                                           <Wand2 className="w-4 h-4" />
                                         </button>
                                       )}
+
+                                    {/* ✅ Nút Gửi lên server cho bản nháp */}
+                                    {m.status === "draft" && (
+                                      <button
+                                        onClick={(e) => handleFinalizeDraft(e, m)}
+                                        disabled={isFinalizing === m.id}
+                                        className={`p-2 rounded-full transition ${isFinalizing === m.id ? 'text-indigo-300 bg-indigo-50 cursor-not-allowed' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                                        title="Gửi bản nháp lên server"
+                                      >
+                                        {isFinalizing === m.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                                      </button>
+                                    )}
+
                                     <button
                                       onClick={(e) =>
                                         handleMoveToTrash(e, m.id)
@@ -807,6 +860,16 @@ export default function DashboardState({
                                       <span className="text-xs">Xử lý lại</span>
                                     </button>
                                   )}
+                                {m.status === "draft" && (
+                                  <button
+                                    onClick={(e) => handleFinalizeDraft(e, m)}
+                                    disabled={isFinalizing === m.id}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition font-medium ${isFinalizing === m.id ? 'bg-indigo-50 text-indigo-300' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200'}`}
+                                  >
+                                    {isFinalizing === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+                                    <span className="text-xs">{isFinalizing === m.id ? 'Đang gửi...' : 'Gửi lên'}</span>
+                                  </button>
+                                )}
                               </div>
                             )}
                             {currentTab === "trash" && (

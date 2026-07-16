@@ -203,14 +203,42 @@ export default function Page() {
     triggerRefresh();
   };
 
-  // ✅ [MỚI] Hàm xử lý tóm tắt chạy ngầm (Fire-and-Forget)
   const handleBackgroundSummarize = async (
     meetingId: string,
     transcriptText: string,
     templateStructure?: string // [NEW] Nhận thêm structure
   ) => {
-    // 1. Cập nhật trạng thái "Đang tóm tắt" ngay lập tức để Dashboard hiện icon xoay
-    await updateMeetingProcess(meetingId, { status: "summarizing" });
+    const isDraft = meetingId.startsWith("draft");
+
+    // 1. Nếu là bản nháp -> Upload lên Cloud trước
+    if (isDraft) {
+      toast.info("Đang đồng bộ bản nháp lên Cloud trước khi tóm tắt...");
+      try {
+        const { getDraftFull, deleteDraft } = await import("./lib/indexedDB");
+        const draftFull = await getDraftFull(meetingId);
+        if (draftFull) {
+          const file = new File([draftFull.audioBlob], `${draftFull.meta.title}.webm`, { type: 'audio/webm' });
+          const url = await uploadAudioToFirebase(file, user?.uid || '');
+          
+          const finalMeeting = {
+            ...draftFull.meta,
+            audioUrl: url,
+            status: "summarizing" as const,
+            jobId: undefined
+          };
+          
+          await saveMeeting(finalMeeting);
+          await deleteDraft(meetingId);
+        }
+      } catch (err) {
+        toast.error("Lỗi đồng bộ bản nháp: " + (err as Error).message);
+        return; // Dừng nếu upload lỗi
+      }
+    } else {
+      // Cập nhật trạng thái "Đang tóm tắt" ngay lập tức để Dashboard hiện icon xoay
+      await updateMeetingProcess(meetingId, { status: "summarizing" });
+    }
+    
     triggerRefresh();
 
     // 2. Chạy bất đồng bộ (KHÔNG await ở đây để không chặn UI)
@@ -328,7 +356,7 @@ export default function Page() {
               </div>
               <div className="text-sm font-bold text-indigo-600">{uploadProgress}%</div>
             </div>
-            
+
             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden shadow-inner">
               <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full transition-all duration-300 rounded-full" style={{ width: `${uploadProgress}%` }}></div>
             </div>
