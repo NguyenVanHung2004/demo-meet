@@ -43,6 +43,7 @@ export interface Meeting {
   language?: "vi" | "en"; // Ngôn ngữ phiên âm: "vi" (mặc định) hoặc "en"
   folderId?: string | null; // [MỚI] Thư mục chứa biên bản
   shareToken?: string;    // [MỚI] Token chia sẻ công khai
+  objectives?: string;    // [MỚI] Mục tiêu cuộc họp
 }
 
 const COLLECTION_NAME = "meetings";

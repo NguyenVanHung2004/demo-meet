@@ -27,11 +27,13 @@ const MobileTabBtn = ({ active, onClick, icon: Icon, label }: any) => (
 );
 
 export default function LiveRecordingState({
-  onFinish, onBack, initialLanguage = "vi"
+  onFinish, onBack, initialLanguage = "vi", initialTitle, initialObjectives
 }: {
   onFinish: () => void,
   onBack: () => void,
-  initialLanguage?: "vi" | "en"
+  initialLanguage?: "vi" | "en",
+  initialTitle?: string,
+  initialObjectives?: string
 }) {
   const { user } = useAuth();
   const [summaries, setSummaries] = useState<SummaryItem[]>([]);
@@ -41,6 +43,8 @@ export default function LiveRecordingState({
   const [isUploading, setIsUploading] = useState(false); // [MỚI] State loading khi upload
   const [language, setLanguage] = useState<"vi" | "en">(initialLanguage);
   const [remainingMinutesWarning, setRemainingMinutesWarning] = useState<number | null>(null); // [MỚI] State hiển thị số phút còn lại
+  const [meetingTitle, setMeetingTitle] = useState(initialTitle || `Cuộc họp trực tiếp ${new Date().toLocaleDateString('vi-VN')}`);
+  const [objectives, setObjectives] = useState(initialObjectives || "");
 
   // [MỚI] Live Session Sync
   const [liveSessionId, setLiveSessionId] = useState<string | null>(null);
@@ -269,13 +273,14 @@ export default function LiveRecordingState({
         await saveDraftMeta({
           id: draftIdRef.current,
           userId: user?.uid,
-          title: `Bản nháp ${new Date().toLocaleString('vi-VN')}`,
+          title: meetingTitle.trim() || `Bản nháp ${new Date().toLocaleString('vi-VN')}`,
           createdAt: Date.now(),
           duration: timer,
           segments: finalSegments,
           summary: finalSummary,
           speakers: [{ id: "SPEAKER_00", name: "Người nói (Live)", color: "bg-indigo-50 text-indigo-700" }],
-          isDeleted: false
+          isDeleted: false,
+          objectives: objectives.trim() || undefined
         });
 
         // [MỚI] Sync dữ liệu lên Firebase Live Session
@@ -402,7 +407,7 @@ export default function LiveRecordingState({
         await createLiveSession({
           id: newSessionId,
           hostId: user.uid,
-          title: `Live Meeting ${new Date().toLocaleString('vi-VN')}`,
+          title: meetingTitle.trim() || `Live Meeting ${new Date().toLocaleString('vi-VN')}`,
           language: language,
           segments: [],
           summary: "",
@@ -624,7 +629,7 @@ export default function LiveRecordingState({
       await saveMeeting({
         id: crypto.randomUUID(),
         userId: user.uid,
-        title: fileName.replace(".mp3", ""),
+        title: meetingTitle.trim() || fileName.replace(".mp3", ""),
         createdAt: Date.now(),
         duration: timer,
         audioUrl: audioUrl,
@@ -637,7 +642,8 @@ export default function LiveRecordingState({
         segments: finalSegments, // Lưu text live
         summary: finalSummary,   // Lưu summary live
         speakers: [{ id: "SPEAKER_00", name: "Người nói (Live)", color: "bg-indigo-50 text-indigo-700" }],
-        isDeleted: false
+        isDeleted: false,
+        objectives: objectives.trim() || undefined
       });
 
       // [FIX] Xóa Draft sau khi đã lưu thành công lên Cloud
@@ -665,6 +671,10 @@ export default function LiveRecordingState({
     const sec = s % 60;
     return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
+
+  useEffect(() => {
+    startRecordingSession();
+  }, []);
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">

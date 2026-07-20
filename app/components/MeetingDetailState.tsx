@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Meeting } from "../lib/db";
+import { Meeting, updateMeetingProcess } from "../lib/db";
 import ReactMarkdown from 'react-markdown';
 import {
   Play, Pause, ChevronLeft, Edit3, Calendar,
@@ -46,6 +46,16 @@ export default function MeetingDetailState({
 
   // --- TEMPLATE STATE ---
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+
+  // --- OBJECTIVES STATE ---
+  const [objectives, setObjectives] = useState(meeting.objectives || "");
+  const [isEditingObjectives, setIsEditingObjectives] = useState(false);
+  const [objectivesInput, setObjectivesInput] = useState(meeting.objectives || "");
+
+  useEffect(() => {
+    setObjectives(meeting.objectives || "");
+    setObjectivesInput(meeting.objectives || "");
+  }, [meeting.objectives]);
 
   const handleSummarizeRequest = (template: MeetingTemplate) => {
     if (!onSummarize) return;
@@ -1019,6 +1029,70 @@ export default function MeetingDetailState({
                     <button onClick={onEdit} className="mt-3 text-xs text-indigo-600 hover:underline font-medium">Tạo ngay trong Edit</button>
                   )}
                 </div>
+              )}
+            </div>
+
+            {/* Meeting Objectives Section */}
+            <div className="bg-white rounded-xl shadow-sm border p-5">
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <AlignLeft className="w-4 h-4 text-indigo-500" /> Mục tiêu cuộc họp
+                </h3>
+                {!isReadOnly && (
+                  <button
+                    onClick={() => {
+                      if (isEditingObjectives) {
+                        setObjectivesInput(objectives);
+                        setIsEditingObjectives(false);
+                      } else {
+                        setIsEditingObjectives(true);
+                      }
+                    }}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1"
+                  >
+                    {isEditingObjectives ? (
+                      <>Hủy</>
+                    ) : (
+                      <>
+                        <Edit3 className="w-3.5 h-3.5" /> Sửa
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {isEditingObjectives ? (
+                <div className="space-y-3">
+                  <textarea
+                    value={objectivesInput}
+                    onChange={(e) => setObjectivesInput(e.target.value)}
+                    placeholder="Nhập mục tiêu cuộc họp..."
+                    rows={3}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium text-slate-700 resize-none"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={async () => {
+                        try {
+                          setObjectives(objectivesInput);
+                          meeting.objectives = objectivesInput;
+                          await updateMeetingProcess(meeting.id, { objectives: objectivesInput.trim() || undefined });
+                          setIsEditingObjectives(false);
+                          toast.success("Đã cập nhật mục tiêu cuộc họp!");
+                        } catch (err) {
+                          toast.error("Lỗi khi lưu mục tiêu: " + (err as Error).message);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm transition-all"
+                    >
+                      Lưu mục tiêu
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600 leading-relaxed italic">
+                  {objectives ? objectives : "Chưa cấu hình mục tiêu cuộc họp."}
+                </p>
               )}
             </div>
 

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 // --- BẮT ĐẦU ĐOẠN CODE MỚI ---
-const PRIMARY_MODEL = "gemini-2.5-flash"; // Model chính (bạn có thể đổi thành 2.5)
+const PRIMARY_MODEL = "gemini-2.5-flash"; // Model chính
 const BACKUP_MODEL = "gemini-1.5-flash"; // Model dự phòng
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -34,9 +34,10 @@ async function generateContentSafe(prompt: string) {
     return await generateWithRetry(BACKUP_MODEL, prompt);
   }
 }
+
 export async function POST(req: Request) {
   try {
-    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure } = await req.json();
+    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives } = await req.json();
 
     if (!text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
@@ -88,13 +89,9 @@ export async function POST(req: Request) {
       QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
       const rawText = await generateContentSafe(prompt);
-
-      // Vì đã ép JSON Mode nên không cần replace markdown nữa, nhưng cứ để cho chắc
       const cleanText = rawText.replace(/```json|```/g, "").trim();
-
-      return NextResponse.json({ summary: cleanText }); // Trả về text dạng chuỗi cho Client parse
+      return NextResponse.json({ summary: cleanText });
     } else if (mode === "segment") {
-      // [PROMPT NÂNG CẤP] Chống lặp ý + Tối ưu cho hội thoại
       prompt = `
       Bạn là chuyên gia ghi chép biên bản cuộc họp theo thời gian thực (Live-taker).
       Nhiệm vụ: Tóm tắt đoạn hội thoại mới nhất ("VĂN BẢN MỚI") để nối tiếp vào biên bản ("NGỮ CẢNH").
@@ -149,7 +146,6 @@ export async function POST(req: Request) {
       `;
     } else {
       // [PROMPT NÂNG CẤP] Cho tóm tắt tổng hợp (Full Summary)
-      // Nếu có templateStructure (Người dùng chọn mẫu), dùng nó. Nếu không, dùng mặc định.
       const structureInstruction = templateStructure || `
       # BIÊN BẢN TÓM TẮT CUỘC HỌP
 
@@ -173,9 +169,13 @@ export async function POST(req: Request) {
         - [ ] **Ai làm?** - [Nhiệm vụ cụ thể] - [Deadline (ghi chính xác ngày/tháng nếu có)]
       `;
 
+      const objectivesPrompt = meetingObjectives
+        ? `\n🎯 MỤC TIÊU CUỘC HỌP (TRỌNG TÂM CẦN BÁM SÁT):\nNgười dùng yêu cầu bạn đặc biệt tập trung tóm tắt và làm nổi bật các nội dung/thảo luận/quyết định có liên quan đến các mục tiêu dưới đây:\n"""\n${meetingObjectives}\n"""\n`
+        : "";
+
       prompt = `
       Bạn là Thư Ký Cấp Cao chuyên nghiệp. Nhiệm vụ của bạn là tổng hợp biên bản cuộc họp từ văn bản thô (transcript), đảm bảo tính chính xác tuyệt đối của thông tin.
-
+      ${objectivesPrompt}
       YÊU CẦU CỐT LÕI (XỬ LÝ DỮ LIỆU):
       1.  **Bảo toàn nguyên vẹn số liệu:** Mọi dữ kiện định lượng (con số, ngày tháng, thời gian, chi phí, số lượng...) phải được trích xuất chính xác như trong transcript. 
         Lưu ý: Transcript là dạng văn nói (speech-to-text), nên các số thường bị viết thành từ ngữ âm tiếng Việt. 
@@ -184,6 +184,7 @@ export async function POST(req: Request) {
           * *Tuyệt đối không* suy đoán hay tự điền số liệu nếu transcript không nhắc đến.
       2.  **Tư duy tổng hợp:** Viết tóm tắt súc tích, tập trung vào kết quả và quyết định, nhưng phải lồng ghép chính xác các dữ kiện số liệu vào ngữ cảnh của câu.
       3.  **Gắn mốc thời gian (Timestamp):** Đây là yêu cầu BẮT BUỘC. Hãy chèn mốc thời gian bắt đầu của ý kiến hoặc chủ đề đó theo định dạng [mm:ss] (ví dụ: [01:23], [10:05]) vào đầu mỗi gạch đầu dòng hoặc tiêu đề mục lục nếu có thể. Điều này giúp người dùng dễ dàng đối chiếu với bản ghi âm.
+      ${meetingObjectives ? `4.  **Định hướng nội dung theo mục tiêu:** Ưu tiên trích xuất và làm sâu sắc thêm các chi tiết liên quan đến "MỤC TIÊU CUỘC HỌP" đã nêu trên.` : ""}
 
       DỮ LIỆU ĐẦU VÀO:
       "${text}"
@@ -199,17 +200,15 @@ export async function POST(req: Request) {
       - Mỗi ý chính hoặc mục thảo luận nên có mốc thời gian [mm:ss] đi kèm.
       - Nếu transcript có thông tin mâu thuẫn (VD: Lúc đầu nói A, sau sửa thành B), hãy ghi nhận thông tin cuối cùng đã được chốt lại (B).
       `;
-
     }
 
     const summary = await generateContentSafe(prompt);
-
     return NextResponse.json({ summary });
 
   } catch (error: any) {
     const errorMessage = error.status === 503
       ? "Hệ thống AI đang quá tải, vui lòng thử lại sau."
       : (error.message || "Lỗi xử lý AI.");
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

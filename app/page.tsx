@@ -41,6 +41,8 @@ export default function Page() {
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false); // [MỚI]
   const [isBotModalOpen, setIsBotModalOpen] = useState(false); // [MỚI]
   const [selectedLiveLanguage, setSelectedLiveLanguage] = useState<"vi" | "en">("vi");
+  const [selectedLiveTitle, setSelectedLiveTitle] = useState("");
+  const [selectedLiveObjectives, setSelectedLiveObjectives] = useState("");
   const [uploadProgress, setUploadProgress] = useState<number | null>(null); // [MỚI] State theo dõi tiến trình upload
   const { toast, confirm } = useGlobalUI(); // [MỚI]
   useEffect(() => {
@@ -140,7 +142,7 @@ export default function Page() {
 
   // --- LOGIC ---
 
-  const handleFileUpload = async (file: File, language: "vi" | "en" = "vi") => {
+  const handleFileUpload = async (file: File, language: "vi" | "en" = "vi", title?: string, objectives?: string) => {
     if (!user) return toast.error("Vui lòng đăng nhập!");
 
     const tempId = crypto.randomUUID();
@@ -161,7 +163,7 @@ export default function Page() {
         id: tempId,
         userId: user.uid,
         jobId: jobId,
-        title: file.name.replace(/\.[^/.]+$/, ""),
+        title: title?.trim() || file.name.replace(/\.[^/.]+$/, ""),
         createdAt: Date.now(),
         duration: 0,
         audioUrl: url,    // URL string
@@ -169,7 +171,8 @@ export default function Page() {
         speakers: [],
         status: 'transcribing',
         isDeleted: false,
-        language: language
+        language: language,
+        objectives: objectives?.trim() || undefined
       };
 
       await saveMeeting(newMeeting);
@@ -191,8 +194,10 @@ export default function Page() {
     toast.success("Đã tạo dữ liệu mẫu!");
   };
   // Flow 3: Live Recording (Xử lý tại trình duyệt)
-  const handleLiveStart = (language: "vi" | "en") => {
+  const handleLiveStart = (language: "vi" | "en", title?: string, objectives?: string) => {
     setSelectedLiveLanguage(language);
+    setSelectedLiveTitle(title || `Cuộc họp trực tiếp ${new Date().toLocaleDateString('vi-VN')}`);
+    setSelectedLiveObjectives(objectives || "");
     setCurrentState("LIVE_RECORDING");
   };
 
@@ -243,7 +248,7 @@ export default function Page() {
     triggerRefresh();
 
     // 2. Chạy bất đồng bộ (KHÔNG await ở đây để không chặn UI)
-    requestSummary(transcriptText, templateStructure)
+    requestSummary(transcriptText, templateStructure, meeting.objectives)
       .then(async (summary) => {
         // Khi xong -> Lưu vào DB
         await updateMeetingProcess(meetingId, {
@@ -375,6 +380,8 @@ export default function Page() {
       {currentState === "LIVE_RECORDING" && (
         <LiveRecordingState
           initialLanguage={selectedLiveLanguage}
+          initialTitle={selectedLiveTitle}
+          initialObjectives={selectedLiveObjectives}
           onFinish={handleFinishLive}
           onBack={() => setCurrentState("DASHBOARD")}
         />

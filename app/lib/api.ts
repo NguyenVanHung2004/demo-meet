@@ -114,7 +114,7 @@ export const requestSegmentSummary = async (text: string, previousSummary: strin
 // };
 
 // ✅ MỚI: Gọi Gemini trả về Text luôn
-export const requestSummary = async (text: string, templateStructure?: string): Promise<string> => {
+export const requestSummary = async (text: string, templateStructure?: string, objectives?: string): Promise<string> => {
   try {
     console.log("📝 Gửi yêu cầu tóm tắt Full sang Gemini...");
 
@@ -124,7 +124,8 @@ export const requestSummary = async (text: string, templateStructure?: string): 
       body: JSON.stringify({
         text: text,
         mode: "full", // Báo hiệu tóm tắt full
-        templateStructure: templateStructure // [NEW] Truyền cấu trúc template nếu có
+        templateStructure: templateStructure, // [NEW] Truyền cấu trúc template nếu có
+        meetingObjectives: objectives // Truyền mục tiêu cuộc họp
       })
     });
 

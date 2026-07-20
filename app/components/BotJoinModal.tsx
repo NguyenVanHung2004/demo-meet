@@ -17,6 +17,7 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
     const [status, setStatus] = useState<string>("idle"); // idle, joining, waiting, recording, processing, completed
     const [statusDetails, setStatusDetails] = useState<string>("Đang đợi kết nối...");
     const [language, setLanguage] = useState<"vi" | "en">("vi");
+    const [objectives, setObjectives] = useState("");
 
     const handleJoin = async () => {
         if (!meetingUrl) return toast.error("Vui lòng nhập link cuộc họp!");
@@ -98,6 +99,9 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                         if (data.shouldSave && data.meetingData) {
                             try {
                                 let finalMeetingData = { ...data.meetingData };
+                                if (objectives.trim()) {
+                                    finalMeetingData.objectives = objectives.trim();
+                                }
 
                                 // [NEW] Upload Audio lên Firebase Storage (nếu có URL từ S3)
                                 if (finalMeetingData.audioUrl && finalMeetingData.audioUrl.startsWith("http")) {
@@ -320,6 +324,18 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                         <option value="vi">🇻🇳 Tiếng Việt</option>
                                         <option value="en">🇬🇧 English</option>
                                     </select>
+                                </div>
+
+                                {/* Objectives Textarea */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Mục tiêu cuộc họp (Objectives)</label>
+                                    <textarea
+                                        value={objectives}
+                                        onChange={(e) => setObjectives(e.target.value)}
+                                        placeholder="Ví dụ: Chốt ngân sách marketing Q3, phân công phát triển tính năng mới..."
+                                        rows={3}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700 text-sm resize-none"
+                                    />
                                 </div>
 
                                 <p className="text-xs text-slate-500 italic">
