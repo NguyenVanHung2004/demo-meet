@@ -2,18 +2,17 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Mic, Pause, ChevronLeft, Save, Sparkles, AlignLeft, Trash2, Loader2, MonitorPlay, Link as LinkIcon, CheckCircle2 } from "lucide-react";
-import useDeepgram from "../hooks/useDeepgram";
-import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api"; // [MỚI] Thêm api mới
-import { saveMeeting, createLiveSession, updateLiveSession, endLiveSession } from "../lib/db"; // [MỚI]
-import { useAuth } from "../context/AuthContext"; // [MỚI]
+import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api";
+import { saveMeeting, createLiveSession, updateLiveSession, endLiveSession } from "../lib/db";
+import { useAuth } from "../context/AuthContext";
 import useLocalTranscription from "../hooks/useLocalTranscription";
-import { useGlobalUI } from "../context/GlobalUIProvider"; // [MỚI]
+import { useGlobalUI } from "../context/GlobalUIProvider";
 
 type SummaryItem = {
   id: number;
   content: string;
   isLoading: boolean;
-  timestamp?: number; // [MỚI]
+  timestamp?: number;
 };
 
 const MobileTabBtn = ({ active, onClick, icon: Icon, label }: any) => (
@@ -40,25 +39,22 @@ export default function LiveRecordingState({
   const [timer, setTimer] = useState(0);
   const [volume, setVolume] = useState(0);
   const [mobileTab, setMobileTab] = useState<'transcript' | 'summary'>('transcript');
-  const [isUploading, setIsUploading] = useState(false); // [MỚI] State loading khi upload
+  const [isUploading, setIsUploading] = useState(false);
   const [language, setLanguage] = useState<"vi" | "en">(initialLanguage);
-  const [remainingMinutesWarning, setRemainingMinutesWarning] = useState<number | null>(null); // [MỚI] State hiển thị số phút còn lại
+  const [remainingMinutesWarning, setRemainingMinutesWarning] = useState<number | null>(null);
   const [meetingTitle, setMeetingTitle] = useState(initialTitle || `Cuộc họp trực tiếp ${new Date().toLocaleDateString('vi-VN')}`);
   const [objectives, setObjectives] = useState(initialObjectives || "");
 
-  // [MỚI] Live Session Sync
   const [liveSessionId, setLiveSessionId] = useState<string | null>(null);
   const liveSessionIdRef = useRef<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
-  // [MỚI] Wake Lock API để giữ sáng màn hình
   const wakeLockRef = useRef<any>(null);
 
   const requestWakeLock = async () => {
     try {
       if ('wakeLock' in navigator) {
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        console.log('Screen Wake Lock active');
       }
     } catch (err) {
       console.warn(`Wake Lock error: ${err}`);
@@ -107,7 +103,6 @@ export default function LiveRecordingState({
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const wordCountRef = useRef(0);
 
-  // [MỚI] Ref theo dõi trạng thái Interim để "Snooze" timer
   const isInterimActiveRef = useRef(false);
 
   // 1. Hàm gọi API tóm tắt
@@ -117,16 +112,13 @@ export default function LiveRecordingState({
 
     if (wordCountRef.current < minWords) return;
 
-    // [QUAN TRỌNG] Kiểm tra nếu đang có chữ xám (đang nói dở) thì KHÔNG tóm tắt, mà hẹn lại sau
     if (!force && isInterimActiveRef.current) {
-      console.log("✋ Đang nói dở (Interim) -> Hoãn tóm tắt thêm 2s...");
       // Hẹn giờ check lại sau 2s
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = setTimeout(() => flushBuffer(false), 2000);
       return;
     }
 
-    console.log(`🚀 Gửi tóm tắt (${wordCountRef.current} từ)...`);
 
     // UI Loading
     const currentId = Date.now();
@@ -193,7 +185,6 @@ export default function LiveRecordingState({
     isInterimActiveRef.current = !!hasInterim;
   }, [interimContent]);
 
-  // [MỚI] Yêu cầu lại quyền sáng màn hình nếu user thoát ra vào lại app
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible' && isListening) {
@@ -239,7 +230,6 @@ export default function LiveRecordingState({
           .map(s => `[${formatTime(s.timestamp || 0)}] ${s.content}`)
           .join("\n\n");
 
-        // [MỚI] Ước tính dung lượng của toàn bộ dữ liệu sẽ lưu (Segments + Summary)
         const payloadSize = new Blob([JSON.stringify({ segments: finalSegments, summary: finalSummary })]).size;
 
         let sizeForCalculation = payloadSize;
@@ -283,7 +273,6 @@ export default function LiveRecordingState({
           objectives: objectives.trim() || undefined
         });
 
-        // [MỚI] Sync dữ liệu lên Firebase Live Session
         if (liveSessionIdRef.current) {
           await updateLiveSession(
             liveSessionIdRef.current,
@@ -299,7 +288,6 @@ export default function LiveRecordingState({
         if (newChunks.length > 0) {
           await appendAudioChunks(draftIdRef.current, newChunks);
           lastSavedChunkIndexRef.current = currentChunks.length;
-          console.log(`Auto-saved draft: ${newChunks.length} chunks`);
         }
 
       } catch (e) {
@@ -329,7 +317,7 @@ export default function LiveRecordingState({
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [isListening, segments]); // [QUAN TRỌNG] Dependency array phải có 2 biến này
+  }, [isListening, segments]);
   // -----------------------------------------------------------
 
   // --- UI Stuff (Giữ nguyên) ---
@@ -377,7 +365,6 @@ export default function LiveRecordingState({
       // [CASE 1] NẾU ĐANG PAUSE -> RESUME LẠI
       // Check if recorder exists and is paused
       if (streamRef.current && mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
-        console.log("Resuming recording...");
         mediaRecorderRef.current.resume(); // Tiếp tục ghi vào file cũ
 
         // Ensure tracks are active
@@ -396,9 +383,7 @@ export default function LiveRecordingState({
       }
 
       // [CASE 2] NẾU LÀ LẦN ĐẦU -> KHỞI TẠO MỚI
-      console.log("Starting new recording session. System Audio:", captureSystemAudio);
 
-      // [MỚI] Khởi tạo Live Session trên Firebase
       if (!liveSessionIdRef.current && user) {
         const newSessionId = `live-${crypto.randomUUID().substring(0, 8)}`;
         setLiveSessionId(newSessionId);
@@ -465,7 +450,6 @@ export default function LiveRecordingState({
       }
       streamRef.current = finalStream;
 
-      // [FIX] Explicit MIME type for compatibility
       let mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = 'audio/webm';
@@ -473,7 +457,6 @@ export default function LiveRecordingState({
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = 'audio/mp4';
       }
-      console.log("Using MediaRecorder mimeType:", mimeType);
 
       const mediaRecorder = new MediaRecorder(finalStream, { mimeType });
       // Đảm bảo không xóa audioChunksRef.current ở đây (bạn đã làm ở bước trước)
@@ -487,14 +470,14 @@ export default function LiveRecordingState({
 
       setupVisualizer(finalStream); // Gọi hàm visualizer đã tách
       startListening(finalStream, timer, language);
-      requestWakeLock(); // [MỚI] Bật giữ sáng màn hình
+      requestWakeLock();
     } catch (err) { alert("Lỗi Micro/Permission: " + err); }
   };
 
   const stopRecordingSession = () => {
     // 1. Tắt Deepgram/Socket (Tiết kiệm)
     stopListening();
-    releaseWakeLock(); // [MỚI] Giải phóng quyền sáng màn hình
+    releaseWakeLock();
 
     // 2. Pause MediaRecorder (Không stop để resume được)
     if (mediaRecorderRef.current?.state === "recording") {
@@ -509,10 +492,8 @@ export default function LiveRecordingState({
   };
 
   const handeFullStop = () => {
-    console.log("Cleaning up recording session...");
-    releaseWakeLock(); // [MỚI] Chắc chắn giải phóng khi unmount hoặc stop hẳn
+    releaseWakeLock();
 
-    // [MỚI] Đánh dấu end nếu đang live
     if (liveSessionIdRef.current) {
       endLiveSession(liveSessionIdRef.current).catch(e => console.error(e));
     }
@@ -634,10 +615,9 @@ export default function LiveRecordingState({
         duration: timer,
         audioUrl: audioUrl,
 
-        // [QUAN TRỌNG] Không có jobId, trạng thái là completed
         jobId: undefined,
         status: 'completed',
-        language: language, // [FIX] Lưu ngôn ngữ để sau này xử lý lại chuẩn
+        language: language,
 
         segments: finalSegments, // Lưu text live
         summary: finalSummary,   // Lưu summary live
@@ -646,11 +626,9 @@ export default function LiveRecordingState({
         objectives: objectives.trim() || undefined
       });
 
-      // [FIX] Xóa Draft sau khi đã lưu thành công lên Cloud
       try {
         const { deleteDraft } = await import("../lib/indexedDB");
         await deleteDraft(draftIdRef.current);
-        console.log("Deleted local draft:", draftIdRef.current);
       } catch (err) {
         console.error("Failed to delete draft:", err);
       }
@@ -806,7 +784,6 @@ export default function LiveRecordingState({
               {/* 1. Render các đoạn hội thoại */}
               {segments.map((seg, idx) => {
                 const startTime = seg.words?.[0]?.start || 0;
-                // [MỚI] Kiểm tra xem đây có phải đoạn cuối cùng không?
                 const isLastSegment = idx === segments.length - 1;
                 // Nếu là đoạn cuối VÀ đang có chữ xám -> Hiển thị nối đuôi luôn
                 const showInterimInline = isLastSegment && interimContent && interimContent.trim().length > 0;
@@ -825,7 +802,7 @@ export default function LiveRecordingState({
                       <p className="text-slate-800 leading-relaxed text-sm">
                         {seg.content}
 
-                        {/* [MỚI] Nối chữ xám vào ngay đây */}
+                        
                         {showInterimInline && (
                           <span className="text-slate-400 italic ml-1">
                             {interimContent} ...

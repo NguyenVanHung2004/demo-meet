@@ -26,7 +26,6 @@ export async function POST(request: Request) {
         const { fileId, fileName } = await request.json();
 
         // 1. Download from Drive
-        console.log(`Downloading ${fileName} from Drive...`);
         const fileBuffer = await downloadFile(fileId, accessToken);
 
         // 2. Upload to Firebase
@@ -44,12 +43,10 @@ export async function POST(request: Request) {
         const storagePath = `imports/drive/${timestamp}-${safeName}`;
         const storageRef = ref(storage, storagePath);
 
-        console.log(`Uploading to Firebase: ${storagePath}`);
         // uploadBytes accepts Uint8Array, ArrayBuffer, Blob
         await uploadBytes(storageRef, fileBuffer, { contentType: 'video/mp4' });
 
         const firebaseUrl = await getDownloadURL(storageRef);
-        console.log(`Uploaded: ${firebaseUrl}`);
 
         // 3. Trigger Transcription
         const jobId = await startTranscriptionJob(firebaseUrl);

@@ -25,7 +25,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  // [SỬA LỖI TẠI ĐÂY]: Dùng async/await và try/catch để đảm bảo hàm trả về Promise<void>
   const login = async () => {
     try {
       await signInWithPopup(auth, googleProvider);

@@ -19,7 +19,6 @@ export async function POST(req: Request) {
 
         // Tự động nhận diện URL (Localhost vs Vercel vs Production)
         let appUrl = process.env.NEXT_PUBLIC_APP_URL;
-        console.log(appUrl);
         // Nếu không có APP_URL thủ công, thử lấy từ biến môi trường Vercel (chưa bao gồm https://)
         if (!appUrl && process.env.VERCEL_URL) {
             appUrl = `https://${process.env.VERCEL_URL}`;
@@ -35,8 +34,6 @@ export async function POST(req: Request) {
         // const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
         const webhookUrl = `${appUrl}/api/webhooks/meetingbaas?userId=${userId}`;
 
-        console.log("Dispatching Bot to:", meetingUrl);
-        console.log("Webhook Return Addr:", webhookUrl);
 
         const response = await fetch("https://api.meetingbaas.com/v2/bots", {
             method: "POST",
@@ -49,7 +46,7 @@ export async function POST(req: Request) {
                 bot_name: botName || "DemoMeet Bot",
                 bot_image: botImage || "https://png.pngtree.com/png-vector/20201224/ourmid/pngtree-future-intelligent-technology-robot-ai-png-image_2588803.jpg", // Ảnh Bot mặc định
                 recording_mode: "speaker_view", // Hoặc "gallery_view"
-                entry_message: "Xin chào, tôi là Meeting AI Bot, tôi sẽ ghi âm cuộc họp này để tóm tắt lại cho bạn.", // [FIX] Sửa bot_entry_message -> entry_message
+                entry_message: "Xin chào, tôi là Meeting AI Bot, tôi sẽ ghi âm cuộc họp này để tóm tắt lại cho bạn.",
                 transcription_enabled: false, // [Optional] Nếu API yêu cầu explicit
                 transcription_config: {
                     provider: "gladia", // Chuyển sang Gladia để có Transcript

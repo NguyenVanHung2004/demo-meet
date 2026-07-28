@@ -6,7 +6,7 @@ import EditorState from "./components/EditorState";
 import LiveRecordingState from "./components/LiveRecordingState";
 import MeetingDetailState from "./components/MeetingDetailState";
 import PollingManager from "./components/PollingManager";
-import { deleteField } from "firebase/firestore"; // [MỚI]
+import { deleteField } from "firebase/firestore";
 import {
   saveMeeting,
   seedInitialData,
@@ -20,8 +20,8 @@ import {
 } from "./lib/api";
 import { useGlobalUI } from "./context/GlobalUIProvider";
 import { useAuth } from "./context/AuthContext";
-import DriveImportModal from "./components/DriveImportModal"; // [MỚI]
-import BotJoinModal from "./components/BotJoinModal"; // [MỚI]
+import DriveImportModal from "./components/DriveImportModal";
+import BotJoinModal from "./components/BotJoinModal";
 import LoginState from "./components/LoginState";
 export type AppState =
   | "DASHBOARD"
@@ -38,13 +38,13 @@ export default function Page() {
   const [currentMeeting, setCurrentMeeting] = useState<Meeting | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
-  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false); // [MỚI]
-  const [isBotModalOpen, setIsBotModalOpen] = useState(false); // [MỚI]
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
+  const [isBotModalOpen, setIsBotModalOpen] = useState(false);
   const [selectedLiveLanguage, setSelectedLiveLanguage] = useState<"vi" | "en">("vi");
   const [selectedLiveTitle, setSelectedLiveTitle] = useState("");
   const [selectedLiveObjectives, setSelectedLiveObjectives] = useState("");
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null); // [MỚI] State theo dõi tiến trình upload
-  const { toast, confirm } = useGlobalUI(); // [MỚI]
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const { toast, confirm } = useGlobalUI();
   useEffect(() => {
     const initData = async () => {
       if (user) {
@@ -59,7 +59,6 @@ export default function Page() {
     };
     initData();
   }, [user]);
-  // [MỚI] Auto open Drive modal if redirected back from Google
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('drive_connected') === 'true') {
@@ -89,7 +88,6 @@ export default function Page() {
         const { getDraftFull } = await import("./lib/indexedDB");
         const fullDraft = await getDraftFull(meeting.id);
         if (fullDraft?.audioBlob) {
-          console.log("Loaded draft blob:", fullDraft.audioBlob.size, fullDraft.audioBlob.type);
           url = URL.createObjectURL(fullDraft.audioBlob);
         }
       } catch (e) {
@@ -271,13 +269,11 @@ export default function Page() {
         triggerRefresh();
       });
   };
-  // ✅ [MỚI] Hàm xử lý lại: Lấy audio cũ -> Đẩy vào quy trình Upload xịn
   // --- LOGIC 5: XỬ LÝ LẠI (REPROCESS) ---
   const handleReprocess = async (meeting: Meeting) => {
     // 1. Check quyền
     if (!user) return toast.error("Vui lòng đăng nhập!");
 
-    // [FIX] Kiểm tra audioUrl thay vì audioBlob
     if (!meeting.audioUrl) {
       toast.error("Không tìm thấy file ghi âm gốc (URL).");
       return;
@@ -335,7 +331,7 @@ export default function Page() {
           onOpenMeeting={handleViewDetail}
           onReprocess={handleReprocess}
           onOpenDrive={() => setIsDriveModalOpen(true)}
-          onOpenBot={() => setIsBotModalOpen(true)} // [MỚI]
+          onOpenBot={() => setIsBotModalOpen(true)}
         />
       )}
 
@@ -343,7 +339,7 @@ export default function Page() {
       <DriveImportModal
         isOpen={isDriveModalOpen}
         onClose={() => setIsDriveModalOpen(false)}
-        onImportSuccess={triggerRefresh} // [MỚI] Pass refresh handler
+        onImportSuccess={triggerRefresh}
       />
       <BotJoinModal
         isOpen={isBotModalOpen}

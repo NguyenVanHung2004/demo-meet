@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useAuth } from "../context/AuthContext"; // [MỚI]
-import { getActiveTranscribingMeetings, subscribeToActiveMeetings, updateMeetingProcess } from "../lib/db"; // [MỚI] import hàm subscribe...
+import { useAuth } from "../context/AuthContext";
+import { getActiveTranscribingMeetings, subscribeToActiveMeetings, updateMeetingProcess } from "../lib/db";
 import { checkJobStatusOnce } from "../lib/api";
 import { parseTranscriptFile } from "../lib/parser";
-import { deleteField } from "firebase/firestore"; // [MỚI]
+import { deleteField } from "firebase/firestore";
 import { formatTranscriptText, formatWords } from "../lib/utils";
 
 export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
@@ -19,7 +19,6 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
 
     // Hàm subscribe trả về unsubscribe funtion
     const unsubscribe = subscribeToActiveMeetings(user.uid, (meetings) => {
-      console.log(`📡 Real-time update: ${meetings.length} active jobs`);
       activeJobsRef.current = meetings;
     });
 
@@ -34,7 +33,6 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
       const currentActiveJobs = activeJobsRef.current;
       if (currentActiveJobs.length === 0) return;
 
-      console.log(`🔄 Polling RunPod for ${currentActiveJobs.length} jobs...`);
 
       for (const meeting of currentActiveJobs) {
         if (!meeting.jobId) continue;
@@ -50,11 +48,9 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
 
             // [LOGIC CŨ GIỮ NGUYÊN] Xử lý output JSON (Karaoke) hoặc Text
             const rawOutput = jobData.output;
-            // [FIX] Support output.segments format from Hybrid Pipeline
             const jsonSegments = rawOutput.transcript || rawOutput.segments || (Array.isArray(rawOutput) ? rawOutput : null);
 
             if (jsonSegments && jsonSegments.length > 0) {
-              console.log("✅ Polling: Nhận dữ liệu Karaoke (JSON)");
               finalSegments = jsonSegments.map((s: any) => ({
                 ...s,
                 text: formatTranscriptText(s.text),
@@ -78,7 +74,6 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
             }
             // Fallback: Text thô
             else if (rawOutput.transcript) {
-              console.log("⚠️ Polling: Dữ liệu Text thô");
               const formattedText = formatTranscriptText(rawOutput.transcript);
               const parsed = parseTranscriptFile(formattedText);
               finalSegments = parsed.segments;
@@ -89,7 +84,7 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
             if (finalSegments.length > 0) {
               try {
                 await updateMeetingProcess(meeting.id, {
-                  status: 'transcribed', // [FIX] Luôn về transcribed trước
+                  status: 'transcribed',
                   segments: finalSegments,
                   speakers: finalSpeakers,
                   duration: finalSegments[finalSegments.length - 1]?.end || 0,
@@ -127,7 +122,6 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
             } else {
               console.error("Job xong nhưng dữ liệu rỗng:", JSON.stringify(jobData, null, 2));
 
-              // [FIX] Nếu không có dữ liệu -> Đánh dấu Failed để thoát vòng lặp
               await updateMeetingProcess(meeting.id, {
                 status: 'failed',
                 errorMessage: "Job Completed but Transcript Empty",

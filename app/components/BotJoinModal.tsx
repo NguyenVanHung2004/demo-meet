@@ -61,11 +61,9 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
         const checkStatus = async () => {
             try {
                 if (!user) {
-                    console.log("[Polling] Skipped: No user");
                     return;
                 }
 
-                console.log("[Polling] Checking:", botId);
                 const res = await fetch(`/api/bots/status?botId=${botId}&userId=${user.uid}`);
 
                 if (!res.ok) {
@@ -80,7 +78,6 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                 }
 
                 const data = await res.json();
-                console.log("[Polling] Data:", data);
 
                 if (data.status === 'failed' || data.error) {
                     setStatus("idle");
@@ -120,7 +117,6 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                     const uploadTask = await uploadBytesResumable(storageRef, blob);
                                     const downloadURL = await getDownloadURL(uploadTask.ref);
 
-                                    console.log("Uploaded Audio to:", downloadURL);
                                     finalMeetingData.audioUrl = downloadURL; // Replace S3 URL with Firebase URL
 
                                     // [HYBRID PIPELINE] Gọi Server Python để Transcribe + Diarize
@@ -129,10 +125,8 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                     try {
                                         setStatusDetails("Đang gửi lệnh xử lý sang Server Local...");
 
-                                        // [FIX] Nếu Diarization là URL -> Fetch JSON content trước khi gửi (Dùng Proxy tránh CORS)
                                         let diarizationPayload = finalMeetingData.diarization;
                                         if (typeof diarizationPayload === 'string' && diarizationPayload.startsWith('http')) {
-                                            console.log("Fetching Diarization JSON from URL:", diarizationPayload);
                                             try {
                                                 // Dùng Proxy để bypass CORS
                                                 const proxyUrl = `/api/proxy-file?url=${encodeURIComponent(diarizationPayload)}`;
@@ -147,7 +141,6 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                     } catch (jsonErr) {
                                                         // 2. If valid JSON fails, try NDJSON (Newline Delimited JSON)
                                                         // Example: {"a":1}\n{"b":2}
-                                                        console.log("Standard JSON parse failed, trying NDJSON...");
                                                         diarizationPayload = text.trim().split('\n')
                                                             .map(line => {
                                                                 try { return JSON.parse(line); } catch (e) { return null; }
@@ -155,7 +148,6 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                                             .filter(item => item !== null);
                                                     }
 
-                                                    console.log("✅ Fetched Diarization:", Array.isArray(diarizationPayload) ? diarizationPayload.length : "Not Array");
                                                 } else {
                                                     console.warn("❌ Failed to fetch Diarization JSON via Proxy:", dRes.status);
                                                     diarizationPayload = [];
@@ -171,7 +163,6 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                         const jobId = await startHybridTranscriptionJob(downloadURL, diarizationPayload, language);
 
                                         if (jobId) {
-                                            console.log("Hybrid Job Started:", jobId);
                                             finalMeetingData.jobId = jobId;
                                             finalMeetingData.status = 'transcribing'; // Để PollingManager tự check tiếp
                                             finalMeetingData.segments = []; // Chưa có segment

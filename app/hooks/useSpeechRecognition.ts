@@ -34,7 +34,6 @@ export default function useSpeechRecognition() {
   const isLineBreakPending = useRef(false);
   const pendingBufferRef = useRef(""); 
 
-  // [MỚI] Ref này để cứu chữ khi API tự ngắt
   const finalInterimRef = useRef(""); 
 
   useEffect(() => { textRef.current = text; }, [text]);
@@ -67,7 +66,6 @@ export default function useSpeechRecognition() {
                 return prev + prefix + clean;
             });
             
-            // [QUAN TRỌNG] Đã chốt câu thì xóa bộ nhớ tạm
             finalInterimRef.current = "";
           } else {
             currentInterim += event.results[i][0].transcript;
@@ -75,7 +73,6 @@ export default function useSpeechRecognition() {
         }
         setInterimText(currentInterim);
         
-        // [QUAN TRỌNG] Lưu liên tục để phòng hờ bị ngắt đột ngột
         finalInterimRef.current = currentInterim;
 
         silenceTimerRef.current = setTimeout(() => {
@@ -105,7 +102,6 @@ export default function useSpeechRecognition() {
 
           if (isListeningRef.current) {
               try { 
-                  console.log("♻️ Restarting Web Speech API...");
                   recognition.start(); 
               } catch (e) {}
           }
@@ -155,7 +151,6 @@ export default function useSpeechRecognition() {
     if (!recognitionRef.current) return;
     try {
       setInterimText("");
-      // [QUAN TRỌNG] Reset biến cứu chữ khi bắt đầu phiên mới
       finalInterimRef.current = ""; 
       
       if (onSegmentEnd) onSegmentEndRef.current = onSegmentEnd;

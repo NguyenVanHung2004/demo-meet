@@ -141,10 +141,8 @@ export default function TaskManagerPage() {
       : "";
     const uniqueDepartments = Array.from(new Set(members.map(m => m.department).filter(Boolean)));
     const uniqueTeams = Array.from(new Set(members.map(m => m.team).filter(Boolean)));
-    console.log(fullTranscript);
     setSelectedMeeting(meeting);
     setIsProcessing(true);
-    console.log(uniqueDepartments);
     try {
       const response = await fetch("/api/gemini", {
         method: "POST",
@@ -187,7 +185,6 @@ export default function TaskManagerPage() {
         rawTasks = JSON.parse(cleanJson);
       } catch (error) {
         console.error("JSON Parse Error:", error);
-        console.log("Bad String:", data.summary);
         return toast.error("AI trả về dữ liệu lỗi. Hãy thử lại!");
       }
 

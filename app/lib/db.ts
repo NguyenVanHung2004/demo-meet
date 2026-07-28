@@ -5,9 +5,9 @@ import {
   query, where, orderBy, onSnapshot
 } from "firebase/firestore";
 import { Segment, Speaker, RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "./mockData";
-export type { Segment, Speaker }; // [FIX] Re-export for external use
+export type { Segment, Speaker };
 import { parseTranscriptFile } from "./parser";
-import { MeetingTemplate } from "./templates"; // [MỚI] Import Interface
+import { MeetingTemplate } from "./templates";
 
 // Định nghĩa trạng thái
 export type MeetingStatus = 'transcribing' | 'transcribed' | 'summarizing' | 'completed' | 'failed' | 'draft';
@@ -18,19 +18,19 @@ export interface TaskItem {
   task: string;
   assigneeName: string; // Tên AI gợi ý
   department?: string;
-  team?: string; // [MỚI] Thêm trường team
+  team?: string;
   email: string[];        // Email người nhận thực tế
   deadline: string;
 }
 // Định nghĩa Interface (Đã đổi audioBlob -> audioUrl)
 export interface Meeting {
   id: string;
-  userId: string;       // [QUAN TRỌNG] Phân biệt user
+  userId: string;
   jobId?: string;       // ID Job RunPod
   title: string;
   createdAt: number;
   duration: number;
-  audioUrl?: string;     // [FIX] Optional cho draft local
+  audioUrl?: string;
   segments: Segment[];
   speakers: Speaker[];
   summary?: string;
@@ -41,9 +41,9 @@ export interface Meeting {
   actionStatus?: ActionItemStatus;
   isMinuteOnly?: boolean; // Flag for imported minutes without audio/transcript
   language?: "vi" | "en"; // Ngôn ngữ phiên âm: "vi" (mặc định) hoặc "en"
-  folderId?: string | null; // [MỚI] Thư mục chứa biên bản
-  shareToken?: string;    // [MỚI] Token chia sẻ công khai
-  objectives?: string;    // [MỚI] Mục tiêu cuộc họp
+  folderId?: string | null;
+  shareToken?: string;
+  objectives?: string;
 }
 
 const COLLECTION_NAME = "meetings";
@@ -206,7 +206,6 @@ export const seedInitialData = async (userId: string) => {
   // Chỉ tạo nếu user chưa có cuộc họp nào
   if (meetings.length === 0) {
     try {
-      console.log("🚀 Đang khởi tạo dữ liệu mẫu cho user mới...");
 
       const parsedData = parseTranscriptFile(RAW_TRANSCRIPT_FILE);
 
@@ -226,7 +225,6 @@ export const seedInitialData = async (userId: string) => {
       };
 
       await saveMeeting(seedMeeting);
-      console.log("✅ Đã nạp dữ liệu mẫu!");
       return true;
 
     } catch (e) {
@@ -448,7 +446,6 @@ export const createLiveSession = async (session: LiveSession) => {
     cleanData.expireAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await setDoc(docRef, cleanData);
-    console.log("Đã khởi tạo Live Session:", session.id);
   } catch (error) {
     console.error("Lỗi tạo Live Session:", error);
     throw error;

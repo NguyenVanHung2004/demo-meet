@@ -19,7 +19,6 @@ export async function POST(request: Request) {
         };
       },
       onUploadCompleted: async ({ blob }) => {
-        console.log('✅ Upload xong:', blob.url);
       },
     });
 

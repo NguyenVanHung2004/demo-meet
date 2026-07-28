@@ -69,11 +69,9 @@ export default function useLocalTranscription(
     const processorRef = useRef<ScriptProcessorNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
 
-    // [QUAN TRỌNG] Biến cộng dồn thời gian (giống useDeepgram)
     const offsetTimeRef = useRef(0);
     const lastEndTimestampRef = useRef<number>(0);
 
-    // [FIX] Biến để chuẩn hóa timestamp nếu Server bị lỗi gửi số quá lớn (VD: 123081s)
     const serverStartOffsetRef = useRef<number | null>(null);
     // -----------------------------------------------------
 
@@ -81,21 +79,18 @@ export default function useLocalTranscription(
         // 1. CẬP NHẬT THỜI GIAN
         offsetTimeRef.current = startTimeOffset;
         setIsListening(true);
-        // [FIX] Reset Server Offset cho session mới
         serverStartOffsetRef.current = null;
 
-        // [FIX] KHÔNG GỌI setSegments([]) Ở ĐÂY để giữ lại nội dung cũ khi Resume
         if (startTimeOffset === 0) {
             lastEndTimestampRef.current = 0;
         }
-        console.log(`🔌 Connecting to ${serverUrl} at offset ${startTimeOffset}s...`);
 
         // 2. SETUP WEBSOCKET
         const finalUrl = `${serverUrl}/?language=${language}`;
         const ws = new WebSocket(finalUrl);
         socketRef.current = ws;
 
-        ws.onopen = () => { console.log("✅ Connected to Local Zipformer Server"); };
+        ws.onopen = () => {};
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
@@ -124,7 +119,6 @@ export default function useLocalTranscription(
     };
 
     const handleServerResponse = (data: any) => {
-        // [QUAN TRỌNG] Kiểm tra cờ is_final từ server
         // Server sẽ gửi { ..., "is_final": false } cho text xám
         // và { ..., "is_final": true } cho text chốt.
         const isFinalPacket = data.is_final;
@@ -155,7 +149,6 @@ export default function useLocalTranscription(
             // [MOD] Format words array
             // import { formatWords } from "../lib/utils";
             let rawWords = (alt.words || []).map((w: any) => {
-                // [FIX] Auto-detect & Normalize Server Timestamp
                 // Nếu timestamp đầu tiên quá lớn (> 3600s = 1h), coi đó là lỗi Server Offset và trừ đi
                 if (serverStartOffsetRef.current === null) {
                     if (w.start > 3600) { // Ngưỡng 1 giờ
@@ -226,7 +219,6 @@ export default function useLocalTranscription(
             audioContextRef.current.close();
             audioContextRef.current = null;
         }
-        // [QUAN TRỌNG] KHÔNG setSegments([]) ở đây
     };
 
     const resetTranscript = () => {

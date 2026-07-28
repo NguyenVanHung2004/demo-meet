@@ -82,41 +82,9 @@ export const requestSegmentSummary = async (text: string, previousSummary: strin
   }
 };
 
-// --- HÀM 3: TÓM TẮT TỔNG HỢP (Text -> Summary) ---
-// [GIỮ NGUYÊN] Dùng RunPod (Qwen) để xử lý tác vụ nặng nền tảng
-// export const requestSummary = async (text: string): Promise<string> => {
-//     try {
-//         console.log("📝 Gửi yêu cầu tóm tắt Full sang RunPod...");
-//         const response = await fetch(RUNPOD_URL_ASYNC, {
-//             method: 'POST',
-//             headers: {
-//               'Content-Type': 'application/json',
-//               'Authorization': `Bearer ${RUNPOD_API_KEY}`
-//             },
-//             body: JSON.stringify({
-//               input: {
-//                 action: "summarize", // Gọi action tóm tắt của Qwen trên RunPod
-//                 text: text
-//               }
-//             })
-//         });
-
-//         const data = await response.json();
-//         // Trả về Job ID để PollingManager theo dõi
-//         if (data.id) return data.id; 
-
-//         throw new Error("Không lấy được Job ID tóm tắt.");
-
-//     } catch (e) {
-//         console.error("Lỗi Full Summary:", e);
-//         throw e;
-//     }
-// };
-
-// ✅ MỚI: Gọi Gemini trả về Text luôn
+// Gọi Gemini trả về Text luôn
 export const requestSummary = async (text: string, templateStructure?: string, objectives?: string): Promise<string> => {
   try {
-    console.log("📝 Gửi yêu cầu tóm tắt Full sang Gemini...");
 
     const response = await fetch('/api/gemini', {
       method: 'POST',
@@ -164,7 +132,6 @@ export const checkJobStatusOnce = async (jobId: string): Promise<any> => {
 // --- HÀM 5: HYBRID TRANSCRIPTION (RunPod Serverless) ---
 export const startHybridTranscriptionJob = async (audioUrl: string, diarization: any[], language: "vi" | "en" = "vi"): Promise<string> => {
   try {
-    console.log("🔌 Calling RunPod for Hybrid Transcription...");
     const response = await fetch(`https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`, {
       method: "POST",
       headers: {

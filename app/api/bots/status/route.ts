@@ -32,7 +32,6 @@ export async function GET(req: Request) {
         }
 
         const data = await response.json();
-        console.log(`[Polling] Raw BaaS Response for ${botId}:`, JSON.stringify(data));
 
         const botData = data.data || data; // Fallback just in case
         if (!botData || !botData.status) {
@@ -53,7 +52,6 @@ export async function GET(req: Request) {
 
         // 2. If 'completed', try to save (Idempotent)
         if (status === 'completed' || status === 'call_ended') {
-            console.log(`[Polling] Bot ${botId} completed. Processing data...`);
 
             const { mp4, video, mp3, audio, transcript, transcription, speakers } = botData;
 
@@ -69,10 +67,8 @@ export async function GET(req: Request) {
                 else if (mp3 || audio) extension = 'mp3';
             }
 
-            // [FIX] Nếu không có mediaUrl -> Đang xử lý media
             if (!mediaUrl) {
                 if (status === 'call_ended') {
-                    console.log("[Polling] Call ended but assets not ready. Waiting...");
                     return NextResponse.json({ status: 'processing', saved: false });
                 }
 
@@ -84,20 +80,16 @@ export async function GET(req: Request) {
                 });
             }
 
-            // [FIX] Kiểm tra trạng thái Transcription (nếu đang chạy thì chờ tiếp)
             if (botData.transcription_status === 'transcribing' || botData.transcription_status === 'queued') {
-                console.log("[Polling] Transcription is processing...");
                 return NextResponse.json({ status: 'transcribing', saved: false });
             }
 
             let transcriptData = transcript;
 
-            // [FIX] Prioritize Raw Transcription (contains Word Timestamps) -> Then Transcription
             const transcriptUrl = botData.transcription || botData.raw_transcription;
 
             if (!transcriptData && transcriptUrl) {
                 try {
-                    console.log(`[Polling] Fetching transcript from: ${transcriptUrl}`);
                     const tResponse = await fetch(transcriptUrl);
                     if (tResponse.ok) {
                         transcriptData = await tResponse.json();

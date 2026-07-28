@@ -37,11 +37,10 @@ export default function MeetingDetailState({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(meeting.duration || 0);
-  const [playbackRate, setPlaybackRate] = useState(1.0); // [MỚI] Tốc độ phát
+  const [playbackRate, setPlaybackRate] = useState(1.0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [activeTab, setActiveTab] = useState<'transcript' | 'summary'>('transcript');
 
-  // [MỚI] State lọc speaker
   const [filteredSpeakerId, setFilteredSpeakerId] = useState<string | null>(null);
 
   // --- TEMPLATE STATE ---
@@ -160,7 +159,6 @@ export default function MeetingDetailState({
     }
   }, [audioSrc]);
 
-  // [MỚI] Effect thay đổi tốc độ
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.playbackRate = playbackRate;
@@ -178,7 +176,6 @@ export default function MeetingDetailState({
   const handleTimeUpdate = () => {
     if (!audioRef.current) return;
 
-    // [MỚI] Tự động bỏ qua đoạn nói của người khác
     if (filteredSpeakerId && isPlaying) {
       const time = audioRef.current.currentTime;
       // Tìm xem hiện tại đang ở segment nào (dự phòng thêm 2s nếu end bị undefined)
@@ -354,7 +351,6 @@ export default function MeetingDetailState({
     }
   };
 
-  // [MỚI] Tua nhanh/lùi
   const skipTime = (seconds: number) => {
     if (audioRef.current) {
       const newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds));
@@ -363,14 +359,12 @@ export default function MeetingDetailState({
     }
   };
 
-  // [MỚI] Đổi tốc độ (Cycle loop)
   const togglePlaybackRate = () => {
     const rates = [0.5, 1.0, 1.25, 1.5, 2.0];
     const nextIdx = (rates.indexOf(playbackRate) + 1) % rates.length;
     setPlaybackRate(rates[nextIdx]);
   };
 
-  // [MỚI] Hàm tải Audio
   const handleDownloadAudio = () => {
     // audioSrc là Blob URL, file-saver sẽ tải nó về máy
     saveAs(audioSrc, `${meeting.title.replace(/\s+/g, "_")}.mp3`);
@@ -564,7 +558,6 @@ export default function MeetingDetailState({
       clone.style.backgroundColor = '#ffffff';
 
       // 3. THUẬT TOÁN DÀN TRANG (SMART PAGINATION)
-      // [QUAN TRỌNG] Chỉ chọn các thẻ "lá" (leaf nodes) để xử lý cắt trang.
       // Bỏ 'div', 'ul', 'ol' ra khỏi danh sách để tránh đẩy cả khối lớn đi.
       const selector = 'h1, h2, h3, h4, h5, h6, p, li, img, blockquote, pre, table';
       const children = Array.from(clone.querySelectorAll(selector)) as HTMLElement[];
@@ -1130,7 +1123,7 @@ export default function MeetingDetailState({
             {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 pl-1" />}
           </button>
 
-          {/* [MỚI] CONTROLS PHỤ (Skip & Speed) - Desktop only (hoặc responsive tùy chỉnh) */}
+          
           <div className="flex items-center gap-1 md:gap-2">
             <button
               onClick={() => skipTime(-10)}

@@ -53,7 +53,6 @@ export default function ActionItemPage() {
           setMeetingTitle(meeting.title);
 
           const rawTasks = meeting.actionItems || [];
-          console.log("Raw task", rawTasks);
           // --- LOGIC MAPPING MỚI (Ưu tiên: Team -> Dept -> Name) ---
           const mappedTasks = rawTasks.map((t: any) => {
             // 1. Chuẩn hóa các chuỗi

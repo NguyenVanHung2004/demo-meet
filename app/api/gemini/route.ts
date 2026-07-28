@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
     if (mode === "extract_json") {
       const deptListStr = departments?.join(", ") || "";
-      const teamListStr = teams?.join(", ") || ""; // [MỚI]
+      const teamListStr = teams?.join(", ") || "";
       prompt = `
       Bạn là trợ lý AI chuyên trích xuất công việc (Action Item) từ biên bản cuộc họp.
       THÔNG TIN NGỮ CẢNH:

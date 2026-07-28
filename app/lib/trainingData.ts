@@ -1,3 +1,8 @@
+/**
+ * EXPERIMENTAL: Training data collection feature.
+ * Code kept for future fine-tuning. Not in active use.
+ * Search "EXPERIMENTAL" to find related code.
+ */
 // app/lib/trainingData.ts
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, doc, setDoc, getDocs, query, orderBy } from "firebase/firestore";
@@ -167,7 +172,6 @@ export async function collectAndUploadSamples(
   language: string,
   meetingId: string
 ): Promise<TrainingDataSample[]> {
-  console.log(`[Training] Processing ${correctedSegments.length} segments...`);
 
   // 1. Fetch audio
   let arrayBuffer: ArrayBuffer;
@@ -233,7 +237,6 @@ export async function collectAndUploadSamples(
   // Lưu metadata Firestore tập trung
   if (results.length > 0) {
     await saveTrainingSamples(results);
-    console.log(`[Training] Successfully uploaded ${results.length} samples.`);
   }
 
   return results;

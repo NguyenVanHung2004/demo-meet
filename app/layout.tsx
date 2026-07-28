@@ -4,7 +4,6 @@ import "./globals.css";
 import GlobalUIProvider from "./context/GlobalUIProvider";
 import { AuthProvider } from "./context/AuthContext";
 
-// [QUAN TRỌNG] Thêm "vietnamese" vào đây
 const inter = Inter({ 
   subsets: ["latin", "vietnamese"],
   variable: '--font-inter'

@@ -22,7 +22,7 @@ import {
   User,
   Edit3,
   FileText as FileTextIcon,
-  Bot, // [MỚI]
+  Bot,
   Database
 } from "lucide-react";
 import {
@@ -45,7 +45,7 @@ export default function DashboardState({
   refreshSignal,
   onReprocess,
   onOpenDrive,
-  onOpenBot // [MỚI]
+  onOpenBot
 }: {
   onImport: (file: File, language: "vi" | "en", title?: string, objectives?: string) => void;
   onLive: (language: "vi" | "en", title?: string, objectives?: string) => void;
@@ -53,7 +53,7 @@ export default function DashboardState({
   onOpenMeeting: (m: Meeting) => void;
   onReprocess: (m: Meeting) => void;
   onOpenDrive: () => void;
-  onOpenBot: () => void; // [MỚI]
+  onOpenBot: () => void;
   refreshSignal: number;
 }) {
   const { user, login, logout } = useAuth();
@@ -67,7 +67,7 @@ export default function DashboardState({
   const hasShownDraftWarning = useRef(false);
   const [uploadLanguage, setUploadLanguage] = useState<"vi" | "en">("vi");
   const [liveLanguage, setLiveLanguage] = useState<"vi" | "en">("vi");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]); // [MỚI]
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedFileForUpload, setSelectedFileForUpload] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadObjectives, setUploadObjectives] = useState("");
@@ -97,7 +97,6 @@ export default function DashboardState({
         const all = [...localDrafts, ...cloudMeetings].sort((a, b) => b.createdAt - a.createdAt);
         setMeetings(all);
 
-        // [MỚI] Cảnh báo nếu có bản nháp chưa lưu (Chỉ hiện 1 lần)
         if (localDrafts.length > 0 && !hasShownDraftWarning.current) {
           toast.info(`Bạn có ${localDrafts.length} bản nháp chưa lưu lên Cloud`);
           hasShownDraftWarning.current = true;
@@ -454,7 +453,7 @@ export default function DashboardState({
 
           {/* Desktop Actions */}
           <div className="hidden md:flex gap-2">
-            {/* [MỚI] Bot Button */}
+            
             <button
               id="tour-bot"
               onClick={onOpenBot}
@@ -533,7 +532,7 @@ export default function DashboardState({
                 </div>
               </div>
 
-              {/* [FIX] Live Card */}
+              
               <div
                 id="tour-record"
                 onClick={() => {
@@ -691,7 +690,7 @@ export default function DashboardState({
                           "summarizing",
                           "completed",
                           "failed",
-                          "draft" // [MỚI]
+                          "draft"
                         ].includes(m.status);
                         return (
                           <tr
@@ -738,7 +737,7 @@ export default function DashboardState({
                               <div className="flex justify-end gap-2 transition-opacity">
                                 {currentTab === "all" ? (
                                   <>
-                                    {/* ✅ [MỚI] Nút xử lý lại */}
+                                    
                                     {["completed", "transcribed", "failed"].includes(
                                       m.status
                                     ) && (
@@ -810,7 +809,7 @@ export default function DashboardState({
                       "summarizing",
                       "completed",
                       "failed",
-                      "draft" // [MỚI]
+                      "draft"
                     ].includes(m.status);
                     return (
                       <div

@@ -68,7 +68,6 @@ export default function EditorState({
     }
   }, [isEditingTitle]);
 
-  // [MỚI] Effect Playback Rate
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.playbackRate = playbackRate;
@@ -101,7 +100,6 @@ export default function EditorState({
     }
   };
 
-  // [MỚI] Skip & Speed
   const skipTime = (seconds: number) => {
     if (audioRef.current) {
       const newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds));
@@ -479,7 +477,7 @@ export default function EditorState({
         </div>
 
         <div className="flex gap-2">
-          {/* [MỚI] Nút Quản lý Speaker cho Mobile */}
+          
           <button
             onClick={() => setShowSpeakerModal(true)}
             className="md:hidden flex items-center justify-center p-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
@@ -606,7 +604,7 @@ export default function EditorState({
           {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
         </button>
 
-        {/* [MỚI] Controls phụ */}
+        
         <div className="flex items-center gap-1 md:gap-2">
           <button onClick={() => skipTime(-10)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition" title="-10s">
             <RotateCcw className="w-5 h-5" />

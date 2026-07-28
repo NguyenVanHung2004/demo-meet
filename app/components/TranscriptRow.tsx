@@ -15,8 +15,8 @@ interface TranscriptRowProps {
   onSpeakerChange: (id: string, spkId: string) => void;
   onSplit: (id: string, cursor: number) => void;
   onMerge: (id: string) => void;
-  onAddRow: (id: string) => void; // [MỚI]
-  onTimeChange: (id: string, newTime: number) => void; // [MỚI]
+  onAddRow: (id: string) => void;
+  onTimeChange: (id: string, newTime: number) => void;
 }
 
 export default function TranscriptRow({
@@ -144,7 +144,6 @@ export default function TranscriptRow({
     }
   };
 
-  // [MỚI] Xử lý khi người dùng sửa xong thời gian (blur hoặc enter)
   const handleTimeBlur = () => {
     const newTime = parseTime(timeStr);
     if (newTime !== segment.start) {
@@ -160,7 +159,7 @@ export default function TranscriptRow({
 
       {/* 1. Cột Thời Gian & Nút Play */}
       <div className="w-16 flex flex-col items-end pt-1 gap-2 flex-shrink-0">
-        {/* [MỚI] Input thời gian thay vì text tĩnh */}
+        
         <div className="relative group/time">
           <input
             className={`text-xs font-mono text-right bg-transparent border-b border-transparent focus:border-indigo-500 outline-none w-14
@@ -203,7 +202,7 @@ export default function TranscriptRow({
         onDoubleClick={() => setIsEditing(true)}
       >
 
-        {/* [MỚI] Action Buttons (Insert & Merge) - Chỉ hiện khi hover vào box nội dung */}
+        
         <div className="absolute right-2 top-2 opacity-0 group-hover/content:opacity-100 transition-opacity flex gap-1 bg-white/90 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 z-10">
           {!isEditing && (
             <button onClick={() => setIsEditing(true)} title="Sửa văn bản" className="p-1.5 hover:bg-blue-50 rounded text-slate-400 hover:text-blue-600 transition-colors">

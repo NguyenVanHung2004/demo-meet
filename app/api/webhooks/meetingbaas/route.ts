@@ -21,7 +21,6 @@ export async function POST(req: Request) {
         const body = await req.json();
         const { event, data } = body;
 
-        console.log(`[Webhook] Received event: ${event} for Bot: ${data?.bot_id}`);
 
         if (event === 'failed') {
             console.error("[Webhook] Bot failed:", data.error);
@@ -33,14 +32,12 @@ export async function POST(req: Request) {
             const mp4 = data.mp4;
             const transcript = data.transcript;
 
-            // [FIX] Support V1 (mp4/transcript) and V2 (video/transcription url)
             const mp4Url = mp4 || data.video;
             let transcriptData = transcript;
 
             // If V2 returns a transcription URL, fetch it
             if (!transcriptData && data.transcription) {
                 try {
-                    console.log(`[Webhook] Fetching transcript from: ${data.transcription}`);
                     const tResponse = await fetch(data.transcription);
                     if (tResponse.ok) {
                         transcriptData = await tResponse.json();
@@ -60,7 +57,6 @@ export async function POST(req: Request) {
                 fs.mkdirSync(uploadDir, { recursive: true });
             }
 
-            console.log(`[Webhook] Downloading MP4 to ${filePath}...`);
 
             if (mp4Url) {
                 try {
@@ -71,7 +67,6 @@ export async function POST(req: Request) {
                     // @ts-ignore
                     const buffer = Buffer.from(await response.arrayBuffer());
                     fs.writeFileSync(filePath, buffer);
-                    console.log("[Webhook] Download success!");
                 } catch (err) {
                     console.error("[Webhook] Error downloading file:", err);
                 }
@@ -129,7 +124,6 @@ export async function POST(req: Request) {
             };
 
             await saveMeeting(newMeeting);
-            console.log(`[Webhook] Meeting saved: ${newMeeting.title}`);
         }
 
         return NextResponse.json({ received: true });

@@ -19,7 +19,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
     const [loading, setLoading] = useState(false);
     const [importingId, setImportingId] = useState<string | null>(null);
     const [conversionProgress, setConversionProgress] = useState(0);
-    const [uploadProgress, setUploadProgress] = useState(0); // [MỚI]
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [showAll, setShowAll] = useState(false);
     const [language, setLanguage] = useState<"vi" | "en">("vi");
 
@@ -69,7 +69,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
 
         setImportingId(file.id);
         setConversionProgress(0); // Reset progress
-        setUploadProgress(0); // [MỚI] Reset
+        setUploadProgress(0);
         
         try {
             // 1. Download from Drive via Proxy (Server)
@@ -79,7 +79,6 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
             const blob = await downloadRes.blob();
             let fileObj = new File([blob], file.name, { type: blob.type });
 
-            // [MỚI] 1b. Convert to MP3 if it's a Video or non-MP3 Audio
             const mimeType = file.mimeType || '';
             const isVideo = mimeType.includes('video');
             const isNonMp3Audio = mimeType.includes('audio') && !mimeType.includes('mp3');
