@@ -55,8 +55,7 @@ export default function ActionItemPage() {
           const rawTasks = meeting.actionItems || [];
           // --- LOGIC MAPPING MỚI (Ưu tiên: Team -> Dept -> Name) ---
           const mappedTasks = rawTasks.map((t: any) => {
-            // 1. Chuẩn hóa các chuỗi
-            const normalize = (str: any) => str ? String(str).normalize("NFC").toLowerCase().trim() : "";
+            const normalize = (str: unknown) => str ? String(str).normalize("NFC").toLowerCase().trim() : "";
 
             let currentEmails: string[] = [];
             if (Array.isArray(t.email)) currentEmails = t.email;

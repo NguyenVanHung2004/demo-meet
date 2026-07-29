@@ -4,10 +4,12 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { subscribeToActiveMeetings, updateMeetingProcess } from "../lib/db";
 import type { Meeting, Segment, Speaker } from "../lib/db";
-import { deleteField } from "firebase/firestore";
+import type { Word } from "../lib/mockData";
 import { checkJobStatusOnce } from "../lib/api";
 import { parseTranscriptFile } from "../lib/parser";
 import { formatWords, formatTranscriptText } from "../lib/utils";
+import { deleteFieldValue } from "../lib/utils/firestore";
+import { MEETING_STATUS } from "../lib/constants";
 
 export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
   const { user } = useAuth();
@@ -43,9 +45,9 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
         const jobStartedAt = meeting.jobStartedAt || meeting.createdAt;
         if (now - jobStartedAt > 30 * 60 * 1000) {
           await updateMeetingProcess(meeting.id, {
-            status: 'failed',
+            status: MEETING_STATUS.FAILED,
             errorMessage: "Job vượt quá thời gian chờ (30 phút).",
-            jobId: deleteField() as any
+            jobId: deleteFieldValue()
           });
           onUpdate();
           continue;
@@ -71,7 +73,7 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
               finalSegments = jsonSegments.map((s: Record<string, unknown>) => ({
                 ...s,
                 text: formatTranscriptText(s.text as string),
-                words: formatWords((s.words || []) as any[])
+                words: formatWords((s.words || []) as Word[])
               })) as Segment[];
 
               // Tạo Speaker giả lập từ ID
@@ -101,11 +103,11 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
             if (finalSegments.length > 0) {
               try {
                 await updateMeetingProcess(meeting.id, {
-                  status: 'transcribed',
+                  status: MEETING_STATUS.TRANSCRIBED,
                   segments: finalSegments,
                   speakers: finalSpeakers,
                   duration: finalSegments[finalSegments.length - 1]?.end || 0,
-                  jobId: deleteField() as any
+                  jobId: deleteFieldValue()
                 });
 
                 // Gọi onUpdate để refresh list ở Dashboard (nếu cần)
@@ -119,19 +121,19 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
                   });
 
                   await updateMeetingProcess(meeting.id, {
-                    status: 'transcribed',
+                    status: MEETING_STATUS.TRANSCRIBED,
                     segments: lightSegments,
                     speakers: finalSpeakers,
                     duration: lightSegments[lightSegments.length - 1]?.end || 0,
-                    jobId: deleteField() as any
+                    jobId: deleteFieldValue()
                   });
                   onUpdate();
                 } catch (fallbackError) {
                   console.error("Vẫn lỗi sau khi giảm dung lượng:", fallbackError);
                   await updateMeetingProcess(meeting.id, {
-                    status: 'failed',
+                    status: MEETING_STATUS.FAILED,
                     errorMessage: "Bản ghi âm quá dài, vượt quá giới hạn bộ nhớ.",
-                    jobId: deleteField() as any
+                    jobId: deleteFieldValue()
                   });
                   onUpdate();
                 }
@@ -140,9 +142,9 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
               console.error("Job xong nhưng dữ liệu rỗng:", JSON.stringify(jobData, null, 2));
 
               await updateMeetingProcess(meeting.id, {
-                status: 'failed',
+                status: MEETING_STATUS.FAILED,
                 errorMessage: "Job Completed but Transcript Empty",
-                jobId: deleteField() as any
+                jobId: deleteFieldValue()
               });
               onUpdate();
             }
@@ -150,9 +152,9 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
             // Trường hợp RunPod trả về COMPLETED nhưng không có output (do quá hạn / bị xóa trên server)
             console.error("Job COMPLETED nhưng mất output từ RunPod:", JSON.stringify(jobData, null, 2));
             await updateMeetingProcess(meeting.id, {
-              status: 'failed',
+              status: MEETING_STATUS.FAILED,
               errorMessage: "Kết quả đã hết hạn trên server RunPod (Timeout).",
-              jobId: deleteField() as any
+              jobId: deleteFieldValue()
             });
             onUpdate();
           }
@@ -161,9 +163,9 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
         // --- XỬ LÝ KHI THẤT BẠI ---
         else if (jobData.status === 'FAILED' || jobData.status === 'failed') {
           await updateMeetingProcess(meeting.id, {
-            status: 'failed',
+            status: MEETING_STATUS.FAILED,
             errorMessage: jobData.error || "Lỗi RunPod không xác định",
-            jobId: deleteField() as any
+            jobId: deleteFieldValue()
           });
           onUpdate();
         }

@@ -191,7 +191,6 @@ export default function TaskManagerPage() {
       // 🟢 LOGIC MAP TÊN -> EMAIL (Để pre-pick trong dropdown)
       // 🟢 LOGIC MAP TÊN/PHÒNG BAN -> EMAIL (FIX FINAL)
       const mappedTasks = rawTasks.map((t: any, index: number) => {
-        // Hàm chuẩn hóa: Chuyển về chữ thường, giữ nguyên dấu tiếng Việt chuẩn NFC
         const normalize = (str: any) =>
           str ? String(str).normalize("NFC").toLowerCase().trim() : "";
 

@@ -17,6 +17,12 @@ export type MeetingStatus = typeof MEETING_STATUS[keyof typeof MEETING_STATUS];
 
 export type ActionItemStatus = 'pending' | 'draft' | 'sent';
 
+export const isFinalStatus = (s: MeetingStatus): boolean =>
+  s === MEETING_STATUS.COMPLETED || s === MEETING_STATUS.FAILED;
+
+export const isActiveStatus = (s: MeetingStatus): boolean =>
+  s === MEETING_STATUS.TRANSCRIBING || s === MEETING_STATUS.SUMMARIZING;
+
 export const MEETING_STATUS_LABELS: Record<MeetingStatus, string> = {
   [MEETING_STATUS.DRAFT]: 'Bản nháp',
   [MEETING_STATUS.TRANSCRIBING]: 'Đang xử lí',

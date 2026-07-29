@@ -1,4 +1,4 @@
-export const formatTranscriptText = (text: string | any): string => {
+export const formatTranscriptText = (text: unknown): string => {
     if (!text) return "";
     // FORCE STRING: Đảm bảo input luôn là string
     const str = String(text);

@@ -8,6 +8,14 @@ import { saveMeeting, Meeting } from '../lib/db';
 import { useAuth } from '../context/AuthContext';
 import { useGlobalUI } from '../context/GlobalUIProvider';
 import { convertToMp3 } from '../lib/converter';
+import { MEETING_STATUS } from '../lib/constants';
+
+interface DriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  size?: string;
+}
 
 export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: { isOpen: boolean; onClose: () => void; onImportSuccess: () => void }) {
     const { user } = useAuth();
@@ -61,7 +69,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
         window.location.href = '/api/drive/auth';
     };
 
-    const handleImport = async (file: any) => {
+    const handleImport = async (file: DriveFile) => {
         if (!user) {
             toast.error("Vui lòng đăng nhập để import.");
             return;
@@ -116,7 +124,7 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
                 audioUrl: firebaseUrl,
                 segments: [],
                 speakers: [],
-                status: 'transcribing',
+                status: MEETING_STATUS.TRANSCRIBING,
                 isDeleted: false,
                 language: language
             };
@@ -126,9 +134,9 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
             onImportSuccess();
             onClose();
 
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error("Import Error:", e);
-            toast.error("Lỗi Import: " + e.message);
+            toast.error("Lỗi Import: " + (e instanceof Error ? e.message : String(e)));
         } finally {
             setImportingId(null);
             setConversionProgress(0);

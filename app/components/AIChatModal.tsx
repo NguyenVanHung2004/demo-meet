@@ -65,9 +65,9 @@ export default function AIChatModal({ isOpen, onClose, onClearContext, contextTe
             const data = await res.json();
             const aiMsg: Message = { role: 'model', content: data.summary || "Lỗi: Không nhận được phản hồi." };
             setMessages(prev => [...prev, aiMsg]);
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(e);
-            setMessages(prev => [...prev, { role: 'model', content: "Error: " + e.message }]);
+            setMessages(prev => [...prev, { role: 'model', content: "Error: " + (e instanceof Error ? e.message : String(e)) }]);
         } finally {
             setLoading(false);
         }

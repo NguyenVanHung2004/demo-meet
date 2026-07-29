@@ -90,7 +90,7 @@ export default function LiveViewerPage() {
           
           <div className="flex-1 overflow-y-auto p-6 space-y-6 font-sans text-sm md:text-base bg-slate-50/50 scroll-smooth">
             {session.segments && session.segments.length > 0 ? (
-              session.segments.map((seg: any, idx) => {
+              session.segments.map((seg: { speakerId?: string; speaker?: number; text?: string; content?: string }, idx) => {
                 const isHost = seg.speakerId === 'SPEAKER_00' || seg.speaker === 0;
                 const speakerName = seg.speakerId || `Speaker ${seg.speaker}`;
                 

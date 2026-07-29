@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/app/lib/rate-limit';
 import fs from 'fs';
 import path from 'path';
 import { getMeetingById, Meeting, Speaker, Segment } from '@/app/lib/db';
+import { MEETING_STATUS } from '@/app/lib/constants';
 
 // Force dynamic
 export const dynamic = 'force-dynamic';
@@ -130,7 +131,7 @@ export async function GET(req: Request) {
                 segments: [], // [HYBRID] Will be filled by Python Server
                 speakers: speakerList,
                 summary: "",
-                status: 'transcribed',
+                status: MEETING_STATUS.TRANSCRIBED,
                 isDeleted: false,
                 // [NEW] Attach Diarization for Client to use
                 // @ts-ignore

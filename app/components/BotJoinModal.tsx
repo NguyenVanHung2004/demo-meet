@@ -7,6 +7,7 @@ import { useGlobalUI } from '../context/GlobalUIProvider';
 import { db, auth, storage } from "@/app/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { saveMeeting, Meeting } from "@/app/lib/db";
+import { MEETING_STATUS } from "../lib/constants";
 
 export default function BotJoinModal({ isOpen, onClose, onUpdate }: { isOpen: boolean; onClose: () => void; onUpdate?: () => void }) {
     const { user } = useAuth();
@@ -171,7 +172,7 @@ export default function BotJoinModal({ isOpen, onClose, onUpdate }: { isOpen: bo
 
                                         if (jobId) {
                                             finalMeetingData.jobId = jobId;
-                                            finalMeetingData.status = 'transcribing'; // Để PollingManager tự check tiếp
+                                            finalMeetingData.status = MEETING_STATUS.TRANSCRIBING;
                                             finalMeetingData.segments = []; // Chưa có segment
 
                                             toast.success("Đã gửi xử lý AI! Hệ thống sẽ tự cập nhật khi xong.");
@@ -180,7 +181,7 @@ export default function BotJoinModal({ isOpen, onClose, onUpdate }: { isOpen: bo
                                     } catch (pyErr) {
                                         console.error("Hybrid Job Failed:", pyErr);
                                         toast.warning("Server Local lỗi/tắt. Không thể xử lý transcript.");
-                                        finalMeetingData.status = 'failed';
+                                        finalMeetingData.status = MEETING_STATUS.FAILED;
                                         finalMeetingData.errorMessage = "Server Local (transcribe+diarize) không khả dụng.";
                                     }
                                 }

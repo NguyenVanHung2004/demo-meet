@@ -7,7 +7,7 @@ import { Segment, Speaker, RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "../mock
 export type { Segment, Speaker };
 import { parseTranscriptFile } from "../parser";
 import { MeetingTemplate } from "../templates";
-import { MeetingStatus, ActionItemStatus } from "../constants";
+import { MEETING_STATUS, MeetingStatus, ActionItemStatus } from "../constants";
 
 export interface TaskItem {
   id: number;
@@ -148,7 +148,7 @@ export const subscribeToActiveMeetings = (userId: string, onUpdate: (meetings: M
   const q = query(
     collection(db, COLLECTION_NAME),
     where("userId", "==", userId),
-    where("status", "==", "transcribing")
+    where("status", "==", MEETING_STATUS.TRANSCRIBING)
   );
   return onSnapshot(q, (snapshot) => {
     const meetings = snapshot.docs.map(doc => doc.data() as Meeting);
@@ -162,7 +162,7 @@ export const getActiveTranscribingMeetings = async (userId: string): Promise<Mee
   const q = query(
     collection(db, COLLECTION_NAME),
     where("userId", "==", userId),
-    where("status", "==", "transcribing")
+    where("status", "==", MEETING_STATUS.TRANSCRIBING)
   );
   const snap = await getDocs(q);
   return snap.docs.map(d => d.data() as Meeting);
@@ -184,7 +184,7 @@ export const seedInitialData = async (userId: string) => {
         segments: parsedData.segments,
         speakers: parsedData.speakers,
         summary: RAW_SUMMARY_FILE,
-        status: 'completed',
+        status: MEETING_STATUS.COMPLETED,
         isDeleted: false
       };
       await saveMeeting(seedMeeting);

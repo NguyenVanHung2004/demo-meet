@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { saveMeeting, updateMeetingProcess, Meeting, Speaker, Segment } from '@/app/lib/db';
 import { getAdminStorage } from '@/app/lib/firebase-admin';
+import { MEETING_STATUS } from '@/app/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
             if (failedBotId) {
                 try {
                     await updateMeetingProcess(failedBotId, {
-                        status: 'failed',
+                        status: MEETING_STATUS.FAILED,
                         errorMessage: data?.error || "Bot không thể tham gia cuộc họp.",
                         jobId: undefined as any,
                     });
@@ -124,7 +125,7 @@ export async function POST(req: Request) {
                 });
             }
 
-            const meetingStatus = mappedSegments.length > 0 ? 'transcribed' : 'failed';
+            const meetingStatus = mappedSegments.length > 0 ? MEETING_STATUS.TRANSCRIBED : MEETING_STATUS.FAILED;
 
             const newMeeting: Meeting = {
                 id: bot_id,
@@ -140,7 +141,7 @@ export async function POST(req: Request) {
                 isDeleted: false
             };
 
-            if (meetingStatus === 'transcribed' || mappedSegments.length > 0) {
+            if (meetingStatus === MEETING_STATUS.TRANSCRIBED || mappedSegments.length > 0) {
                 await saveMeeting(newMeeting);
             }
         }

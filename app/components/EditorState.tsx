@@ -8,12 +8,15 @@ import {
   RotateCcw, RotateCw, LayoutTemplate
 } from "lucide-react";
 import { Meeting, saveMeeting, updateMeetingTitle } from "../lib/db";
+import { MEETING_STATUS } from "../lib/constants";
 import type { Word } from "../lib/mockData";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { useAuth } from "../context/AuthContext";
 import { MeetingTemplate, DEFAULT_TEMPLATES } from "../lib/templates";
 import TemplateManagerModal from "./TemplateManagerModal";
 import SegmentList from "./Editor/SegmentList";
+import EditorHeader from "./Editor/Header";
+import SpeakerSidebar from "./Editor/SpeakerSidebar";
 
 export default function EditorState({
   audioSrc,
@@ -321,7 +324,7 @@ export default function EditorState({
       };
 
 
-      if (initialData.status === 'draft') {
+      if (initialData.status === MEETING_STATUS.DRAFT) {
         toast.info("Đang đồng bộ bản nháp lên cloud...");
 
         // A. Lấy Blob từ URL tạm
@@ -338,7 +341,7 @@ export default function EditorState({
         finalMeeting = {
           ...finalMeeting,
           audioUrl: cloudUrl,
-          status: 'completed',
+          status: MEETING_STATUS.COMPLETED,
           jobId: undefined // Clear job id nếu có
         };
 
@@ -350,7 +353,7 @@ export default function EditorState({
       toast.success("Đã lưu thành công!");
 
       // [TRAINING DATA] Fire-and-forget — không block UX
-      if (initialData.status === 'completed' && user) {
+      if (initialData.status === MEETING_STATUS.COMPLETED && user) {
         (async () => {
           try {
             const { collectAndUploadSamples } = await import("../lib/trainingData");
@@ -369,7 +372,7 @@ export default function EditorState({
 
 
       // Nếu vừa finalize draft xong -> Back về dashboard để refresh
-      if (initialData.status === 'draft') {
+      if (initialData.status === MEETING_STATUS.DRAFT) {
         setTimeout(onBack, 1000);
       } else {
         setTimeout(() => setIsSaving(false), 500);
@@ -444,64 +447,21 @@ export default function EditorState({
         </div>
       )}
 
-      {/* ------------------- HEADER ------------------- */}
-      <div className="h-16 border-b flex items-center justify-between px-4 md:px-6 bg-white shrink-0 z-20 shadow-sm">
-        <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
-          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-
-          {/* Edit Title Logic */}
-          <div className="flex-1 min-w-0">
-            {isEditingTitle ? (
-              <div className="flex items-center gap-2">
-                <input
-                  ref={titleInputRef}
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onBlur={handleSaveTitle}
-                  className="text-sm md:text-lg font-bold text-slate-800 bg-slate-100 px-2 py-1 rounded w-full focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-                <button onMouseDown={handleSaveTitle} className="text-green-600"><Check className="w-5 h-5" /></button>
-              </div>
-            ) : (
-              <div className="group flex items-center gap-2 cursor-pointer" onClick={() => setIsEditingTitle(true)}>
-                <h1 className="font-bold text-slate-800 text-sm md:text-lg truncate max-w-[150px] md:max-w-md" title={title}>{title}</h1>
-                <Pencil className="w-3 h-3 text-slate-300 group-hover:text-indigo-500 transition-colors" />
-              </div>
-            )}
-            <p className="text-[10px] md:text-xs text-slate-400 hidden md:block">Chế độ chỉnh sửa chi tiết</p>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          
-          <button
-            onClick={() => setShowSpeakerModal(true)}
-            className="md:hidden flex items-center justify-center p-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-          >
-            <Users className="w-5 h-5" />
-          </button>
-
-          {/* TEMPLATE BUTTON */}
-          <button
-            onClick={() => setShowTemplateModal(true)}
-            className="hidden md:flex items-center gap-2 px-3 py-1.5 text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors border border-slate-200"
-            title={selectedTemplate.name}
-          >
-            <LayoutTemplate className="w-4 h-4 text-indigo-600" />
-            <span className="max-w-[100px] truncate">{selectedTemplate.name}</span>
-          </button>
-
-          <button onClick={handleSummarizeRequest} className="hidden md:flex items-center gap-2 px-3 py-1.5 text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg text-sm font-medium transition-colors border border-orange-200">
-            <Sparkles className="w-4 h-4" /> Tóm tắt lại
-          </button>
-          <button onClick={handleSave} disabled={isSaving} className={`flex items-center gap-2 px-3 md:px-4 py-1.5 rounded-lg text-sm font-medium shadow-md transition-all ${isSaving ? 'bg-green-600 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}>
-            <Save className="w-4 h-4" /> <span className="hidden md:inline">{isSaving ? "Đã lưu" : "Lưu"}</span>
-          </button>
-        </div>
-      </div>
+      <EditorHeader
+        title={title}
+        isEditingTitle={isEditingTitle}
+        isSaving={isSaving}
+        selectedTemplateName={selectedTemplate.name}
+        onBack={onBack}
+        onStartEditingTitle={() => setIsEditingTitle(true)}
+        onSaveTitle={handleSaveTitle}
+        onTitleKeyDown={handleKeyDown}
+        onTitleChange={setTitle}
+        onOpenSpeakerModal={() => setShowSpeakerModal(true)}
+        onOpenTemplateModal={() => setShowTemplateModal(true)}
+        onSummarize={handleSummarizeRequest}
+        onSave={handleSave}
+      />
 
       {/* ------------------- MOBILE TABS ------------------- */}
       <div className="md:hidden flex bg-white border-b sticky top-0 z-10 shrink-0">
@@ -516,35 +476,13 @@ export default function EditorState({
       {/* ------------------- BODY LAYOUT ------------------- */}
       <div className="flex-1 flex overflow-hidden">
 
-        {/* LEFT SIDEBAR (Speakers) - Desktop Only */}
-        <div className="hidden md:flex w-72 border-r bg-slate-50 flex-col shrink-0">
-          <div className="p-4 border-b flex justify-between items-center">
-            <h3 className="font-bold text-slate-700">Người tham gia</h3>
-            <button onClick={handleAddSpeaker} className="p-1 bg-white border hover:bg-indigo-50 rounded"><Plus className="w-4 h-4" /></button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {speakers.map(spk => (
-              <div key={spk.id} className="bg-white p-3 rounded-lg border shadow-sm group">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${spk.color.split(' ')[0]}`}>{spk.name.charAt(0)}</div>
-                  <span className="text-xs font-mono text-slate-400 flex-1">{spk.id.split('_')[1]}</span>
-                  <button onClick={() => handleDeleteSpeaker(spk.id)} className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition"><Trash2 className="w-3 h-3" /></button>
-                </div>
-                <input
-                  value={spk.name}
-                  onChange={(e) => handleUpdateSpeakerName(spk.id, e.target.value)}
-                  className="w-full text-sm font-medium border-b border-transparent focus:border-indigo-500 outline-none bg-transparent"
-                  placeholder="Tên..."
-                />
-              </div>
-            ))}
-          </div>
-          <div className="p-4 border-t">
-            <button onClick={handleViewTranscript} className="w-full py-2 bg-white border text-slate-600 rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-slate-50">
-              <FileText className="w-4 h-4" /> Xem toàn văn
-            </button>
-          </div>
-        </div>
+        <SpeakerSidebar
+          speakers={speakers}
+          onAddSpeaker={handleAddSpeaker}
+          onUpdateSpeakerName={handleUpdateSpeakerName}
+          onDeleteSpeaker={handleDeleteSpeaker}
+          onViewTranscript={handleViewTranscript}
+        />
 
         {/* MAIN EDITOR AREA */}
         <div className="flex-1 overflow-y-auto bg-slate-100/50 scroll-smooth relative">

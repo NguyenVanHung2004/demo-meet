@@ -6,13 +6,14 @@ import EditorState from "./components/EditorState";
 import LiveRecordingState from "./components/LiveRecordingState";
 import MeetingDetailState from "./components/MeetingDetailState";
 import PollingManager from "./components/PollingManager";
-import { deleteField } from "firebase/firestore";
 import {
   saveMeeting,
   seedInitialData,
   Meeting,
   updateMeetingProcess,
 } from "./lib/db";
+import { MEETING_STATUS } from "./lib/constants";
+import { deleteFieldValue } from "./lib/utils/firestore";
 import {
   uploadAudioToFirebase,
   startTranscriptionJob,
@@ -83,7 +84,7 @@ export default function Page() {
     let url = meeting.audioUrl;
 
 
-    if (meeting.status === 'draft') {
+    if (meeting.status === MEETING_STATUS.DRAFT) {
       try {
         const { getDraftFull } = await import("./lib/indexedDB");
         const fullDraft = await getDraftFull(meeting.id);
@@ -104,7 +105,7 @@ export default function Page() {
   const handleViewDetail = async (meeting: Meeting) => {
     let url = meeting.audioUrl;
 
-    if (meeting.status === 'draft') {
+    if (meeting.status === MEETING_STATUS.DRAFT) {
       try {
         const { getDraftFull } = await import("./lib/indexedDB");
         const fullDraft = await getDraftFull(meeting.id);
@@ -168,7 +169,7 @@ export default function Page() {
         audioUrl: url,
         segments: [],
         speakers: [],
-        status: 'transcribing',
+        status: MEETING_STATUS.TRANSCRIBING,
         isDeleted: false,
         language: language,
         objectives: objectives?.trim() || undefined
@@ -212,7 +213,7 @@ export default function Page() {
     transcriptText: string,
     templateStructure?: string
   ) => {
-    const isDraft = meeting.status === 'draft';
+    const isDraft = meeting.status === MEETING_STATUS.DRAFT;
     const meetingId = meeting.id;
 
     if (isDraft) {
@@ -227,7 +228,7 @@ export default function Page() {
           const finalMeeting = {
             ...draftFull.meta,
             audioUrl: url,
-            status: "summarizing" as const,
+            status: MEETING_STATUS.SUMMARIZING,
             jobId: undefined
           };
           
@@ -238,7 +239,7 @@ export default function Page() {
         return;
       }
     } else {
-      await updateMeetingProcess(meetingId, { status: "summarizing" });
+      await updateMeetingProcess(meetingId, { status: MEETING_STATUS.SUMMARIZING });
     }
     
     triggerRefresh();
@@ -247,7 +248,7 @@ export default function Page() {
       const summary = await requestSummary(transcriptText, templateStructure, meeting.objectives);
       
       await updateMeetingProcess(meetingId, {
-        status: "completed",
+        status: MEETING_STATUS.COMPLETED,
         summary: summary,
       });
 
@@ -264,7 +265,7 @@ export default function Page() {
     } catch (error) {
       console.error("Background Summary Error:", error);
       await updateMeetingProcess(meetingId, {
-        status: "failed",
+        status: MEETING_STATUS.FAILED,
         errorMessage: (error as Error).message,
       });
       toast.error("Lỗi tóm tắt ngầm: " + (error as Error).message);
@@ -281,7 +282,7 @@ export default function Page() {
       return;
     }
 
-    if (meeting.status === 'transcribing') {
+    if (meeting.status === MEETING_STATUS.TRANSCRIBING) {
       toast.warning("Cuộc họp này đang được xử lý, vui lòng đợi...");
       return;
     }
@@ -303,12 +304,12 @@ export default function Page() {
       const newJobId = await startTranscriptionJob(meeting.audioUrl, meeting.language ?? "vi");
 
       await updateMeetingProcess(meeting.id, {
-        status: 'transcribing',
+        status: MEETING_STATUS.TRANSCRIBING,
         jobId: newJobId,
         jobStartedAt: Date.now(),
         segments: [],
-        summary: deleteField() as any,
-        errorMessage: deleteField() as any
+        summary: deleteFieldValue(),
+        errorMessage: deleteFieldValue()
       });
 
       triggerRefresh();

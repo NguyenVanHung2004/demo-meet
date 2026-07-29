@@ -6,12 +6,7 @@ import { Meeting, updateMeetingProcess } from "../lib/db";
 import type { Segment, Speaker } from "../lib/db";
 import ReactMarkdown from "react-markdown";
 
-import {
-  Play, Pause, ChevronLeft, Edit3, Calendar,
-  Clock, Download, FileText, Sparkles, User, AlignLeft, Share2,
-  FileType, Music, RotateCcw, RotateCw, Check,
-  Trash2
-} from "lucide-react";
+import { Sparkles, User, Check } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 import { useGlobalUI } from "../context/GlobalUIProvider";
@@ -20,6 +15,10 @@ import { MeetingTemplate } from "../lib/templates";
 import TemplateManagerModal from "./TemplateManagerModal";
 import TranscriptRow from "./TranscriptRow";
 import SummaryPanel from "./Meeting/SummaryPanel";
+import TabSwitcher from "./Meeting/TabSwitcher";
+import SpeakerFilter from "./Meeting/SpeakerFilter";
+import MeetingHeader from "./Meeting/Header";
+import MeetingAudioPlayer from "./Meeting/AudioPlayer";
 export default function MeetingDetailState({
   meeting,
   audioSrc,
@@ -49,7 +48,22 @@ export default function MeetingDetailState({
   // --- TEMPLATE STATE ---
   const [showTemplateModal, setShowTemplateModal] = useState(false);
 
-
+  const handleShare = async () => {
+    const { generateMeetingShareToken } = await import('../lib/db');
+    let shareId = meeting.shareToken;
+    if (!shareId) {
+      try {
+        shareId = await generateMeetingShareToken(meeting.id);
+        meeting.shareToken = shareId;
+      } catch (e) {
+        console.error("Lỗi sinh share token", e);
+        shareId = meeting.id;
+      }
+    }
+    const shareUrl = `${window.location.origin}/share/${shareId}`;
+    navigator.clipboard.writeText(shareUrl);
+    toast.success("Đã copy link chia sẻ: " + shareUrl);
+  };
 
   const handleSummarizeRequest = (template: MeetingTemplate) => {
     if (!onSummarize) return;
@@ -63,8 +77,6 @@ export default function MeetingDetailState({
     onBack();
   };
 
-  // State cho menu xuất file
-  const [showExportMenu, setShowExportMenu] = useState(false);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number, y: number } | null>(null);
   const [showCopySuccess, setShowCopySuccess] = useState(false);
@@ -316,7 +328,6 @@ export default function MeetingDetailState({
   const handleDownloadAudio = () => {
     // audioSrc là Blob URL, file-saver sẽ tải nó về máy
     saveAs(audioSrc, `${meeting.title.replace(/\s+/g, "_")}.mp3`);
-    setShowExportMenu(false);
   };
 
   // --- LOGIC XUẤT FILE (MỚI) ---
@@ -466,7 +477,7 @@ export default function MeetingDetailState({
       // Xuất file
       const blob = await Packer.toBlob(doc);
       saveAs(blob, `${meeting.title.replace(/\s+/g, "_")}_summary.docx`);
-      setShowExportMenu(false);
+      // setShowExportMenu moved to MeetingHeader
     } catch (e) {
       console.error(e);
       alert("Lỗi khi tạo file DOCX");
@@ -587,7 +598,7 @@ export default function MeetingDetailState({
 
       pdf.save(`${meeting.title.replace(/\s+/g, "_")}_summary.pdf`);
       document.body.style.cursor = 'default';
-      setShowExportMenu(false);
+      // setShowExportMenu moved to MeetingHeader
 
     } catch (e) {
       console.error(e);
@@ -724,119 +735,23 @@ export default function MeetingDetailState({
         </div>
       </div>
 
-      {/* 1. HEADER */}
-      <div className="bg-white border-b px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-sm z-20 shrink-0">
-        <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
-          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition shrink-0">
-            <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
-          </button>
-          <div className="min-w-0">
-            <h1 className="text-base md:text-xl font-bold text-slate-800 truncate pr-2">{meeting.title}</h1>
-            <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-              <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(meeting.createdAt)}</span>
-              <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(meeting.duration)}</span>
-            </div>
-          </div>
-        </div>
+      <MeetingHeader
+        meeting={meeting}
+        isReadOnly={isReadOnly}
+        showTemplateBtn={!!onSummarize}
+        onBack={onBack}
+        onEdit={onEdit}
+        onOpenTemplateModal={() => setShowTemplateModal(true)}
+        onShare={handleShare}
+        onDownloadAudio={handleDownloadAudio}
+        onExportTxt={handleExport}
+        onExportDocx={handleExportDocx}
+        onExportPdf={handleExportPdf}
+        formatDate={formatDate}
+        formatDuration={formatDuration}
+      />
 
-        <div className="flex gap-2 shrink-0 relative">
-          {/* NÚT CHIA SẺ (Chỉ Admin mới thấy) */}
-          {!isReadOnly && (
-            <button
-              onClick={async () => {
-                import('../lib/db').then(async ({ generateMeetingShareToken }) => {
-                  let shareId = meeting.shareToken;
-                  // Nếu chưa có token, sinh token mới
-                  if (!shareId) {
-                    try {
-                      shareId = await generateMeetingShareToken(meeting.id);
-                      meeting.shareToken = shareId; // Update state local tạm thời
-                    } catch (e) {
-                      console.error("Lỗi sinh share token", e);
-                      shareId = meeting.id; // Fallback
-                    }
-                  }
-                  const shareUrl = `${window.location.origin}/share/${shareId}`;
-                  navigator.clipboard.writeText(shareUrl);
-                  toast.success("Đã copy link chia sẻ: " + shareUrl);
-                });
-              }}
-              className="px-3 py-2 md:px-4 md:py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-medium rounded-lg shadow-sm flex items-center gap-2 transition"
-            >
-              <Share2 className="w-4 h-4" /> <span className="hidden md:inline">Chia sẻ</span>
-            </button>
-          )}
-
-          {/* EXPORT DROPDOWN */}
-          <div className="relative">
-            <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              className="p-2 md:px-4 md:py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 transition"
-            >
-              <Download className="w-4 h-4" /> <span className="hidden md:inline">Tải xuống</span>
-            </button>
-
-            {showExportMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)}></div>
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                  <button onClick={handleDownloadAudio} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700 font-medium border-b border-slate-50">
-                    <Music className="w-4 h-4 text-pink-500" /> Audio
-                  </button>
-                  {/* Bản Transcript Chỉ Khách (Visitor) hoặc Admin đều có thể tải. Hoặc bạn có thể giấu đi cho Khách tuỳ ý */}
-                  <button onClick={handleExport} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700 border-b border-slate-50">
-                    <FileText className="w-4 h-4 text-slate-400" /> Nội dung thô (.txt)
-                  </button>
-                  <button onClick={handleExportDocx} className="w-full text-left px-4 py-3 text-sm hover:bg-indigo-50 flex items-center gap-3 text-indigo-700 font-medium">
-                    <FileType className="w-4 h-4" /> Bản tóm tắt (.docx)
-                  </button>
-                  <button onClick={handleExportPdf} className="w-full text-left px-4 py-3 text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-700 font-medium">
-                    <FileType className="w-4 h-4" /> Bản tóm tắt (.pdf)
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* NÚT TÓM TẮT LẠI */}
-          {!isReadOnly && onSummarize && (
-            <button
-              onClick={() => setShowTemplateModal(true)}
-              className="px-3 py-2 md:px-5 md:py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 font-medium rounded-lg shadow-sm border border-orange-200 flex items-center gap-2 transition"
-            >
-              <Sparkles className="w-4 h-4" /> <span className="hidden md:inline">Tóm tắt lại</span>
-            </button>
-          )}
-
-          {/* NÚT SỬA (Chỉ Admin) */}
-          {!isReadOnly && (
-            <button
-              onClick={onEdit}
-              className="px-3 py-2 md:px-5 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-md shadow-indigo-200 flex items-center gap-2 transition"
-            >
-              <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">Sửa</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 2. TABS NAVIGATION (Sticky) - Chỉ hiện trên Mobile */}
-      <div className="md:hidden flex bg-white border-b sticky top-0 z-10 shrink-0">
-        <button
-          onClick={() => setActiveTab('transcript')}
-          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-all border-b-2 
-            ${activeTab === 'transcript' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
-        >
-          <AlignLeft className="w-4 h-4" /> Nội dung
-        </button>
-        <button
-          onClick={() => setActiveTab('summary')}
-          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-all border-b-2
-            ${activeTab === 'summary' ? 'border-orange-500 text-orange-700 bg-orange-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
-        >
-          <Sparkles className="w-4 h-4" /> Tóm tắt
-        </button>
-      </div>
+      <TabSwitcher activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* 3. MAIN CONTENT (Có thể cuộn) */}
       <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
@@ -846,27 +761,11 @@ export default function MeetingDetailState({
           ref={transcriptContainerRef}
           className={`flex-1 overflow-y-auto bg-white md:border-r ${activeTab === 'transcript' ? 'block' : 'hidden md:block'}`}
         >
-          {/* BADGES FILTER */}
-          <div className="px-4 py-3 md:px-8 border-b flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-hide sticky top-0 bg-white/95 backdrop-blur z-20 shadow-sm">
-            <span className="text-xs font-bold text-slate-500 uppercase flex items-center mr-2">
-              <User className="w-3.5 h-3.5 mr-1" /> Người nói:
-            </span>
-            <button
-              onClick={() => setFilteredSpeakerId(null)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${!filteredSpeakerId ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-            >
-              Tất cả
-            </button>
-            {meeting.speakers.map(speaker => (
-              <button
-                key={speaker.id}
-                onClick={() => setFilteredSpeakerId(filteredSpeakerId === speaker.id ? null : speaker.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${filteredSpeakerId === speaker.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-              >
-                {speaker.name}
-              </button>
-            ))}
-          </div>
+          <SpeakerFilter
+            speakers={meeting.speakers}
+            filteredSpeakerId={filteredSpeakerId}
+            onFilterChange={setFilteredSpeakerId}
+          />
 
           <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 pb-32 relative">
             {meeting.segments.map((seg, idx) => {
@@ -928,71 +827,22 @@ export default function MeetingDetailState({
 
       </div>
 
-      {/* 4. FOOTER AUDIO PLAYER (Sticky Bottom) */}
-      <div className="bg-white border-t p-3 md:p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30 shrink-0">
-        <div className="max-w-3xl mx-auto flex items-center gap-3 md:gap-4">
-          <button
-            onClick={togglePlay}
-            className="w-10 h-10 md:w-12 md:h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center hover:bg-indigo-700 active:scale-95 transition shadow-lg shrink-0"
-          >
-            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 pl-1" />}
-          </button>
-
-          
-          <div className="flex items-center gap-1 md:gap-2">
-            <button
-              onClick={() => skipTime(-10)}
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition"
-              title="Lùi 10s"
-            >
-              <RotateCcw className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => skipTime(10)}
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition"
-              title="Tua 10s"
-            >
-              <RotateCw className="w-5 h-5" />
-            </button>
-            <button
-              onClick={togglePlaybackRate}
-              className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg transition text-xs font-bold min-w-[3rem]"
-              title="Tốc độ phát"
-            >
-              {playbackRate}x
-            </button>
-          </div>
-
-          <div className="flex-1 flex flex-col justify-center gap-1">
-            <div className="flex justify-between text-[10px] md:text-xs font-medium text-slate-500">
-              <span>{formatTimeCode(currentTime)}</span>
-              <span>{formatTimeCode(duration)}</span>
-            </div>
-
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              value={currentTime}
-              onChange={(e) => {
-                const t = Number(e.target.value);
-                setCurrentTime(t);
-                if (audioRef.current) audioRef.current.currentTime = t;
-              }}
-              className="w-full h-1.5 md:h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500"
-            />
-          </div>
-
-          <audio
-            ref={audioRef}
-            src={audioSrc}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onEnded={() => setIsPlaying(false)}
-            className="hidden"
-          />
-        </div>
-      </div>
+      <MeetingAudioPlayer
+        audioRef={audioRef}
+        audioSrc={audioSrc}
+        isPlaying={isPlaying}
+        currentTime={currentTime}
+        duration={duration}
+        playbackRate={playbackRate}
+        onTogglePlay={togglePlay}
+        onSkip={skipTime}
+        onRateChange={togglePlaybackRate}
+        onSeek={(t) => { setCurrentTime(t); if (audioRef.current) audioRef.current.currentTime = t; }}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={() => setIsPlaying(false)}
+        formatTimeCode={formatTimeCode}
+      />
 
       {/* Smart Copy Tooltip */}
       {tooltipPos && (

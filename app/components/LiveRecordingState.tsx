@@ -1,13 +1,18 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { ChevronLeft, Save, Sparkles, AlignLeft, Trash2, Loader2, Link as LinkIcon, CheckCircle2 } from "lucide-react";
+import { Sparkles, AlignLeft } from "lucide-react";
 import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api";
 import { saveMeeting, createLiveSession, updateLiveSession, endLiveSession } from "../lib/db";
 import { useAuth } from "../context/AuthContext";
 import useLocalTranscription from "../hooks/useLocalTranscription";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import LiveControls from "./Live/Controls";
+import LiveHeader from "./Live/Header";
+import LiveStatusBar from "./Live/StatusBar";
+import TranscriptView from "./Live/TranscriptView";
+import LVSummaryPanel from "./Live/LVSummaryPanel";
+import { MEETING_STATUS } from "../lib/constants";
 
 type SummaryItem = {
   id: number;
@@ -344,19 +349,16 @@ export default function LiveRecordingState({
   const setupVisualizer = (stream: MediaStream) => {
     let audioCtx = audioContextRef.current;
     if (!audioCtx || audioCtx.state === 'closed') {
-      const AudioContext = (window.AudioContext || (window as any).webkitAudioContext);
-      audioCtx = new AudioContext();
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioCtx = new AudioContextClass();
       audioContextRef.current = audioCtx;
     } else if (audioCtx.state === 'suspended') {
       audioCtx.resume();
     }
 
-    // Ensure we don't have multiple analyzers connected if resumed
-    // For simplicity, we create new analyzer each time, garbage collection handles the rest?
-    // Better: check if we already have one. But refs are tricky here. 
-    // Just creating new one is fine for this scope.
-    const analyzer = audioCtx.createAnalyser();
-    const source = audioCtx.createMediaStreamSource(stream);
+    const ctx = audioCtx!;
+    const analyzer = ctx.createAnalyser();
+    const source = ctx.createMediaStreamSource(stream);
     source.connect(analyzer);
     analyzer.fftSize = 32;
     const dataArray = new Uint8Array(analyzer.frequencyBinCount);
@@ -443,8 +445,8 @@ export default function LiveRecordingState({
         micStreamRef.current = micStream;
 
         // 3. Mix them together
-        const AudioContext = (window.AudioContext || (window as any).webkitAudioContext);
-        const audioCtx = new AudioContext();
+        const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const audioCtx = new AudioContextClass();
         audioContextRef.current = audioCtx;
 
         const micSource = audioCtx.createMediaStreamSource(micStream);
@@ -634,7 +636,7 @@ export default function LiveRecordingState({
         audioUrl: audioUrl,
 
         jobId: undefined,
-        status: 'completed',
+        status: MEETING_STATUS.COMPLETED,
         language: language,
 
         segments: finalSegments, // Lưu text live
@@ -674,80 +676,27 @@ export default function LiveRecordingState({
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
-      {/* HEADER */}
-      <div className="h-14 md:h-16 bg-white border-b flex items-center justify-between px-4 md:px-6 shadow-sm z-20 shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              // Nếu chưa Save -> Quay lại báo hỏi
-              // Ở đây ta gọi handeFullStop trước khi back để dọn dẹp
-              handeFullStop();
-              onBack();
-            }}
-            className="p-2 hover:bg-slate-100 rounded-full text-slate-500"
-            disabled={isUploading}
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div className="flex flex-col">
-            <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Thời gian</span>
-            <span className="text-sm md:text-base font-mono font-bold text-slate-700">{formatTime(timer)}</span>
-          </div>
-          {remainingMinutesWarning !== null && (
-            <div
-              className={`ml-2 md:ml-4 flex flex-col border-l pl-3 md:pl-4 transition-colors cursor-help ${remainingMinutesWarning < 15 ? 'border-red-200' : 'border-slate-200'}`}
-              title="Khi cuộc họp kéo dài quá con số còn lại, hệ thống sẽ bỏ một số trường khi lưu cuộc họp, giúp tăng thời gian cuộc họp. Điều này dẫn đến khi xem lại cuộc họp sẽ không có hiệu ứng đổi màu chữ chạy theo giọng nói."
-            >
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${remainingMinutesWarning < 15 ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
-                {remainingMinutesWarning < 15 ? 'Sắp đầy bộ nhớ' : 'Dự kiến'}
-              </span>
-              <span className={`text-xs font-medium ${remainingMinutesWarning < 15 ? 'text-red-600' : 'text-slate-500'}`}>
-                Còn ~{remainingMinutesWarning} phút
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 md:gap-3">
-          {liveSessionId && (
-            <button
-              onClick={() => {
-                const url = `${window.location.origin}/live/${liveSessionId}`;
-                navigator.clipboard.writeText(url);
-                setIsCopied(true);
-                setTimeout(() => setIsCopied(false), 2000);
-              }}
-              className="px-3 py-1.5 md:px-4 md:py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-medium text-sm flex items-center gap-2 shadow-sm transition-all"
-            >
-              {isCopied ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <LinkIcon className="w-4 h-4" />}
-              <span className="hidden md:inline">{isCopied ? "Đã copy link" : "Share Live"}</span>
-            </button>
-          )}
-
-          <button
-            onClick={handleSaveAndProcess}
-            disabled={isUploading}
-            className={`px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2 shadow-lg transition-all ${isUploading ? 'opacity-70 cursor-wait' : ''}`}
-          >
-            {isUploading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Đang lưu...</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span className="hidden md:inline">Dừng & Lưu</span>
-                <span className="md:hidden">Lưu</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      <LiveHeader
+        isUploading={isUploading}
+        liveSessionId={liveSessionId}
+        isCopied={isCopied}
+        onBack={() => { handeFullStop(); onBack(); }}
+        onSave={handleSaveAndProcess}
+        onCopyShareLink={() => {
+          const url = `${window.location.origin}/live/${liveSessionId}`;
+          navigator.clipboard.writeText(url);
+          setIsCopied(true);
+          setTimeout(() => setIsCopied(false), 2000);
+        }}
+      />
+      <LiveStatusBar
+        timer={timer}
+        remainingMinutesWarning={remainingMinutesWarning}
+        formatTime={formatTime}
+      />
 
       {/* BODY */}
       <div className="flex-1 overflow-hidden flex flex-col md:flex-row p-4 gap-4 md:gap-6">
-        {/* LEFT COLUMN */}
         <div className="flex-1 flex flex-col gap-4 min-h-0">
           <LiveControls
             isListening={isListening}
@@ -758,102 +707,24 @@ export default function LiveRecordingState({
             canToggleSystemAudio={!isListening}
           />
 
-          {/* TRANSCRIPT */}
           <div className="flex md:hidden bg-slate-200 p-1 rounded-xl shrink-0">
             <MobileTabBtn active={mobileTab === 'transcript'} onClick={() => setMobileTab('transcript')} icon={AlignLeft} label="Hội thoại" />
             <MobileTabBtn active={mobileTab === 'summary'} onClick={() => setMobileTab('summary')} icon={Sparkles} label="Live Tóm tắt" />
           </div>
-          <div className={`bg-white rounded-2xl border shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden transition-all ${mobileTab === 'transcript' ? 'flex' : 'hidden md:flex'}`}>
-            <div className="p-3 border-b bg-slate-50 flex items-center gap-2 shrink-0">
-              <AlignLeft className="w-4 h-4 text-indigo-600" />
-              <span className="text-xs font-bold text-slate-600 uppercase">Nội dung chi tiết</span>
-              <button onClick={handleClearTranscript} className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans text-sm">
-              {/* 1. Render các đoạn hội thoại */}
-              {segments.map((seg, idx) => {
-                const startTime = seg.words?.[0]?.start || 0;
-                const isLastSegment = idx === segments.length - 1;
-                // Nếu là đoạn cuối VÀ đang có chữ xám -> Hiển thị nối đuôi luôn
-                const showInterimInline = isLastSegment && interimContent && interimContent.trim().length > 0;
 
-                return (
-                  <div
-                    key={idx}
-                    id={`live-seg-${startTime}`}
-                    className={`flex flex-col gap-1 animate-in fade-in slide-in-from-bottom-2 ${seg.speaker === 0 ? 'items-start' : 'items-end'}`}
-                  >
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mx-2">
-                      Speaker {seg.speaker}
-                    </span>
-                    <div className={`p-3 rounded-2xl max-w-[85%] ${seg.speaker === 0 ? 'bg-slate-50 border border-slate-100 rounded-tl-none' : 'bg-indigo-50 border border-indigo-100 rounded-tr-none'
-                      }`}>
-                      <p className="text-slate-800 leading-relaxed text-sm">
-                        {seg.content}
-
-                        
-                        {showInterimInline && (
-                          <span className="text-slate-400 italic ml-1">
-                            {interimContent} ...
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* 2. Trường hợp đặc biệt: Chưa có đoạn nào (Mới bắt đầu) thì hiện chữ xám ở dòng riêng */}
-              {segments.length === 0 && interimContent && (
-                <div className="flex gap-3 opacity-75 mt-2">
-                  <div className="w-8 h-8 rounded-full bg-slate-100 animate-pulse shrink-0 flex items-center justify-center">
-                    <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
-                  </div>
-                  <div className="bg-white p-3 rounded-2xl border border-dashed border-slate-300 shadow-sm max-w-[85%]">
-                    <p className="text-slate-500 italic font-medium text-sm">{interimContent} ...</p>
-                  </div>
-                </div>
-              )}
-              <div ref={transcriptEndRef} className="h-2" />
-            </div>
-          </div>
+          <TranscriptView
+            segments={segments}
+            interimContent={interimContent}
+            onClear={handleClearTranscript}
+          />
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div className={`md:w-1/3 bg-white rounded-2xl border shadow-sm flex flex-col min-h-0 overflow-hidden transition-all ${mobileTab === 'summary' ? 'flex flex-1' : 'hidden md:flex'}`}>
-          <div className="p-3 border-b bg-indigo-50 flex items-center gap-2 shrink-0">
-            <Sparkles className="w-4 h-4 text-indigo-600" />
-            <span className="text-xs font-bold text-indigo-800 uppercase">Live Insights (Tóm tắt)</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 scroll-smooth">
-            <div className="space-y-4">
-              {summaries.filter(s => !s.isLoading).map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => item.timestamp !== undefined && scrollToLiveSegment(item.timestamp)}
-                  className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500 group cursor-pointer hover:bg-indigo-50/50 p-2 -mx-2 rounded-xl transition-colors"
-                >
-                  <div className="mt-1.5 w-2 h-2 rounded-full bg-green-500 shrink-0 group-hover:scale-125 transition-transform"></div>
-                  <div className="flex flex-col gap-0.5">
-                    {item.timestamp !== undefined && (
-                      <span className="text-[10px] font-mono font-bold text-indigo-500 uppercase">
-                        [{formatTime(item.timestamp)}]
-                      </span>
-                    )}
-                    <p className="text-slate-700 text-sm leading-relaxed text-justify">{item.content}</p>
-                  </div>
-                </div>
-              ))}
-              {summaries.filter(s => s.isLoading).map((item) => (
-                <div key={item.id} className="flex gap-3 opacity-70">
-                  <div className="mt-1.5 w-2 h-2 rounded-full bg-slate-300 animate-bounce shrink-0"></div>
-                  <p className="text-slate-400 text-sm italic">{item.content}</p>
-                </div>
-              ))}
-            </div>
-            <div ref={summariesEndRef} className="h-4" />
-          </div>
-        </div>
+        <LVSummaryPanel
+          summaries={summaries}
+          mobileTab={mobileTab}
+          onScrollToSegment={scrollToLiveSegment}
+          formatTime={formatTime}
+        />
       </div>
     </div>
   );
