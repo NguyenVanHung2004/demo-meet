@@ -1,9 +1,9 @@
 
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "@/app/lib/firebase"; // Inspect this path
+import { getAdminStorage } from '@/app/lib/firebase-admin';
 import { startTranscriptionJob } from "@/app/lib/api";
+import { checkRateLimit } from '@/app/lib/rate-limit';
 
 // Helper to download file from Drive
 async function downloadFile(fileId: string, accessToken: string): Promise<ArrayBuffer> {
@@ -14,9 +14,49 @@ async function downloadFile(fileId: string, accessToken: string): Promise<ArrayB
     return await res.arrayBuffer();
 }
 
-export async function POST(request: Request) {
+async function getValidAccessToken(): Promise<string | null> {
     const cookieStore = await cookies();
-    const accessToken = cookieStore.get('google_access_token')?.value;
+    let accessToken = cookieStore.get('google_access_token')?.value;
+    const refreshToken = cookieStore.get('google_refresh_token')?.value;
+
+    if (accessToken) return accessToken;
+    if (!refreshToken) return null;
+
+    try {
+        const res = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                client_id: process.env.GOOGLE_CLIENT_ID!,
+                client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+                refresh_token: refreshToken,
+                grant_type: 'refresh_token',
+            }),
+        });
+        const tokens = await res.json();
+        if (tokens.access_token) {
+            cookieStore.set('google_access_token', tokens.access_token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                maxAge: tokens.expires_in,
+                path: '/',
+            });
+            return tokens.access_token;
+        }
+    } catch (err) {
+        console.error("Token refresh failed:", err);
+    }
+    return null;
+}
+
+export async function POST(request: Request) {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const { allowed } = checkRateLimit(`drive:import:${ip}`, 10, 60 * 1000);
+    if (!allowed) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
+    const accessToken = await getValidAccessToken();
 
     if (!accessToken) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -25,33 +65,26 @@ export async function POST(request: Request) {
     try {
         const { fileId, fileName } = await request.json();
 
-        // 1. Download from Drive
         const fileBuffer = await downloadFile(fileId, accessToken);
-
-        // 2. Upload to Firebase
-        // Simple trick: Upload to a predictable path or allow anonymous? 
-        // We need auth? 'storage' is initialized with client config, likely unauthenticated or using rules?
-        // Server-side, normally we use Admin SDK. 
-        // But if 'storage' is from initializedApp, it might work if rules allow write.
-        // Assuming rules allow write for now or we rely on client-side 'user' (but we are on server).
-        // Actually, in the Zoom implementation, how did we handle this?
-        // Zoom implementation: "const storageRef = ref(storage, ...); await uploadBytes(storageRef, fileBuffer);"
-        // It worked there, so it should work here.
 
         const timestamp = Date.now();
         const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
         const storagePath = `imports/drive/${timestamp}-${safeName}`;
-        const storageRef = ref(storage, storagePath);
+        const bucket = getAdminStorage().bucket();
+        const fileRef = bucket.file(storagePath);
 
-        // uploadBytes accepts Uint8Array, ArrayBuffer, Blob
-        await uploadBytes(storageRef, fileBuffer, { contentType: 'video/mp4' });
+        await fileRef.save(Buffer.from(fileBuffer), {
+            metadata: { contentType: 'video/mp4' }
+        });
 
-        const firebaseUrl = await getDownloadURL(storageRef);
+        const [signedUrl] = await fileRef.getSignedUrl({
+            action: 'read',
+            expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        });
 
-        // 3. Trigger Transcription
-        const jobId = await startTranscriptionJob(firebaseUrl);
+        const jobId = await startTranscriptionJob(signedUrl);
 
-        return NextResponse.json({ success: true, jobId, firebaseUrl });
+        return NextResponse.json({ success: true, jobId, firebaseUrl: signedUrl });
 
     } catch (error: any) {
         console.error("Drive Import Error:", error);

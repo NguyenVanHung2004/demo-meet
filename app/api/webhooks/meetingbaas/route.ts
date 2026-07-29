@@ -1,15 +1,30 @@
-
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import { Readable } from 'stream';
-import { saveMeeting, Meeting, Speaker, Segment } from '@/app/lib/db';
+import { saveMeeting, updateMeetingProcess, Meeting, Speaker, Segment } from '@/app/lib/db';
+import { getAdminStorage } from '@/app/lib/firebase-admin';
 
-// Force dynamic to prevent caching of webhook handling
 export const dynamic = 'force-dynamic';
+
+const WEBHOOK_SECRET = process.env.MEETINGBAAS_WEBHOOK_SECRET;
+
+async function verifySignature(req: Request): Promise<boolean> {
+  if (!WEBHOOK_SECRET) return true;
+  const signature = req.headers.get('X-MeetingBaas-Signature');
+  if (!signature) return false;
+  const text = await req.text();
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  const expected = await crypto.subtle.sign('HMAC', key, encoder.encode(text));
+  const expectedHex = Array.from(new Uint8Array(expected)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return signature === expectedHex;
+}
 
 export async function POST(req: Request) {
     try {
+        const verified = await verifySignature(req);
+        if (!verified) {
+            return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(req.url);
         const userId = searchParams.get('userId');
 
@@ -21,9 +36,20 @@ export async function POST(req: Request) {
         const body = await req.json();
         const { event, data } = body;
 
-
         if (event === 'failed') {
-            console.error("[Webhook] Bot failed:", data.error);
+            console.error("[Webhook] Bot failed:", data?.error);
+            const failedBotId = data?.bot_id;
+            if (failedBotId) {
+                try {
+                    await updateMeetingProcess(failedBotId, {
+                        status: 'failed',
+                        errorMessage: data?.error || "Bot không thể tham gia cuộc họp.",
+                        jobId: undefined as any,
+                    });
+                } catch (err) {
+                    console.error("[Webhook] Failed to mark meeting as failed:", err);
+                }
+            }
             return NextResponse.json({ received: true });
         }
 
@@ -35,7 +61,6 @@ export async function POST(req: Request) {
             const mp4Url = mp4 || data.video;
             let transcriptData = transcript;
 
-            // If V2 returns a transcription URL, fetch it
             if (!transcriptData && data.transcription) {
                 try {
                     const tResponse = await fetch(data.transcription);
@@ -47,40 +72,37 @@ export async function POST(req: Request) {
                 }
             }
 
-            // 1. Download MP4 File
-            const fileName = `meetingbaas_${bot_id.split('-')[0]}.mp4`; // Shorten ID
-            const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-            const filePath = path.join(uploadDir, fileName);
-
-            // Ensure directory exists
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-
+            let audioUrl = "";
 
             if (mp4Url) {
                 try {
                     const response = await fetch(mp4Url);
-                    if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
-
-                    // Convert web ReadableStream to Node WritableStream
-                    // @ts-ignore
-                    const buffer = Buffer.from(await response.arrayBuffer());
-                    fs.writeFileSync(filePath, buffer);
+                    if (response.ok) {
+                        const buffer = Buffer.from(await response.arrayBuffer());
+                        const fileName = `meetingbaas_${bot_id.split('-')[0]}.mp4`;
+                        const bucket = getAdminStorage().bucket();
+                        const fileRef = bucket.file(`users/${userId}/uploads/${fileName}`);
+                        await fileRef.save(buffer, {
+                            metadata: { contentType: 'video/mp4' }
+                        });
+                        const [url] = await fileRef.getSignedUrl({
+                            action: 'read',
+                            expires: Date.now() + 365 * 24 * 60 * 60 * 1000,
+                        });
+                        audioUrl = url;
+                    }
                 } catch (err) {
-                    console.error("[Webhook] Error downloading file:", err);
+                    console.error("[Webhook] Error uploading to Firebase:", err);
                 }
             }
 
-            // 2. Process Transcript -> Segments
             const mappedSegments: Segment[] = [];
             const speakerList: Speaker[] = (speakers || []).map((name: string, idx: number) => ({
                 id: `SPEAKER_${idx.toString().padStart(2, '0')}`,
                 name: name,
-                color: "bg-indigo-100 text-indigo-700" // Default color
+                color: "bg-indigo-100 text-indigo-700"
             }));
 
-            // Helper to map speaker name back to our ID
             const getSpeakerId = (name: string) => {
                 const s = speakerList.find(x => x.name === name);
                 return s ? s.id : "SPEAKER_00";
@@ -88,16 +110,10 @@ export async function POST(req: Request) {
 
             if (transcriptData && Array.isArray(transcriptData)) {
                 transcriptData.forEach((block: any) => {
-                    // Block has { speaker: "Name", words: [...] }
-                    // We can combine all words into one text or keep granule?
-                    // Let's combine for readability as segments usually act as sentences/paragraphs
-
                     if (!block.words || block.words.length === 0) return;
-
                     const text = block.words.map((w: any) => w.word).join(" ");
                     const start = block.words[0].start;
                     const end = block.words[block.words.length - 1].end;
-
                     mappedSegments.push({
                         id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                         speakerId: getSpeakerId(block.speaker),
@@ -108,22 +124,25 @@ export async function POST(req: Request) {
                 });
             }
 
-            // 3. Save to DB
+            const meetingStatus = mappedSegments.length > 0 ? 'transcribed' : 'failed';
+
             const newMeeting: Meeting = {
                 id: bot_id,
                 userId: userId,
-                title: `Meeting Report ${new Date().toLocaleDateString('vi-VN')}`, // Default title
+                title: `Meeting Report ${new Date().toLocaleDateString('vi-VN')}`,
                 createdAt: Date.now(),
                 duration: mappedSegments.length > 0 ? mappedSegments[mappedSegments.length - 1].end : 0,
-                audioUrl: `/uploads/${fileName}`,
+                audioUrl: audioUrl,
                 segments: mappedSegments,
                 speakers: speakerList,
-                summary: "", // Will be generated later
-                status: 'transcribed', // Ready for summary
+                summary: "",
+                status: meetingStatus,
                 isDeleted: false
             };
 
-            await saveMeeting(newMeeting);
+            if (meetingStatus === 'transcribed' || mappedSegments.length > 0) {
+                await saveMeeting(newMeeting);
+            }
         }
 
         return NextResponse.json({ received: true });

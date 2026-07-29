@@ -125,7 +125,7 @@ export default function useLocalTranscription(
 
         if (data.channel && data.channel.alternatives?.[0]) {
             const alt = data.channel.alternatives[0];
-            // [MOD] Format text trước khi sử dụng
+
             // import { formatTranscriptText } from "../lib/utils"; (Sẽ được auto-import hoặc thêm ở đầu file)
             // Lưu ý: Cần thêm import thủ công nếu tool không tự làm.
             const rawTranscript = alt.transcript;
@@ -146,7 +146,7 @@ export default function useLocalTranscription(
             setInterimContent("");
 
             // Logic thêm vào segments giữ nguyên như cũ
-            // [MOD] Format words array
+
             // import { formatWords } from "../lib/utils";
             let rawWords = (alt.words || []).map((w: any) => {
                 // Nếu timestamp đầu tiên quá lớn (> 3600s = 1h), coi đó là lỗi Server Offset và trừ đi

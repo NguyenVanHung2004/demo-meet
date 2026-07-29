@@ -1,8 +1,15 @@
 
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { checkRateLimit } from '@/app/lib/rate-limit';
 
-export async function GET() {
+export async function GET(request: Request) {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const { allowed } = checkRateLimit(`drive:list:${ip}`, 30, 60 * 1000);
+    if (!allowed) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
     const cookieStore = await cookies();
     const accessToken = cookieStore.get('google_access_token')?.value;
 

@@ -34,10 +34,22 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
       if (currentActiveJobs.length === 0) return;
 
 
+      const now = Date.now();
       for (const meeting of currentActiveJobs) {
+        try {
         if (!meeting.jobId) continue;
 
-        // Hỏi trạng thái từ RunPod
+        const jobStartedAt = meeting.jobStartedAt || meeting.createdAt;
+        if (now - jobStartedAt > 30 * 60 * 1000) {
+          await updateMeetingProcess(meeting.id, {
+            status: 'failed',
+            errorMessage: "Job vượt quá thời gian chờ (30 phút).",
+            jobId: deleteField() as any
+          });
+          onUpdate();
+          continue;
+        }
+
         const jobData = await checkJobStatusOnce(meeting.jobId);
 
         // --- XỬ LÝ KHI THÀNH CÔNG ---
@@ -149,6 +161,9 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
             jobId: deleteField() as any
           });
           onUpdate();
+        }
+        } catch (err) {
+          console.error(`[Polling] Error processing meeting ${meeting.id}:`, err);
         }
       }
     };

@@ -27,6 +27,7 @@ export interface Meeting {
   id: string;
   userId: string;
   jobId?: string;       // ID Job RunPod
+  jobStartedAt?: number; // Thời điểm bắt đầu job (cho timeout)
   title: string;
   createdAt: number;
   duration: number;

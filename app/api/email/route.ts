@@ -1,6 +1,7 @@
-// app/api/email/route.ts
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import { getAdminAuth } from '@/app/lib/firebase-admin';
+import { checkRateLimit } from '@/app/lib/rate-limit';
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -10,12 +11,11 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// 🟢 Hàm Helper: Format ngày giờ cho đẹp (2025-12-26T17:00 -> 17:00 ngày 26/12/2025)
 const formatDeadline = (isoString: string) => {
     if (!isoString || isoString === 'TBD' || isoString === 'Chưa rõ') return isoString;
     try {
         const date = new Date(isoString);
-        if (isNaN(date.getTime())) return isoString; // Nếu không parse được thì trả về nguyên gốc
+        if (isNaN(date.getTime())) return isoString;
         return date.toLocaleString('vi-VN', {
             hour: '2-digit',
             minute: '2-digit',
@@ -23,14 +23,30 @@ const formatDeadline = (isoString: string) => {
             month: '2-digit',
             year: 'numeric'
         });
-    } catch (e) {
+    } catch {
         return isoString;
     }
 };
 
 export async function POST(req: Request) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const { allowed } = checkRateLimit(`email:${ip}`, 10, 60 * 1000);
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   try {
-    // 🟢 NHẬN THÊM meetingTitle TỪ FRONTEND
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const idToken = authHeader.slice(7);
+    try {
+      await getAdminAuth().verifyIdToken(idToken);
+    } catch {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
     const { tasks, meetingTitle } = await req.json();
 
     const tasksByEmail: Record<string, any[]> = {};
@@ -38,8 +54,7 @@ export async function POST(req: Request) {
       if (task.email && Array.isArray(task.email)) {
           task.email.forEach((email: string) => {
               if (!tasksByEmail[email]) tasksByEmail[email] = [];
-              // Push task vào danh sách của người này
-              tasksByEmail[email].push(task); 
+              tasksByEmail[email].push(task);
           });
       }
     });
@@ -58,6 +73,8 @@ export async function POST(req: Request) {
         </div>
       `).join('');
 
+      const unsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/unsubscribe?email=${encodeURIComponent(email)}`;
+
       const htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #4f46e5;">Phân công công việc mới</h2>
@@ -73,7 +90,8 @@ export async function POST(req: Request) {
             
             <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;"/>
             <p style="font-size: 12px; color: #666; text-align: center;">
-                Email tự động từ AI Task Manager. Vui lòng không trả lời email này.
+                Email tự động từ AI Task Manager.
+                <a href="${unsubscribeUrl}" style="color: #4f46e5;">Hủy đăng ký nhận email</a>
             </p>
         </div>
       `;
@@ -81,14 +99,26 @@ export async function POST(req: Request) {
       return transporter.sendMail({
         from: '"AI Task Manager" <no-reply@taskmanager.com>',
         to: email,
-        // 🟢 Tiêu đề mail cũng thêm tên cuộc họp cho dễ tìm
         subject: `[Task Mới] ${meetingTitle} - Bạn có ${userTasks.length} việc cần làm`,
         html: htmlContent,
       });
     });
 
-    await Promise.all(sendPromises);
-    return NextResponse.json({ success: true, count: Object.keys(tasksByEmail).length });
+    const results = await Promise.allSettled(sendPromises);
+    const failures = results.filter(r => r.status === 'rejected');
+    if (failures.length > 0) {
+      console.error(`Email failures: ${failures.length}/${results.length}`);
+      failures.forEach((f, i) => {
+        const reason = (f as PromiseRejectedResult).reason;
+        console.error(`  [${i + 1}] ${reason?.message || reason}`);
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      count: Object.keys(tasksByEmail).length,
+      failures: failures.length
+    });
 
   } catch (error) {
     console.error("Lỗi gửi mail:", error);

@@ -315,7 +315,11 @@ export default function TaskManagerPage() {
         };
       });
 
-      //   setExtractedTasks(mappedTasks);
+      const unmatchedTasks = mappedTasks.filter((t: { email: string[] }) => t.email.length === 0);
+      if (unmatchedTasks.length > 0) {
+        toast.warning(`Có ${unmatchedTasks.length} nhiệm vụ không tìm thấy người thực hiện trong danh sách. Vui lòng kiểm tra lại.`);
+      }
+
       await updateMeetingProcess(meeting.id, {
         actionItems: mappedTasks,
         actionStatus: "draft",

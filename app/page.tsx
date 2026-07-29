@@ -82,7 +82,7 @@ export default function Page() {
   const handleDirectEdit = async (meeting: Meeting) => {
     let url = meeting.audioUrl;
 
-    // [LOGIC MỚI] Nếu là draft -> Lấy Blob từ IndexedDB
+
     if (meeting.status === 'draft') {
       try {
         const { getDraftFull } = await import("./lib/indexedDB");
@@ -161,10 +161,11 @@ export default function Page() {
         id: tempId,
         userId: user.uid,
         jobId: jobId,
+        jobStartedAt: Date.now(),
         title: title?.trim() || file.name.replace(/\.[^/.]+$/, ""),
         createdAt: Date.now(),
         duration: 0,
-        audioUrl: url,    // URL string
+        audioUrl: url,
         segments: [],
         speakers: [],
         status: 'transcribing',
@@ -199,7 +200,7 @@ export default function Page() {
     setCurrentState("LIVE_RECORDING");
   };
 
-  // [CẬP NHẬT] Nhận thêm tham số dbSegments từ component con gửi lên
+
   const handleFinishLive = () => {
     toast.success("Đã lưu ghi âm!");
     setCurrentState('DASHBOARD');
@@ -214,11 +215,10 @@ export default function Page() {
     const isDraft = meeting.status === 'draft';
     const meetingId = meeting.id;
 
-    // 1. Nếu là bản nháp -> Upload lên Cloud trước
     if (isDraft) {
       toast.info("Đang đồng bộ bản nháp lên Cloud trước khi tóm tắt...");
       try {
-        const { getDraftFull, deleteDraft } = await import("./lib/indexedDB");
+        const { getDraftFull } = await import("./lib/indexedDB");
         const draftFull = await getDraftFull(meetingId);
         if (draftFull) {
           const file = new File([draftFull.audioBlob], `${draftFull.meta.title}.webm`, { type: 'audio/webm' });
@@ -232,46 +232,48 @@ export default function Page() {
           };
           
           await saveMeeting(finalMeeting);
-          await deleteDraft(meetingId);
         }
       } catch (err) {
         toast.error("Lỗi đồng bộ bản nháp: " + (err as Error).message);
-        return; // Dừng nếu upload lỗi
+        return;
       }
     } else {
-      // Cập nhật trạng thái "Đang tóm tắt" ngay lập tức để Dashboard hiện icon xoay
       await updateMeetingProcess(meetingId, { status: "summarizing" });
     }
     
     triggerRefresh();
 
-    // 2. Chạy bất đồng bộ (KHÔNG await ở đây để không chặn UI)
-    requestSummary(transcriptText, templateStructure, meeting.objectives)
-      .then(async (summary) => {
-        // Khi xong -> Lưu vào DB
-        await updateMeetingProcess(meetingId, {
-          status: "completed",
-          summary: summary,
-        });
-        toast.success(
-          `Đã tóm tắt xong cuộc họp: ${meetingId.split("-")[1] || "..."}`
-        );
-        triggerRefresh(); // Reload Dashboard
-      })
-      .catch(async (error) => {
-        // Nếu lỗi
-        console.error("Background Summary Error:", error);
-        await updateMeetingProcess(meetingId, {
-          status: "failed",
-          errorMessage: error.message,
-        });
-        toast.error("Lỗi tóm tắt ngầm: " + error.message);
-        triggerRefresh();
+    try {
+      const summary = await requestSummary(transcriptText, templateStructure, meeting.objectives);
+      
+      await updateMeetingProcess(meetingId, {
+        status: "completed",
+        summary: summary,
       });
+
+      if (isDraft) {
+        try {
+          const { deleteDraft } = await import("./lib/indexedDB");
+          await deleteDraft(meetingId);
+        } catch (cleanupErr) {
+          console.warn("Không thể xóa draft local:", cleanupErr);
+        }
+      }
+
+      toast.success(`Đã tóm tắt xong cuộc họp: ${meetingId.split("-")[1] || "..."}`);
+    } catch (error) {
+      console.error("Background Summary Error:", error);
+      await updateMeetingProcess(meetingId, {
+        status: "failed",
+        errorMessage: (error as Error).message,
+      });
+      toast.error("Lỗi tóm tắt ngầm: " + (error as Error).message);
+    } finally {
+      triggerRefresh();
+    }
   };
   // --- LOGIC 5: XỬ LÝ LẠI (REPROCESS) ---
   const handleReprocess = async (meeting: Meeting) => {
-    // 1. Check quyền
     if (!user) return toast.error("Vui lòng đăng nhập!");
 
     if (!meeting.audioUrl) {
@@ -279,7 +281,11 @@ export default function Page() {
       return;
     }
 
-    // 2. Hỏi xác nhận
+    if (meeting.status === 'transcribing') {
+      toast.warning("Cuộc họp này đang được xử lý, vui lòng đợi...");
+      return;
+    }
+
     const lang = meeting.language || "vi";
     const langLabel = lang === "en" ? "Tiếng Anh (English)" : "Tiếng Việt";
     const isConfirmed = await confirm({
@@ -294,16 +300,13 @@ export default function Page() {
     try {
       toast.info("Đang gửi lệnh xử lý lại...");
 
-      // 3. [TỐI ƯU] Tái sử dụng URL cũ, KHÔNG CẦN UPLOAD LẠI
-      // Chỉ việc gọi RunPod với url đang có sẵn trên Firebase
-      const newJobId = await startTranscriptionJob(meeting.audioUrl, (meeting as any).language ?? "vi");
+      const newJobId = await startTranscriptionJob(meeting.audioUrl, meeting.language ?? "vi");
 
-      // 4. Cập nhật lại bản ghi cũ trong Firestore
-      // Đưa về trạng thái 'transcribing' để PollingManager bắt đầu làm việc
       await updateMeetingProcess(meeting.id, {
         status: 'transcribing',
-        jobId: newJobId,      // Gắn Job ID mới
-        segments: [],         // Xóa dữ liệu cũ đi cho sạch
+        jobId: newJobId,
+        jobStartedAt: Date.now(),
+        segments: [],
         summary: deleteField() as any,
         errorMessage: deleteField() as any
       });
@@ -344,6 +347,7 @@ export default function Page() {
       <BotJoinModal
         isOpen={isBotModalOpen}
         onClose={() => setIsBotModalOpen(false)}
+        onUpdate={triggerRefresh}
       />
 
       {/* --- UPLOAD PROGRESS WIDGET (NON-BLOCKING) --- */}

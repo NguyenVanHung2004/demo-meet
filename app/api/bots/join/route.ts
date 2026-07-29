@@ -1,7 +1,14 @@
 
 import { NextResponse } from 'next/server';
+import { checkRateLimit } from '@/app/lib/rate-limit';
 
 export async function POST(req: Request) {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const { allowed } = checkRateLimit(`bots:join:${ip}`, 10, 5 * 60 * 1000);
+    if (!allowed) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
     try {
         const { meetingUrl, botName, botImage, userId } = await req.json();
 

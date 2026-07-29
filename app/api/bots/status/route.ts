@@ -1,5 +1,6 @@
 
 import { NextResponse } from 'next/server';
+import { checkRateLimit } from '@/app/lib/rate-limit';
 import fs from 'fs';
 import path from 'path';
 import { getMeetingById, Meeting, Speaker, Segment } from '@/app/lib/db';
@@ -8,6 +9,12 @@ import { getMeetingById, Meeting, Speaker, Segment } from '@/app/lib/db';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const { allowed } = checkRateLimit(`bots:status:${ip}`, 60, 60 * 1000);
+    if (!allowed) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
     try {
         const { searchParams } = new URL(req.url);
         const botId = searchParams.get('botId');

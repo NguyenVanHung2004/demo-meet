@@ -20,6 +20,20 @@ import { useAuth } from "@/app/context/AuthContext";
 import { useGlobalUI } from "@/app/context/GlobalUIProvider";
 import Link from "next/link";
 import RichTextEditor from "@/app/components/RichTextEditor";
+import ErrorBoundary from "@/app/components/ErrorBoundary";
+
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object[\s\S]*?<\/object>/gi, '')
+    .replace(/<embed[\s\S]*?<\/embed>/gi, '')
+    .replace(/<link[\s\S]*?>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]*\s+on\w+\s*=\s*["'][^"']*["'][^>]*>/gi, (match) => match.replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, ''))
+    .replace(/<[^>]*\s+on\w+\s*=\s*[^\s>]+/gi, (match) => match.replace(/\s+on\w+\s*=\s*[^\s>]+/gi, ''))
+    .replace(/javascript\s*:/gi, '');
+}
 
 // Simple Markdown parser for common patterns
 function parseMarkdown(text: string): string {
@@ -56,7 +70,7 @@ function parseMarkdown(text: string): string {
 }
 
 
-export default function MinuteDetailPage() {
+function MinuteDetailPage() {
     const params = useParams();
     const router = useRouter();
     // 🟢 LẤY SEARCH PARAMS ĐỂ HIGHLIGHT
@@ -500,12 +514,12 @@ export default function MinuteDetailPage() {
                                 <div
                                     className="summary-text"
                                     dangerouslySetInnerHTML={{
-                                        __html: getHighlightedContent(
+                                        __html: sanitizeHtml(getHighlightedContent(
                                             meeting.summary && meeting.summary.trim().startsWith("<")
                                                 ? meeting.summary
                                                 : parseMarkdown(meeting.summary || ""),
                                             highlightQuery
-                                        )
+                                        ))
                                     }}
                                 />
                             </div>
@@ -583,5 +597,13 @@ export default function MinuteDetailPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function WrappedMinuteDetailPage() {
+    return (
+        <ErrorBoundary>
+            <MinuteDetailPage />
+        </ErrorBoundary>
     );
 }

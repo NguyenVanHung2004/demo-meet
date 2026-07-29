@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
@@ -10,6 +9,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
     const error = searchParams.get('error');
+    const state = searchParams.get('state');
+    const cookieStore = await cookies();
+    const savedState = cookieStore.get('drive_oauth_state')?.value;
+
+    if (!state || state !== savedState) {
+        return NextResponse.json({ error: 'Invalid state parameter. Possible CSRF attack.' }, { status: 403 });
+    }
+    cookieStore.delete('drive_oauth_state');
 
     if (error) {
         return NextResponse.json({ error }, { status: 400 });
@@ -41,9 +48,6 @@ export async function GET(request: Request) {
             throw new Error(tokens.error_description || 'Failed to get tokens');
         }
 
-        // Store tokens in cookies
-        // Note: In production you might want to encrypt this or store in DB
-        const cookieStore = await cookies();
         cookieStore.set('google_access_token', tokens.access_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
@@ -55,12 +59,11 @@ export async function GET(request: Request) {
             cookieStore.set('google_refresh_token', tokens.refresh_token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                maxAge: 30 * 24 * 60 * 60, // 30 days
+                maxAge: 30 * 24 * 60 * 60,
                 path: '/',
             });
         }
 
-        // Redirect back to main page with success flag
         return NextResponse.redirect(new URL('/?drive_connected=true', request.url));
     } catch (error: any) {
         console.error('Drive Auth Error:', error);

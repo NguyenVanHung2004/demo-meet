@@ -1,6 +1,7 @@
 // app/api/gemini/route.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { checkRateLimit } from "@/app/lib/rate-limit";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 // --- BẮT ĐẦU ĐOẠN CODE MỚI ---
@@ -36,6 +37,12 @@ async function generateContentSafe(prompt: string) {
 }
 
 export async function POST(req: Request) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const { allowed } = checkRateLimit(`gemini:${ip}`, 20, 60 * 1000);
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   try {
     const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives } = await req.json();
 

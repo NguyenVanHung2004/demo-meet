@@ -38,6 +38,11 @@ export default function MinutesState() {
     const router = useRouter();
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
+    const [debouncedQuery, setDebouncedQuery] = useState("");
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
     const [loading, setLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -226,7 +231,7 @@ export default function MinutesState() {
     };
 
     const filteredMeetings = meetings.filter((m) => {
-        const query = searchQuery.trim().toLowerCase().normalize('NFC');
+        const query = debouncedQuery.trim().toLowerCase().normalize('NFC');
         const titleMatch = m.title.toLowerCase().normalize('NFC').includes(query);
         const summaryMatch = cleanText(m.summary || "").toLowerCase().normalize('NFC').includes(query);
         const matchesSearch = titleMatch || summaryMatch;
@@ -486,11 +491,11 @@ export default function MinutesState() {
                         <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
                             <FileText className="w-8 h-8" />
                         </div>
-                        <p className="text-slate-500 font-medium">
-                            {searchQuery
-                                ? "Không tìm thấy biên bản phù hợp"
-                                : "Chưa có biên bản nào. Hãy import hoặc tạo cuộc họp mới!"}
-                        </p>
+                    <p className="text-slate-500 font-medium">
+                        {debouncedQuery
+                            ? "Không tìm thấy biên bản phù hợp"
+                            : "Chưa có biên bản nào. Hãy import hoặc tạo cuộc họp mới!"}
+                    </p>
                     </div>
                 ) : (
                     <div className="space-y-4">
@@ -548,8 +553,8 @@ export default function MinutesState() {
                                             <td className="px-6 py-4 text-slate-500 text-sm max-w-md">
                                                 <div className="text-slate-600 line-clamp-2"
                                                     dangerouslySetInnerHTML={{
-                                                        __html: searchQuery
-                                                            ? getHighlightedSnippet(meeting.summary || "", searchQuery)
+                                                        __html: debouncedQuery
+                                                            ? getHighlightedSnippet(meeting.summary || "", debouncedQuery)
                                                             : getSummaryPreview(meeting.summary || "")
                                                     }}
                                                 />
@@ -604,8 +609,8 @@ export default function MinutesState() {
                                             </div>
                                             <div className="text-sm text-slate-600 line-clamp-2"
                                                 dangerouslySetInnerHTML={{
-                                                    __html: searchQuery
-                                                        ? getHighlightedSnippet(meeting.summary || "", searchQuery)
+                                                    __html: debouncedQuery
+                                                        ? getHighlightedSnippet(meeting.summary || "", debouncedQuery)
                                                         : getSummaryPreview(meeting.summary || "")
                                                 }}
                                             />

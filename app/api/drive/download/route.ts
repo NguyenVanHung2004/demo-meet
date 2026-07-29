@@ -1,8 +1,15 @@
 
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { checkRateLimit } from '@/app/lib/rate-limit';
 
 export async function GET(request: Request) {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const { allowed } = checkRateLimit(`drive:download:${ip}`, 30, 60 * 1000);
+    if (!allowed) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
     const { searchParams } = new URL(request.url);
     const fileId = searchParams.get('fileId');
 

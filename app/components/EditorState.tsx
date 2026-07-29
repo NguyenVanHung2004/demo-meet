@@ -321,7 +321,7 @@ export default function EditorState({
         title: title
       };
 
-      // [LOGIC MỚI] Nếu là Draft -> Cần finalize (Upload Audio + Xóa Local)
+
       if (initialData.status === 'draft') {
         toast.info("Đang đồng bộ bản nháp lên cloud...");
 

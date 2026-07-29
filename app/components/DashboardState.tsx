@@ -127,7 +127,7 @@ export default function DashboardState({
     });
 
     if (isConfirmed) {
-      // [LOGIC MỚI] Check nếu là draft thì xóa vĩnh viễn khỏi Local DB
+
       const meetingToDelete = meetings.find(m => m.id === id);
       if (meetingToDelete?.status === 'draft') {
         const { deleteDraft } = await import("../lib/indexedDB");

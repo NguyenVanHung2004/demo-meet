@@ -69,10 +69,10 @@ export default function LiveRecordingState({
     }
   };
 
-  const { toast } = useGlobalUI();
+  const { toast, confirm } = useGlobalUI();
   const isSizeWarningShownRef = useRef(false);
 
-  // [FEATURE] Capture System Audio (Persisted)
+
   const [captureSystemAudio, setCaptureSystemAudio] = useState(false);
 
   useEffect(() => {
@@ -179,7 +179,7 @@ export default function LiveRecordingState({
 
   const { segments, interimContent, isListening, startListening, stopListening, resetTranscript } = useLocalTranscription(handleDeepgramFinal);
 
-  // [LOGIC MỚI] Cập nhật cờ hiệu Interim
+
   useEffect(() => {
     const hasInterim = interimContent && interimContent.trim().length > 0;
     isInterimActiveRef.current = !!hasInterim;
@@ -288,6 +288,11 @@ export default function LiveRecordingState({
         if (newChunks.length > 0) {
           await appendAudioChunks(draftIdRef.current, newChunks);
           lastSavedChunkIndexRef.current = currentChunks.length;
+        }
+
+        if (currentChunks.length > 100) {
+          audioChunksRef.current = [];
+          lastSavedChunkIndexRef.current = 0;
         }
 
       } catch (e) {
@@ -556,21 +561,26 @@ export default function LiveRecordingState({
     }
   };
 
-  const handleClearTranscript = () => {
-    if (confirm("Xóa toàn bộ?")) {
-      resetTranscript();
-      setSummaries([]);
-      bufferTextRef.current = "";
-      wordCountRef.current = 0;
-    }
+  const handleClearTranscript = async () => {
+    const isConfirmed = await confirm({
+      title: "Xóa toàn bộ?",
+      message: "Xóa toàn bộ nội dung ghi âm và tóm tắt hiện tại?",
+      confirmText: "Xóa",
+      type: "danger"
+    });
+    if (!isConfirmed) return;
+    resetTranscript();
+    setSummaries([]);
+    bufferTextRef.current = "";
+    wordCountRef.current = 0;
   };
 
   const handleSaveAndProcess = async () => {
-    if (!user) return alert("Vui lòng đăng nhập!");
+    if (!user) return toast.error("Vui lòng đăng nhập!");
 
     // 1. Dừng ghi âm
     stopRecordingSession();
-    handeFullStop(); // [MOD] Make sure everything stops
+    handeFullStop();
 
     setIsUploading(true);
 

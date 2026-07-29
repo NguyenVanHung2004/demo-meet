@@ -8,7 +8,7 @@ import { db, auth, storage } from "@/app/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { saveMeeting, Meeting } from "@/app/lib/db";
 
-export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export default function BotJoinModal({ isOpen, onClose, onUpdate }: { isOpen: boolean; onClose: () => void; onUpdate?: () => void }) {
     const { user } = useAuth();
     const { toast } = useGlobalUI();
     const [meetingUrl, setMeetingUrl] = useState("");
@@ -19,9 +19,16 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
     const [language, setLanguage] = useState<"vi" | "en">("vi");
     const [objectives, setObjectives] = useState("");
 
+    const validateMeetingUrl = (url: string): boolean => {
+        const googleMeetRegex = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/;
+        const zoomRegex = /^https:\/\/(?:[\w-]+\.)?zoom\.(?:us|com|gov)\/j\/\d+/;
+        return googleMeetRegex.test(url) || zoomRegex.test(url);
+    };
+
     const handleJoin = async () => {
         if (!meetingUrl) return toast.error("Vui lòng nhập link cuộc họp!");
         if (!user) return toast.error("Vui lòng đăng nhập!");
+        if (!validateMeetingUrl(meetingUrl)) return toast.error("Link không hợp lệ. Chỉ hỗ trợ Google Meet hoặc Zoom.");
 
         setLoading(true);
         setStatus("joining");
@@ -172,9 +179,9 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
 
                                     } catch (pyErr) {
                                         console.error("Hybrid Job Failed:", pyErr);
-                                        toast.warning("Server Local lỗi/tắt. Đã lưu audio gốc.");
-                                        // Fallback: Vẫn lưu meeting nhưng ko có job ID -> Trạng thái sẽ là 'uploaded' hoặc giữ nguyên 'completed' nhưng ko có text
-                                        finalMeetingData.status = 'completed';
+                                        toast.warning("Server Local lỗi/tắt. Không thể xử lý transcript.");
+                                        finalMeetingData.status = 'failed';
+                                        finalMeetingData.errorMessage = "Server Local (transcribe+diarize) không khả dụng.";
                                     }
                                 }
 
@@ -183,18 +190,17 @@ export default function BotJoinModal({ isOpen, onClose }: { isOpen: boolean; onC
                                 toast.success("Đã kết xuất biên bản thành công!");
                                 setTimeout(() => {
                                     onClose();
-                                    window.location.reload();
+                                    if (onUpdate) onUpdate();
                                 }, 1500);
                             } catch (error) {
                                 console.error("Save Error:", error);
                                 toast.error("Lỗi khi lưu dữ liệu!");
                             }
                         } else if (data.saved) {
-                            // Backup case: maybe server saved it (old logic)
                             toast.success("Đã xong!");
                             setTimeout(() => {
                                 onClose();
-                                window.location.reload();
+                                if (onUpdate) onUpdate();
                             }, 1500);
                         }
                     } else if (data.status === 'in_call_recording') {
