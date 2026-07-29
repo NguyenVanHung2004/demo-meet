@@ -2,6 +2,7 @@
 import type { Meeting } from "@/app/lib/db";
 import { MEETING_STATUS, MeetingStatus } from "@/app/lib/constants";
 import Badge from "../ui/Badge";
+import Button from "../ui/Button";
 import {
   Calendar, Trash2, RotateCcw,
   Wand2, FolderOpen, Edit3, Eye, Loader2, Clock
@@ -15,6 +16,8 @@ interface MeetingListViewProps {
   selectedIds: string[];
   loading: boolean;
   isFinalizing: string | null;
+  hasMore: boolean;
+  onLoadMore: () => void;
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
   onOpenMeeting: (m: Meeting) => void;
@@ -26,14 +29,17 @@ interface MeetingListViewProps {
   onMoveSelectedToTrash: () => void;
   onDeleteSelected: () => void;
   onEmptyTrash: () => void;
+  onNavigateToUpload?: () => void;
+  onNavigateToLive?: () => void;
 }
 
 export default function MeetingListView({
-  meetings, currentTab, selectedIds, loading, isFinalizing,
+  meetings, currentTab, selectedIds, loading, isFinalizing, hasMore, onLoadMore,
   onToggleSelect, onToggleSelectAll,
   onOpenMeeting, onReprocess, onFinalizeDraft,
   onMoveToTrash, onRestore, onDeleteForever,
-  onMoveSelectedToTrash, onDeleteSelected, onEmptyTrash
+  onMoveSelectedToTrash, onDeleteSelected, onEmptyTrash,
+  onNavigateToUpload, onNavigateToLive
 }: MeetingListViewProps) {
   const formatDuration = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -59,16 +65,42 @@ export default function MeetingListView({
   }
 
   if (meetings.length === 0) {
+    if (currentTab === "trash") {
+      return (
+        <div className="text-center py-12 md:py-20 bg-white rounded-2xl border border-dashed border-slate-200">
+          <div className="w-12 h-12 md:w-16 md:h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-300">
+            <Trash2 className="w-6 h-6 md:w-8 md:h-8" />
+          </div>
+          <p className="text-slate-500 font-medium text-sm">Thùng rác trống.</p>
+        </div>
+      );
+    }
+
     return (
       <div className="text-center py-12 md:py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-        <div className="w-12 h-12 md:w-16 md:h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-300">
-          {currentTab === "all" ? (
-            <Calendar className="w-6 h-6 md:w-8 md:h-8" />
-          ) : (
-            <Trash2 className="w-6 h-6 md:w-8 md:h-8" />
+        <div className="w-12 h-12 md:w-16 md:h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-300">
+          <Calendar className="w-6 h-6 md:w-8 md:h-8" />
+        </div>
+        <h3 className="text-slate-700 font-bold text-base mb-1">Chưa có cuộc họp nào</h3>
+        <p className="text-slate-400 text-sm mb-5">Tải lên file audio hoặc ghi âm trực tiếp để bắt đầu.</p>
+        <div className="flex items-center justify-center gap-3">
+          {onNavigateToUpload && (
+            <button
+              onClick={onNavigateToUpload}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all"
+            >
+              Tải file lên
+            </button>
+          )}
+          {onNavigateToLive && (
+            <button
+              onClick={onNavigateToLive}
+              className="px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl border border-slate-200 transition-all"
+            >
+              Ghi âm trực tiếp
+            </button>
           )}
         </div>
-        <p className="text-slate-500 font-medium text-sm">Danh sách trống.</p>
       </div>
     );
   }
@@ -178,14 +210,16 @@ export default function MeetingListView({
                       )}
                       {m.status === MEETING_STATUS.DRAFT && (
                         <>
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            loading={isFinalizing === m.id}
                             onClick={(e) => { e.stopPropagation(); onFinalizeDraft(e, m); }}
-                            disabled={isFinalizing === m.id}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors font-bold text-xs disabled:opacity-50"
+                            className="text-indigo-600"
                             title="Đồng bộ lên cloud"
                           >
-                            {isFinalizing === m.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                          </button>
+                            <Wand2 className="w-4 h-4" />
+                          </Button>
                         </>
                       )}
                       {([MEETING_STATUS.COMPLETED, MEETING_STATUS.TRANSCRIBED] as MeetingStatus[]).includes(m.status) && (
@@ -286,6 +320,16 @@ export default function MeetingListView({
           );
         })}
       </div>
+      {hasMore && currentTab === "all" && (
+        <div className="text-center py-4">
+          <button
+            onClick={onLoadMore}
+            className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+          >
+            Tải thêm
+          </button>
+        </div>
+      )}
     </div>
   );
 }

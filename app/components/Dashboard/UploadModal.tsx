@@ -1,10 +1,13 @@
 "use client";
+import { AlertTriangle } from "lucide-react";
+import Button from "../ui/Button";
 
 interface UploadModalProps {
   selectedFile: File;
   uploadTitle: string;
   uploadObjectives: string;
   uploadLanguage: "vi" | "en";
+  loading?: boolean;
   onTitleChange: (v: string) => void;
   onObjectivesChange: (v: string) => void;
   onLanguageChange: (v: "vi" | "en") => void;
@@ -13,7 +16,7 @@ interface UploadModalProps {
 }
 
 export default function UploadModal({
-  selectedFile, uploadTitle, uploadObjectives, uploadLanguage,
+  selectedFile, uploadTitle, uploadObjectives, uploadLanguage, loading = false,
   onTitleChange, onObjectivesChange, onLanguageChange,
   onConfirm, onCancel
 }: UploadModalProps) {
@@ -26,6 +29,13 @@ export default function UploadModal({
             Tệp: <span className="font-semibold text-slate-700">{selectedFile.name}</span> ({(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)
           </p>
         </div>
+
+        {selectedFile.size > 100 * 1024 * 1024 && (
+          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs font-medium">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            File lớn (&gt;100MB) có thể mất nhiều thời gian để xử lý.
+          </div>
+        )}
 
         <div className="space-y-4">
           <div>
@@ -64,18 +74,12 @@ export default function UploadModal({
         </div>
 
         <div className="flex gap-3 pt-2">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold transition-all text-sm"
-          >
+          <Button variant="secondary" onClick={onCancel} className="flex-1">
             Hủy bỏ
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all text-sm shadow-lg shadow-indigo-100"
-          >
+          </Button>
+          <Button variant="primary" loading={loading} disabled={!uploadTitle.trim()} onClick={onConfirm} className="flex-1">
             Bắt đầu tải lên
-          </button>
+          </Button>
         </div>
       </div>
     </div>

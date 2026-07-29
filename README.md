@@ -76,6 +76,14 @@ A smart, modern web application built with **Next.js** to record, transcribe, ed
 
 Contributions, issues, and feature requests are welcome!
 
+## 📚 Documentation
+
+Tài liệu kỹ thuật nằm trong folder [`docs/`](./docs/):
+
+- [`docs/REFACTOR_PLAN.md`](./docs/REFACTOR_PLAN.md) — Kế hoạch refactor tổng thể & phân tích business issues
+- [`docs/PHASE_3.md`](./docs/PHASE_3.md) — Phase 3: Structure + Type Safety + Migration (đã hoàn thành)
+- [`docs/PHASE_4.md`](./docs/PHASE_4.md) — Phase 4: Performance (đã hoàn thành)
+
 ## 📄 License
 
 This project is created as part of a thesis/graduation project (Khoa luận). 

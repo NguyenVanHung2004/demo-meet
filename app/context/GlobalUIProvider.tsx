@@ -3,6 +3,7 @@
 
 import React, { createContext, useContext, useState, useRef, ReactNode } from "react";
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from "lucide-react";
+import Button from "../components/ui/Button";
 
 // --- 1. TOAST TYPES ---
 type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -39,9 +40,13 @@ export const useGlobalUI = () => {
   return context;
 };
 
+const MAX_TOASTS = 3;
+const TOAST_DURATION_MS = 3000;
+
 export default function GlobalUIProvider({ children }: { children: ReactNode }) {
   // --- STATE TOAST ---
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   
   // --- STATE CONFIRM ---
   const [confirmState, setConfirmState] = useState<{
@@ -51,13 +56,33 @@ export default function GlobalUIProvider({ children }: { children: ReactNode }) 
   } | null>(null);
 
   // --- LOGIC TOAST ---
+  const startTimer = (id: string) => {
+    const existing = timersRef.current.get(id);
+    if (existing) clearTimeout(existing);
+    timersRef.current.set(id, setTimeout(() => {
+      timersRef.current.delete(id);
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, TOAST_DURATION_MS));
+  };
+
   const addToast = (message: string, type: ToastType) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => removeToast(id), 3000); // Tự tắt sau 3s
+    setToasts((prev) => {
+      const existing = prev.find((t) => t.message === message && t.type === type);
+      if (existing) {
+        startTimer(existing.id);
+        return prev;
+      }
+      const id = Math.random().toString(36).substr(2, 9);
+      const next = [...prev, { id, message, type }];
+      startTimer(id);
+      return next.length > MAX_TOASTS ? next.slice(-MAX_TOASTS) : next;
+    });
   };
 
   const removeToast = (id: string) => {
+    const timer = timersRef.current.get(id);
+    if (timer) clearTimeout(timer);
+    timersRef.current.delete(id);
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
@@ -125,21 +150,20 @@ export default function GlobalUIProvider({ children }: { children: ReactNode }) 
                 <p className="text-slate-500 text-sm mt-1">{confirmState.options.message}</p>
               </div>
               <div className="flex gap-3 w-full mt-2">
-                <button 
+                <Button 
+                  variant="secondary" 
                   onClick={() => handleConfirm(false)}
-                  className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition"
+                  className="flex-1"
                 >
                   {confirmState.options.cancelText}
-                </button>
-                <button 
+                </Button>
+                <Button 
+                  variant={confirmState.options.type === 'danger' ? 'danger' : 'primary'}
                   onClick={() => handleConfirm(true)}
-                  className={`flex-1 px-4 py-2.5 text-white font-medium rounded-xl shadow-lg transition 
-                    ${confirmState.options.type === 'danger' 
-                      ? 'bg-red-600 hover:bg-red-700 shadow-red-200' 
-                      : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'}`}
+                  className="flex-1"
                 >
                   {confirmState.options.confirmText}
-                </button>
+                </Button>
               </div>
             </div>
           </div>

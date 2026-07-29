@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { subscribeToActiveMeetings, updateMeetingProcess } from "../lib/db";
 import type { Meeting, Segment, Speaker } from "../lib/db";
@@ -13,29 +13,24 @@ import { MEETING_STATUS } from "../lib/constants";
 
 export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
   const { user } = useAuth();
-  // Ref để lưu danh sách các job đang active (từ Firestore)
   const activeJobsRef = useRef<Meeting[]>([]);
+  const [activeJobsCount, setActiveJobsCount] = useState(0);
 
-  // 1. LISTEN: Lắng nghe danh sách job 'transcribing' từ Firestore (Real-time)
   useEffect(() => {
     if (!user) return;
-
-    // Hàm subscribe trả về unsubscribe funtion
     const unsubscribe = subscribeToActiveMeetings(user.uid, (meetings) => {
       activeJobsRef.current = meetings;
+      setActiveJobsCount(meetings.length);
     });
-
     return () => unsubscribe();
   }, [user]);
 
-  // 2. POLLING: Định kỳ hỏi RunPod trạng thái của các job đang active
   useEffect(() => {
-    if (!user) return;
+    if (!user || activeJobsCount === 0) return;
 
     const checkRunPodStatus = async () => {
       const currentActiveJobs = activeJobsRef.current;
       if (currentActiveJobs.length === 0) return;
-
 
       const now = Date.now();
       for (const meeting of currentActiveJobs) {
@@ -175,11 +170,9 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
       }
     };
 
-    // Chạy mỗi 5s
     const intervalId = setInterval(checkRunPodStatus, 5000);
-
     return () => clearInterval(intervalId);
-  }, [user, onUpdate]);
+  }, [user, activeJobsCount, onUpdate]);
 
   return null;
 }

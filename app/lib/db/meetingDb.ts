@@ -1,7 +1,8 @@
 import { db } from "../firebase";
 import {
   collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot
+  query, where, orderBy, limit, startAfter, onSnapshot,
+  type QueryConstraint, type QueryDocumentSnapshot
 } from "firebase/firestore";
 import { Segment, Speaker, RAW_TRANSCRIPT_FILE, RAW_SUMMARY_FILE } from "../mockData";
 export type { Segment, Speaker };
@@ -48,7 +49,7 @@ const COLLECTION_NAME = "meetings";
 export const saveMeeting = async (meeting: Meeting) => {
   try {
     const docRef = doc(db, COLLECTION_NAME, meeting.id);
-    const cleanData = JSON.parse(JSON.stringify(meeting));
+    const cleanData = structuredClone(meeting);
     await setDoc(docRef, cleanData);
   } catch (error) {
     console.warn("⚠️ Lỗi lưu meeting (có thể do limit 1MB). Đang thử giảm dung lượng...", error);
@@ -59,13 +60,43 @@ export const saveMeeting = async (meeting: Meeting) => {
         return rest;
       });
       const lightMeeting = { ...meeting, segments: lightSegments };
-      const cleanData = JSON.parse(JSON.stringify(lightMeeting));
+      const cleanData = structuredClone(lightMeeting);
       await setDoc(docRef, cleanData);
     } catch (fallbackError) {
       console.error("Vẫn lỗi sau khi giảm dung lượng:", fallbackError);
       throw fallbackError;
     }
   }
+};
+
+export const PAGE_SIZE = 20;
+
+export const getMeetingsPaginated = async (
+  userId: string,
+  cursor?: QueryDocumentSnapshot,
+  deleted?: boolean
+): Promise<{ meetings: Meeting[]; lastDoc: QueryDocumentSnapshot | null; hasMore: boolean }> => {
+  const constraints: QueryConstraint[] = [
+    where("userId", "==", userId),
+  ];
+  if (deleted !== undefined) {
+    constraints.push(where("isDeleted", "==", deleted));
+  }
+  constraints.push(orderBy("createdAt", "desc"));
+  constraints.push(limit(PAGE_SIZE + 1));
+  if (cursor) constraints.push(startAfter(cursor));
+
+  const q = query(collection(db, COLLECTION_NAME), ...constraints);
+  const snap = await getDocs(q);
+  const docs = snap.docs;
+  const hasMore = docs.length > PAGE_SIZE;
+  const visible = hasMore ? docs.slice(0, PAGE_SIZE) : docs;
+
+  return {
+    meetings: visible.map(d => d.data() as Meeting),
+    lastDoc: visible[visible.length - 1] ?? null,
+    hasMore
+  };
 };
 
 export const getAllMeetings = async (userId: string): Promise<Meeting[]> => {

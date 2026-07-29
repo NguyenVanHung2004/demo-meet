@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef, useEffect, useState } from "react";
+import React, { memo, useRef, useEffect, useState } from "react";
 import { ChevronDown, Play, Pause, ArrowUpToLine, Plus, Edit2 } from "lucide-react";
 
 import type { Segment, Speaker } from "../lib/db";
@@ -11,7 +11,7 @@ interface TranscriptRowProps {
   allSpeakers: Speaker[];
   isActive: boolean;
   isAudioPlaying: boolean;
-  currentTime: number;
+  activeWordIndex: number;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
   onTextChange: (id: string, text: string) => void;
@@ -22,9 +22,9 @@ interface TranscriptRowProps {
   onTimeChange: (id: string, newTime: number) => void;
 }
 
-export default function TranscriptRow({
+function TranscriptRow({
   segment, speaker, allSpeakers, isActive,
-  isAudioPlaying, currentTime, onTogglePlay,
+  isAudioPlaying, activeWordIndex, onTogglePlay,
   onSeek, onTextChange, onSpeakerChange, onSplit, onMerge,
   onAddRow, onTimeChange
 }: TranscriptRowProps) {
@@ -71,9 +71,7 @@ export default function TranscriptRow({
         data-timestamp={formatTime(segment.start)}
       >
         {segment.words.map((w: Word, idx: number) => {
-          // Logic highlight: Thời gian hiện tại nằm trong khoảng bắt đầu và kết thúc của từ
-          // Thêm sai số 0.2s để highlight mượt hơn (giữ màu lâu hơn một chút)
-          const isHighlight = currentTime >= w.start && currentTime <= (w.end + 0.15);
+          const isHighlight = activeWordIndex >= 0 && idx === activeWordIndex;
 
           return (
             <React.Fragment key={idx}>
@@ -300,3 +298,5 @@ export default function TranscriptRow({
     </div>
   );
 }
+
+export default memo(TranscriptRow);

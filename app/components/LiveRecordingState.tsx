@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import { Sparkles, AlignLeft } from "lucide-react";
 import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api";
 import { saveMeeting, createLiveSession, updateLiveSession, endLiveSession } from "../lib/db";
@@ -64,7 +64,7 @@ export default function LiveRecordingState({
 
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
-  const requestWakeLock = async () => {
+  const requestWakeLock = useCallback(async () => {
     try {
       if ('wakeLock' in navigator) {
         wakeLockRef.current = await navigator.wakeLock.request('screen');
@@ -72,15 +72,15 @@ export default function LiveRecordingState({
     } catch (err) {
       console.warn(`Wake Lock error: ${err}`);
     }
-  };
+  }, []);
 
-  const releaseWakeLock = () => {
+  const releaseWakeLock = useCallback(() => {
     if (wakeLockRef.current) {
       wakeLockRef.current.release().then(() => {
         wakeLockRef.current = null;
       });
     }
-  };
+  }, []);
 
   const { toast, confirm } = useGlobalUI();
   const isSizeWarningShownRef = useRef(false);
@@ -93,11 +93,11 @@ export default function LiveRecordingState({
     if (saved === "true") setCaptureSystemAudio(true);
   }, []);
 
-  const toggleCaptureSystemAudio = () => {
+  const toggleCaptureSystemAudio = useCallback(() => {
     const newValue = !captureSystemAudio;
     setCaptureSystemAudio(newValue);
     localStorage.setItem("captureSystemAudio", String(newValue));
-  };
+  }, []);
 
   const summariesEndRef = useRef<HTMLDivElement>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -119,7 +119,7 @@ export default function LiveRecordingState({
   const isInterimActiveRef = useRef(false);
 
   // 1. Hàm gọi API tóm tắt
-  const flushBuffer = async (force: boolean = false) => {
+  const flushBuffer = useCallback(async (force: boolean = false) => {
     const content = bufferTextRef.current.trim();
     const minWords = force ? 2 : 10; // Giảm ngưỡng tối thiểu xuống 10 từ cho nhạy
 
@@ -159,9 +159,9 @@ export default function LiveRecordingState({
     } catch (e) {
       setSummaries(prev => prev.filter(item => item.id !== currentId));
     }
-  };
+  }, []);
 
-  const handleDeepgramFinal = ({ speaker, content }: { speaker: number; content: string }) => {
+  const handleDeepgramFinal = useCallback(({ speaker, content }: { speaker: number; content: string }) => {
     const formattedLine = `Speaker ${speaker}: ${content}`;
     bufferTextRef.current += (bufferTextRef.current ? "\n" : "") + formattedLine;
 
@@ -188,7 +188,7 @@ export default function LiveRecordingState({
       // Lưu ý: Trong flushBuffer đã có logic check isInterimActiveRef để hoãn nếu cần
       flushBuffer();
     }, timeoutMs);
-  };
+  }, [flushBuffer]);
 
   const { segments, interimContent, isListening, startListening, stopListening, resetTranscript } = useLocalTranscription(handleDeepgramFinal);
 
@@ -346,7 +346,7 @@ export default function LiveRecordingState({
     if (isListening) interval = setInterval(() => setTimer(t => t + 1), 1000);
     return () => { if (interval !== null) clearInterval(interval); };
   }, [isListening]);
-  const setupVisualizer = (stream: MediaStream) => {
+  const setupVisualizer = useCallback((stream: MediaStream) => {
     let audioCtx = audioContextRef.current;
     if (!audioCtx || audioCtx.state === 'closed') {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -373,9 +373,36 @@ export default function LiveRecordingState({
       animationRef.current = requestAnimationFrame(updateVolume);
     };
     updateVolume();
-  };
+  }, []);
 
-  const startRecordingSession = async () => {
+  const handeFullStop = useCallback(() => {
+    releaseWakeLock();
+
+    if (liveSessionIdRef.current) {
+      endLiveSession(liveSessionIdRef.current).catch(e => console.error(e));
+    }
+
+    if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(e => console.error(e));
+      audioContextRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(track => track.stop());
+      micStreamRef.current = null;
+    }
+    if (sysStreamRef.current) {
+      sysStreamRef.current.getTracks().forEach(track => track.stop());
+      sysStreamRef.current = null;
+    }
+  }, [releaseWakeLock]);
+
+  const startRecordingSession = useCallback(async () => {
     try {
       // [CASE 1] NẾU ĐANG PAUSE -> RESUME LẠI
       // Check if recorder exists and is paused
@@ -487,56 +514,22 @@ export default function LiveRecordingState({
       startListening(finalStream, timer, language);
       requestWakeLock();
     } catch (err) { alert("Lỗi Micro/Permission: " + err); }
-  };
+  }, [captureSystemAudio, language, timer, user, meetingTitle, startListening, setupVisualizer, requestWakeLock, handeFullStop]);
 
-  const stopRecordingSession = () => {
-    // 1. Tắt Deepgram/Socket (Tiết kiệm)
+  const stopRecordingSession = useCallback(() => {
     stopListening();
     releaseWakeLock();
 
-    // 2. Pause MediaRecorder (Không stop để resume được)
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.pause();
     }
 
-    // 3. Tắt Visualizer Animation
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     setVolume(0);
-
-    // [FIX QUAN TRỌNG] KHÔNG được stop tracks hay close AudioContext ở đây.
-  };
-
-  const handeFullStop = () => {
-    releaseWakeLock();
-
-    if (liveSessionIdRef.current) {
-      endLiveSession(liveSessionIdRef.current).catch(e => console.error(e));
-    }
-
-    // Stop everything clearly
-    if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
-    mediaRecorderRef.current = null;
-
-    streamRef.current?.getTracks().forEach(track => track.stop()); // Stream mixed hoặc single
-    streamRef.current = null;
-
-    // Clean up mixing sources
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(e => console.error(e));
-      audioContextRef.current = null;
-    }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach(track => track.stop());
-      micStreamRef.current = null;
-    }
-    if (sysStreamRef.current) {
-      sysStreamRef.current.getTracks().forEach(track => track.stop());
-      sysStreamRef.current = null;
-    }
-  }
+  }, [stopListening, releaseWakeLock]);
 
   // --- ACTIONS ---
-  const scrollToLiveSegment = (time: number) => {
+  const scrollToLiveSegment = useCallback((time: number) => {
     // Tìm segment có start gần nhất với time
     const targetSegment = segments.find(s => {
       const start = s.words?.[0]?.start || 0;
@@ -554,24 +547,24 @@ export default function LiveRecordingState({
         behavior: 'smooth'
       });
     }
-  };
+  }, [segments]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       handeFullStop();
     }
-  }, [])
+  }, [handeFullStop])
 
-  const handleToggleRecord = () => {
+  const handleToggleRecord = useCallback(() => {
     if (isListening) {
       stopRecordingSession();
     } else {
       startRecordingSession();
     }
-  };
+  }, [isListening, startRecordingSession, stopRecordingSession]);
 
-  const handleClearTranscript = async () => {
+  const handleClearTranscript = useCallback(async () => {
     const isConfirmed = await confirm({
       title: "Xóa toàn bộ?",
       message: "Xóa toàn bộ nội dung ghi âm và tóm tắt hiện tại?",
@@ -583,9 +576,9 @@ export default function LiveRecordingState({
     setSummaries([]);
     bufferTextRef.current = "";
     wordCountRef.current = 0;
-  };
+  }, [resetTranscript, confirm]);
 
-  const handleSaveAndProcess = async () => {
+  const handleSaveAndProcess = useCallback(async () => {
     if (!user) return toast.error("Vui lòng đăng nhập!");
 
     // 1. Dừng ghi âm
@@ -662,13 +655,13 @@ export default function LiveRecordingState({
     } finally {
       setIsUploading(false);
     }
-  };
+  }, [user, stopRecordingSession, handeFullStop, segments, summaries, timer, language, meetingTitle, objectives, onFinish, toast]);
 
-  const formatTime = (s: number) => {
+  const formatTime = useCallback((s: number) => {
     const m = Math.floor(s / 60);
     const sec = s % 60;
     return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
   useEffect(() => {
     startRecordingSession();

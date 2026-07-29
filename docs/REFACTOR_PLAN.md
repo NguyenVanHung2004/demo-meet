@@ -1,5 +1,10 @@
 # Kế hoạch Refactor & Phân tích — AI Meeting Notes
 
+> **Tài liệu liên quan:**
+> - [`PHASE_3.md`](./PHASE_3.md) — Structure + Type Safety + Migration (đã hoàn thành)
+> - [`PHASE_4.md`](./PHASE_4.md) — Performance (đã hoàn thành)
+> - [`PHASE_5.md`](./PHASE_5.md) — UI Polish (đã hoàn thành)
+
 > **Context dự án:**
 > - Tech: Next.js 16, Tailwind v4, Firebase (Firestore + Auth + Storage), RunPod ASR, Gemini AI, MeetingBaas, Zipformer WebSocket
 > - Deploy: Vercel auto-deploy từ `main`, dùng `refactor` branch cho preview
@@ -327,7 +332,7 @@ Theo dõi logs 1 tuần → nếu không có lỗi → xóa rules cũ.
 
 ---
 
-## PHASE 0: QUICK WINS + XÓA CODE CHẾT (~2 giờ)
+## ✅ PHASE 0: QUICK WINS + XÓA CODE CHẾT (~2 giờ) [HOÀN THÀNH]
 
 > **An toàn:** Không touch schema, không touch logic flow.
 
@@ -350,7 +355,7 @@ Theo dõi logs 1 tuần → nếu không có lỗi → xóa rules cũ.
 
 ---
 
-## PHASE 1A: CRITICAL DATA LOSS + XSS (2-3 ngày)
+## ✅ PHASE 1A: CRITICAL DATA LOSS + XSS (2-3 ngày) [HOÀN THÀNH]
 
 > **Critical:** Mất dữ liệu + XSS. Làm trước tiên sau Phase 0.
 
@@ -375,7 +380,7 @@ Theo dõi logs 1 tuần → nếu không có lỗi → xóa rules cũ.
 
 ---
 
-## PHASE 1B: AUTH + WEBHOOK + UX (3-4 ngày)
+## ✅ PHASE 1B: AUTH + WEBHOOK + UX (3-4 ngày) [HOÀN THÀNH]
 
 > **Có thể chạy song song 1A** vì touch file khác (chủ yếu API routes + modals).
 
@@ -411,7 +416,7 @@ Theo dõi logs 1 tuần → nếu không có lỗi → xóa rules cũ.
 
 ---
 
-## PHASE 2: SECURITY CÒN LẠI (2-3 ngày)
+## ✅ PHASE 2: SECURITY CÒN LẠI (2-3 ngày) [HOÀN THÀNH]
 
 | # | Task | Fixes issue | File | Chi tiết |
 |---|------|-------------|------|----------|
@@ -434,7 +439,7 @@ Theo dõi logs 1 tuần → nếu không có lỗi → xóa rules cũ.
 
 ---
 
-## PHASE 3: CẤU TRÚC + TYPE SAFETY + MIGRATION (3-4 ngày)
+## ✅ PHASE 3: CẤU TRÚC + TYPE SAFETY + MIGRATION (3-4 ngày) [HOÀN THÀNH]
 
 > **Gộp:** Structure (Phase 3 cũ) + Type safety (Phase 5 cũ) + Status enum migration.
 
@@ -511,18 +516,18 @@ export type MeetingStatus = typeof MEETING_STATUS[keyof typeof MEETING_STATUS];
 
 ---
 
-## PHASE 4: PERFORMANCE (3-4 ngày)
+## ✅ PHASE 4: PERFORMANCE (3-4 ngày) [HOÀN THÀNH]
 
 | # | Task | Fixes issue | File | Chi tiết |
-|---|------|-------------|------|----------|
-| 4.1 | `React.memo` cho `TranscriptRow` | — | `TranscriptRow.tsx` | Tránh re-render mỗi audio frame |
-| 4.2 | `useCallback` + `useMemo` | — | `DashboardState.tsx`, `MeetingDetailState.tsx` | Ổn định reference, cache filtered meetings list |
-| 4.3 | Firebase pagination | 5.2 | `meetingDb.ts` | `limit(20)` + `startAfter(cursor)`. UI nút "Load more" |
-| 4.4 | Optimize PollingManager | 1.5, 2.4, 3.4 | `PollingManager.tsx` | Chỉ poll khi có active job. Interval 5s → 10s. Gộp polling bot + RunPod vào 1 loop |
-| 4.5 | Gộp 1MB fallback | 1.8, 2.5 | Tạo `app/lib/storage/firestoreSave.ts` | 1 hàm `saveWithFallback()` dùng chung, xóa duplicate ở 3 file |
-| 4.6 | Bỏ `JSON.parse(JSON.stringify())` | — | `meetingDb.ts`, `liveSessionDb.ts` | Thay bằng `structuredClone()` (built-in Node 17+) |
-| 4.7 | Retry pattern cho RunPod | — | `app/lib/api.ts` | Retry 3 lần, exponential backoff (1s, 2s, 4s) |
-| 4.8 | Auto-save debounce | 2.4 | `LiveRecordingState.tsx:219` | Debounce 5s → dùng `useDebouncedCallback`. Tránh ghi liên tục |
+|------|------|-------------|------|----------|
+| 4.1 | `React.memo` cho `TranscriptRow` | — | `TranscriptRow.tsx` | Tránh re-render mỗi audio frame. Thêm `activeWordIndex` để memo hiệu quả. |
+| 4.2 | `useCallback` + `useMemo` | — | `DashboardState.tsx`, `MeetingDetailState.tsx`, `EditorState.tsx`, `LiveRecordingState.tsx` | Ổn định reference cho tất cả handlers. `filteredMeetings` dùng `useMemo`. |
+| 4.3 | Firebase pagination | 5.2 | `meetingDb.ts`, `DashboardState.tsx`, `MeetingListView.tsx` | `limit(20)` + `startAfter(cursor)`. Filter `isDeleted` riêng cho tab Trash. |
+| 4.4 | Optimize PollingManager | 1.5 | `PollingManager.tsx` | `useState(activeJobsCount)`, interval chỉ chạy khi `activeJobsCount > 0`. |
+| ~~4.5~~ | ~~Gộp 1MB fallback~~ | - | - | ❌ Bỏ qua theo user |
+| 4.6 | Bỏ `JSON.parse(JSON.stringify())` | — | `meetingDb.ts`, `liveSessionDb.ts` | Thay bằng `structuredClone()`. 5 chỗ. |
+| ~~4.7~~ | ~~Retry pattern cho RunPod~~ | - | - | ❌ Bỏ qua theo user |
+| ~~4.8~~ | ~~Auto-save debounce~~ | - | - | ❌ Bỏ qua theo user |
 
 **Manual test (2 giờ):**
 ```
@@ -537,27 +542,33 @@ export type MeetingStatus = typeof MEETING_STATUS[keyof typeof MEETING_STATUS];
 
 ---
 
-## PHASE 5: UI POLISH (2-3 ngày)
+## ✅ PHASE 5: UI POLISH (2-3 ngày) [HOÀN THÀNH]
 
 | # | Task | File | Chi tiết |
 |---|------|------|----------|
-| 5.1 | Summary panel responsive | `MeetingDetailState.tsx` | `md:w-[400px]` → `lg:w-2/5 md:w-[350px]` |
-| 5.2 | Breadcrumb | `app/components/Breadcrumb.tsx` | `Dashboard > [meeting title]`. Dùng `MEETING_STATUS` constant cho badge |
-| 5.3 | Upload modal validation | `DashboardState.tsx` | Disable button khi chưa chọn file. Show file size warning nếu > 100MB |
-| 5.4 | Empty state + CTA | `DashboardState.tsx`, `MinutesState.tsx` | Nút "Tạo meeting đầu tiên" khi list rỗng |
-| 5.5 | Button loading state | Tất cả | Spinner riêng trong button, không block cả page |
-| 5.6 | Toast grouping | `GlobalUI` | Group toasts cùng type. Max 3 toasts hiển thị |
-| 5.7 | Dark mode consistency | Tất cả | Check tất cả màn hình dark mode không bị chỗ sáng chỗ tối |
+| 5.1 | Summary panel responsive | `SummaryPanel.tsx` | `md:w-[400px]` → `lg:w-2/5 md:w-[350px]` |
+| 5.2 | Breadcrumb | `Breadcrumb.tsx` | `Dashboard > [meeting title]`. Dùng `onBack` callback |
+| 5.3 | Upload modal validation | `UploadModal.tsx`, `LiveSetupModal.tsx`, `DashboardState.tsx` | Thêm `loading` prop, file size warning >100MB, disable khi title rỗng |
+| 5.4 | Empty state + CTA | `MeetingListView.tsx`, `Minutes/MeetingList.tsx` | CTA buttons "Tải file lên" / "Ghi âm trực tiếp" / "Tạo cuộc họp" |
+| 5.5 | Button loading state | `UploadModal`, `LiveSetupModal`, `MeetingListView`, `GlobalUIProvider` | Adopt `ui/Button` component |
+| 5.6 | Toast grouping | `GlobalUIProvider.tsx` | Max 3 toasts, group trùng message+type, reset timer |
+| 5.7 | Dark mode consistency | `globals.css` | Force `color-scheme: light`, xóa `prefers-color-scheme: dark` |
 
 **Manual test (1-2 giờ):**
 ```
 □ Resize window 320px → 1920px → UI không vỡ
-□ Empty state hiển thị CTA đúng
+□ Summary panel responsive: lg:w-2/5, md:w-[350px]
+□ Breadcrumb: Dashboard > [title], click quay về Dashboard
+□ Upload modal: loading spinner, disabled khi title rỗng, warning >100MB
+□ Empty state hiển thị CTA đúng (Dashboard + Minutes)
 □ Button loading → click 1 lần không trigger 2 lần
-□ Dark mode: mở tất cả route, check contrast
+□ Toast: max 3, group trùng message
+□ Dark mode: app luôn light mode, không bị vỡ giao diện
 ```
 
 **Branch:** Commit trên `refactor` branch. User tự push → test 24h trên Vercel preview.
+
+**✅ Hoàn thành:** 17 files modified (7 tasks). Build pass, TypeScript 0 errors.
 
 ---
 
@@ -642,16 +653,16 @@ export function middleware(request: NextRequest) {
 
 ## TỔNG KẾT EFFORT & PRIORITY
 
-| Phase | Mô tả | Effort | Priority | Dependencies |
-|-------|-------|--------|----------|-------------|
-| 0 | Quick wins + Xóa code chết | ~2h | 🔴 Cao | — |
-| 1A | Critical data loss + XSS | 2-3 ngày | 🔴 Cao | Phase 0 |
-| 1B | Auth + Webhook + UX | 3-4 ngày | 🔴 Cao | Phase 0 (có thể song song 1A) |
-| 2 | Security còn lại | 2-3 ngày | 🔴 Cao | Phase 0 |
-| 3 | Cấu trúc + Type safety + Migration | 3-4 ngày | 🟡 Cao | Phase 1A, 1B |
-| 4 | Performance | 3-4 ngày | 🟡 Trung bình | Phase 3 |
-| 5 | UI Polish | 2-3 ngày | 🟢 Thấp | Phase 3 |
-| 6 | Routing (kéo dài) | 5-7 ngày | 🟢 Thấp | Phase 3 |
+| Phase | Mô tả | Effort | Priority | Dependencies | Trạng thái |
+|-------|-------|--------|----------|-------------|-----------|
+| 0 | Quick wins + Xóa code chết | ~2h | 🔴 Cao | — | ✅ Hoàn thành |
+| 1A | Critical data loss + XSS | 2-3 ngày | 🔴 Cao | Phase 0 | ✅ Hoàn thành |
+| 1B | Auth + Webhook + UX | 3-4 ngày | 🔴 Cao | Phase 0 (có thể song song 1A) | ✅ Hoàn thành |
+| 2 | Security còn lại | 2-3 ngày | 🔴 Cao | Phase 0 | ✅ Hoàn thành |
+| 3 | Cấu trúc + Type safety + Migration | 3-4 ngày | 🟡 Cao | Phase 1A, 1B | ✅ Hoàn thành |
+| 4 | Performance | 3-4 ngày | 🟡 Trung bình | Phase 3 | ✅ Hoàn thành |
+| 5 | UI Polish | 2-3 ngày | 🟢 Thấp | Phase 3 | ✅ Hoàn thành |
+| 6 | Routing (kéo dài) | 5-7 ngày | 🟢 Thấp | Phase 3 | 🔜 |
 
 **Tổng: ~20-27 ngày** (gồm manual testing time)
 
@@ -728,3 +739,7 @@ Mỗi phase merge vào main phải có khả năng revert trong 5 phút:
 4. **Schema migration:** Dual-write phase cho phép rollback code dễ dàng
 
 **Quy tắc:** Không xóa code cũ khi chưa có code mới chạy được 1 tuần trên Vercel preview.
+
+---
+
+**Navigation:** [REFACTOR_PLAN.md](./REFACTOR_PLAN.md) • [Phase 3 ➡️](./PHASE_3.md) • [Phase 4 ➡️](./PHASE_4.md) • [Phase 5 ➡️](./PHASE_5.md) • [Phase 6 ➡️](./REFACTOR_PLAN.md#phase-6-routing--spa--proper-routes-5-7-ngày)

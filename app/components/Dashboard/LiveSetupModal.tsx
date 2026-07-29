@@ -1,10 +1,12 @@
 "use client";
 import { Mic } from "lucide-react";
+import Button from "../ui/Button";
 
 interface LiveSetupModalProps {
   liveTitle: string;
   liveObjectives: string;
   liveLanguage: "vi" | "en";
+  loading?: boolean;
   onTitleChange: (v: string) => void;
   onObjectivesChange: (v: string) => void;
   onLanguageChange: (v: "vi" | "en") => void;
@@ -13,7 +15,7 @@ interface LiveSetupModalProps {
 }
 
 export default function LiveSetupModal({
-  liveTitle, liveObjectives, liveLanguage,
+  liveTitle, liveObjectives, liveLanguage, loading = false,
   onTitleChange, onObjectivesChange, onLanguageChange,
   onConfirm, onCancel
 }: LiveSetupModalProps) {
@@ -66,18 +68,12 @@ export default function LiveSetupModal({
         </div>
 
         <div className="flex gap-3 pt-2">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold transition-all text-sm"
-          >
+          <Button variant="secondary" onClick={onCancel} className="flex-1">
             Hủy bỏ
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-all text-sm shadow-lg shadow-red-100 flex items-center justify-center gap-1.5"
-          >
+          </Button>
+          <Button variant="danger" loading={loading} disabled={!liveTitle.trim()} onClick={onConfirm} className="flex-1">
             <Mic className="w-4 h-4" /> Bắt đầu ghi âm
-          </button>
+          </Button>
         </div>
       </div>
     </div>

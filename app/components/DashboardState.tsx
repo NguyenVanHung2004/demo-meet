@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { QueryDocumentSnapshot } from "firebase/firestore";
 import {
-  getAllMeetings,
+  getMeetingsPaginated,
   Meeting,
   toggleTrashMeeting,
   deleteMeetingPermanent,
@@ -28,7 +29,7 @@ export default function DashboardState({
   onOpenDrive,
   onOpenBot
 }: {
-  onImport: (file: File, language: "vi" | "en", title?: string, objectives?: string) => void;
+  onImport: (file: File, language: "vi" | "en", title?: string, objectives?: string) => Promise<void>;
   onLive: (language: "vi" | "en", title?: string, objectives?: string) => void;
   onUseSample: () => void;
   onOpenMeeting: (m: Meeting) => void;
@@ -43,6 +44,8 @@ export default function DashboardState({
   const [loading, setLoading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
   const [currentTab, setCurrentTab] = useState<DashboardTab>("all");
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasShownDraftWarning = useRef(false);
   const [uploadLanguage, setUploadLanguage] = useState<"vi" | "en">("vi");
@@ -55,27 +58,33 @@ export default function DashboardState({
   const [showLiveSetupModal, setShowLiveSetupModal] = useState(false);
   const [liveTitle, setLiveTitle] = useState("");
   const [liveObjectives, setLiveObjectives] = useState("");
+  const [isUploadLoading, setIsUploadLoading] = useState(false);
+  const [isLiveLoading, setIsLiveLoading] = useState(false);
   const [liveLanguageState, setLiveLanguageState] = useState<"vi" | "en">("vi");
 
-  const handleTabChange = (tab: DashboardTab) => {
+  const handleTabChange = useCallback((tab: DashboardTab) => {
     setCurrentTab(tab);
     setSelectedIds([]);
-  };
+  }, []);
 
-  const loadMeetings = async () => {
+  const loadMeetings = useCallback(async () => {
     if (user) {
       setLoading(true);
       try {
-        // 1. Load Cloud Meetings (exclude minute-only imports)
-        const allCloudMeetings = await getAllMeetings(user.uid);
-        const cloudMeetings = allCloudMeetings.filter(m => !m.isMinuteOnly);
+        const { meetings: activeCloud, lastDoc: newLastDoc, hasMore: newHasMore } = await getMeetingsPaginated(user.uid, undefined, false);
+        const cloudActive = activeCloud.filter(m => !m.isMinuteOnly);
 
-        // 2. Load Local Drafts
+        const { getAllMeetings } = await import("../lib/db");
+        const allCloud = await getAllMeetings(user.uid);
+        const cloudTrash = allCloud.filter(m => m.isDeleted);
+
         const { getAllDraftsMeta } = await import("../lib/indexedDB");
         const localDrafts = await getAllDraftsMeta(user.uid);
 
-        const all = [...localDrafts, ...cloudMeetings].sort((a, b) => b.createdAt - a.createdAt);
+        const all = [...localDrafts, ...cloudActive, ...cloudTrash].sort((a, b) => b.createdAt - a.createdAt);
         setMeetings(all);
+        setLastDoc(newLastDoc);
+        setHasMore(newHasMore);
 
         if (localDrafts.length > 0 && !hasShownDraftWarning.current) {
           toast.info(`Bạn có ${localDrafts.length} bản nháp chưa lưu lên Cloud`);
@@ -90,14 +99,27 @@ export default function DashboardState({
     } else {
       setMeetings([]);
     }
-  };
+  }, [user, toast]);
+
+  const loadMoreMeetings = useCallback(async () => {
+    if (!user || !lastDoc || !hasMore) return;
+    try {
+      const { meetings: moreMeetings, lastDoc: newLastDoc, hasMore: newHasMore } = await getMeetingsPaginated(user.uid, lastDoc, false);
+      const filteredMore = moreMeetings.filter(m => !m.isMinuteOnly);
+      setMeetings(prev => [...prev, ...filteredMore]);
+      setLastDoc(newLastDoc);
+      setHasMore(newHasMore);
+    } catch (error) {
+      console.error("Error loading more meetings:", error);
+    }
+  }, [user, lastDoc, hasMore]);
 
   useEffect(() => {
     loadMeetings();
-  }, [refreshSignal, user]);
+  }, [refreshSignal, user, loadMeetings]);
 
   // --- ACTIONS ---
-  const handleMoveToTrash = async (e: React.MouseEvent, id: string) => {
+  const handleMoveToTrash = useCallback(async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     const isConfirmed = await confirm({
       title: "Xóa cuộc họp?",
@@ -121,16 +143,16 @@ export default function DashboardState({
       toast.success("Đã chuyển vào thùng rác");
       loadMeetings();
     }
-  };
+  }, [meetings, confirm, toast, loadMeetings]);
 
-  const handleRestore = async (e: React.MouseEvent, id: string) => {
+  const handleRestore = useCallback(async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     await toggleTrashMeeting(id, false);
     toast.success("Đã khôi phục cuộc họp");
     loadMeetings();
-  };
+  }, [loadMeetings, toast]);
 
-  const handleDeleteForever = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteForever = useCallback(async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     const isConfirmed = await confirm({
       title: "Xóa vĩnh viễn?",
@@ -149,9 +171,9 @@ export default function DashboardState({
       }
       loadMeetings();
     }
-  };
+  }, [meetings, confirm, toast, loadMeetings]);
 
-  const handleFinalizeDraft = async (e: React.MouseEvent, m: Meeting) => {
+  const handleFinalizeDraft = useCallback(async (e: React.MouseEvent, m: Meeting) => {
     e.stopPropagation();
     try {
       setIsFinalizing(m.id);
@@ -188,9 +210,9 @@ export default function DashboardState({
     } finally {
       setIsFinalizing(null);
     }
-  };
+  }, [user, meetings, toast, loadMeetings]);
 
-  const handleEmptyTrash = async () => {
+  const handleEmptyTrash = useCallback(async () => {
     const isConfirmed = await confirm({
       title: "Dọn dẹp thùng rác?",
       message: "Tất cả cuộc họp trong thùng rác sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
@@ -210,9 +232,9 @@ export default function DashboardState({
       setSelectedIds([]);
       loadMeetings();
     }
-  };
+  }, [meetings, confirm, loadMeetings]);
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = useCallback(async () => {
     if (selectedIds.length === 0) return;
     const isConfirmed = await confirm({
       title: `Xóa ${selectedIds.length} mục đã chọn?`,
@@ -235,9 +257,9 @@ export default function DashboardState({
       setSelectedIds([]);
       loadMeetings();
     }
-  };
+  }, [selectedIds, meetings, confirm, loadMeetings]);
 
-  const handleMoveSelectedToTrash = async () => {
+  const handleMoveSelectedToTrash = useCallback(async () => {
     if (selectedIds.length === 0) return;
     const isConfirmed = await confirm({
       title: `Chuyển ${selectedIds.length} mục vào thùng rác?`,
@@ -260,27 +282,27 @@ export default function DashboardState({
       setSelectedIds([]);
       loadMeetings();
     }
-  };
+  }, [selectedIds, meetings, confirm, loadMeetings]);
 
-  const toggleSelectAll = () => {
+  // --- FILTERING ---
+  const filteredMeetings = useMemo(() => meetings.filter((m) => {
+    if (currentTab === "trash") return m.isDeleted;
+    return !m.isDeleted;
+  }), [meetings, currentTab]);
+
+  const toggleSelectAll = useCallback(() => {
     if (selectedIds.length === filteredMeetings.length) {
       setSelectedIds([]);
     } else {
       setSelectedIds(filteredMeetings.map(m => m.id));
     }
-  };
+  }, [selectedIds, filteredMeetings]);
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
-  };
-
-  // --- FILTERING ---
-  const filteredMeetings = meetings.filter((m) => {
-    if (currentTab === "trash") return m.isDeleted;
-    return !m.isDeleted;
-  });
+  }, []);
 
   return (
     <div className="flex h-full bg-slate-50 overflow-hidden relative font-sans">
@@ -325,6 +347,8 @@ export default function DashboardState({
             selectedIds={selectedIds}
             loading={loading}
             isFinalizing={isFinalizing}
+            hasMore={hasMore}
+            onLoadMore={loadMoreMeetings}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
             onOpenMeeting={onOpenMeeting}
@@ -336,6 +360,27 @@ export default function DashboardState({
             onMoveSelectedToTrash={handleMoveSelectedToTrash}
             onDeleteSelected={handleDeleteSelected}
             onEmptyTrash={handleEmptyTrash}
+            onNavigateToUpload={() => {
+              const fileInput = document.createElement('input');
+              fileInput.type = 'file';
+              fileInput.accept = 'audio/*,video/*';
+              fileInput.onchange = () => {
+                const file = fileInput.files?.[0];
+                if (file) {
+                  setSelectedFileForUpload(file);
+                  setUploadTitle(file.name.replace(/\.[^/.]+$/, ""));
+                  setUploadObjectives("");
+                  setUploadLanguageState(uploadLanguage);
+                }
+              };
+              fileInput.click();
+            }}
+            onNavigateToLive={() => {
+              setLiveTitle(`Cuộc họp trực tiếp ${new Date().toLocaleDateString('vi-VN')}`);
+              setLiveObjectives("");
+              setLiveLanguageState(liveLanguage);
+              setShowLiveSetupModal(true);
+            }}
           />
       </div>
 
@@ -350,8 +395,14 @@ export default function DashboardState({
           onTitleChange={setUploadTitle}
           onObjectivesChange={setUploadObjectives}
           onLanguageChange={setUploadLanguageState}
-          onConfirm={() => {
-            onImport(selectedFileForUpload, uploadLanguageState, uploadTitle, uploadObjectives);
+          loading={isUploadLoading}
+          onConfirm={async () => {
+            setIsUploadLoading(true);
+            try {
+              await onImport(selectedFileForUpload, uploadLanguageState, uploadTitle, uploadObjectives);
+            } finally {
+              setIsUploadLoading(false);
+            }
             setSelectedFileForUpload(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
           }}
@@ -366,11 +417,17 @@ export default function DashboardState({
           liveTitle={liveTitle}
           liveObjectives={liveObjectives}
           liveLanguage={liveLanguageState}
+          loading={isLiveLoading}
           onTitleChange={setLiveTitle}
           onObjectivesChange={setLiveObjectives}
           onLanguageChange={setLiveLanguageState}
-          onConfirm={() => {
-            onLive(liveLanguageState, liveTitle, liveObjectives);
+          onConfirm={async () => {
+            setIsLiveLoading(true);
+            try {
+              await onLive(liveLanguageState, liveTitle, liveObjectives);
+            } finally {
+              setIsLiveLoading(false);
+            }
             setShowLiveSetupModal(false);
           }}
           onCancel={() => setShowLiveSetupModal(false)}

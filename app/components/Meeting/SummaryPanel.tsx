@@ -82,7 +82,7 @@ export default function SummaryPanel({
   };
 
   return (
-    <div className={`md:w-[400px] bg-slate-50 flex flex-col shrink-0 ${activeTab === "summary" ? "flex flex-1" : "hidden md:flex"}`}>
+    <div className={`lg:w-2/5 md:w-[350px] bg-slate-50 flex flex-col shrink-0 ${activeTab === "summary" ? "flex flex-1" : "hidden md:flex"}`}>
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 pb-32">
         <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-5">
           <div className="flex items-center justify-between mb-4 pb-2 border-b border-orange-50">

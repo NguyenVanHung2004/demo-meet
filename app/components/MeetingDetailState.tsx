@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useCallback, useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Meeting, updateMeetingProcess } from "../lib/db";
 import type { Segment, Speaker } from "../lib/db";
@@ -19,6 +19,7 @@ import TabSwitcher from "./Meeting/TabSwitcher";
 import SpeakerFilter from "./Meeting/SpeakerFilter";
 import MeetingHeader from "./Meeting/Header";
 import MeetingAudioPlayer from "./Meeting/AudioPlayer";
+import Breadcrumb from "./Breadcrumb";
 export default function MeetingDetailState({
   meeting,
   audioSrc,
@@ -48,7 +49,7 @@ export default function MeetingDetailState({
   // --- TEMPLATE STATE ---
   const [showTemplateModal, setShowTemplateModal] = useState(false);
 
-  const handleShare = async () => {
+  const handleShare = useCallback(async () => {
     const { generateMeetingShareToken } = await import('../lib/db');
     let shareId = meeting.shareToken;
     if (!shareId) {
@@ -63,9 +64,9 @@ export default function MeetingDetailState({
     const shareUrl = `${window.location.origin}/share/${shareId}`;
     navigator.clipboard.writeText(shareUrl);
     toast.success("Đã copy link chia sẻ: " + shareUrl);
-  };
+  }, [meeting, toast]);
 
-  const handleSummarizeRequest = (template: MeetingTemplate) => {
+  const handleSummarizeRequest = useCallback((template: MeetingTemplate) => {
     if (!onSummarize) return;
     const fullText = meeting.segments.map((s: Segment) => {
       const name = meeting.speakers.find((sp: Speaker) => sp.id === s.speakerId)?.name || `Speaker ${s.speakerId.split('_')[1] || '00'}`;
@@ -75,14 +76,14 @@ export default function MeetingDetailState({
     toast.info(`Đang tóm tắt theo mẫu: ${template.name}...`);
     setShowTemplateModal(false);
     onBack();
-  };
+  }, [meeting, onSummarize, toast, onBack]);
 
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number, y: number } | null>(null);
   const [showCopySuccess, setShowCopySuccess] = useState(false);
 
   // --- ACTIONS ---
-  const scrollToSegment = (time: number) => {
+  const scrollToSegment = useCallback((time: number) => {
     // Tìm segment gần nhất
     const segment = meeting.segments.find((s: Segment) => time >= s.start && (s.end ? time < s.end : time < s.start + 10))
       || [...meeting.segments].sort((a, b) => Math.abs(a.start - time) - Math.abs(b.start - time))[0];
@@ -107,9 +108,47 @@ export default function MeetingDetailState({
         behavior: 'smooth'
       });
     }
-  };
+  }, [meeting.segments]);
 
+  // --- FORMATTERS ---
+  const formatDate = useCallback((ts: number) => {
+    return new Date(ts).toLocaleDateString("vi-VN", {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }, []);
 
+  const formatDuration = useCallback((seconds: number) => {
+    if (!seconds || isNaN(seconds) || !Number.isFinite(seconds)) return "0p 0s";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}p ${s}s`;
+  }, []);
+
+  const formatTimeCode = useCallback((s: number) => {
+    if (!s || isNaN(s) || !Number.isFinite(s)) return "00:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  }, []);
+
+  // Helper chọn màu Speaker
+  const getActiveWordIndex = useCallback((segment: Segment) => {
+    if (!isPlaying || !segment.words) return -1;
+    return segment.words.findIndex(w => currentTime >= w.start && currentTime <= (w.end + 0.15));
+  }, [currentTime, isPlaying]);
+
+  const getSpeakerStyle = useCallback((speakerId: string) => {
+    const id = parseInt(speakerId.split('_')[1] || '0');
+    const colors = [
+      'bg-indigo-100 text-indigo-700 ring-indigo-200',
+      'bg-emerald-100 text-emerald-700 ring-emerald-200',
+      'bg-orange-100 text-orange-700 ring-orange-200',
+      'bg-pink-100 text-pink-700 ring-pink-200',
+      'bg-cyan-100 text-cyan-700 ring-cyan-200',
+    ];
+    return colors[id % colors.length];
+  }, []);
 
   // --- AUDIO CONTROL ---
   useEffect(() => {
@@ -125,15 +164,15 @@ export default function MeetingDetailState({
     }
   }, [playbackRate]);
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     if (audioRef.current) {
       if (isPlaying) audioRef.current.pause();
       else audioRef.current.play();
       setIsPlaying(!isPlaying);
     }
-  };
+  }, [isPlaying]);
 
-  const handleTimeUpdate = () => {
+  const handleTimeUpdate = useCallback(() => {
     if (!audioRef.current) return;
 
     if (filteredSpeakerId && isPlaying) {
@@ -158,17 +197,17 @@ export default function MeetingDetailState({
     }
 
     setCurrentTime(audioRef.current.currentTime);
-  };
+  }, [filteredSpeakerId, isPlaying, meeting.segments]);
 
-  const handleLoadedMetadata = () => {
+  const handleLoadedMetadata = useCallback(() => {
     if (audioRef.current) {
       const d = audioRef.current.duration;
       if (Number.isFinite(d)) setDuration(d);
     }
-  };
+  }, []);
 
   // Helper logic for extracting smart copy format
-  const getSmartCopyText = (selection: Selection, container: HTMLElement): string | null => {
+  const getSmartCopyText = useCallback((selection: Selection, container: HTMLElement): string | null => {
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
 
     const allSmartTexts = Array.from(container.querySelectorAll('.smart-copy-text')) as HTMLElement[];
@@ -220,7 +259,7 @@ export default function MeetingDetailState({
     resultText += `\n\nNguồn: Biên bản họp ${meetingTitle} - ${meetingDate}`;
 
     return resultText;
-  };
+  }, [meeting.title, meeting.createdAt]);
 
   // --- SMART COPY LOGIC (Auto Copy on MouseUp) ---
   useEffect(() => {
@@ -301,37 +340,36 @@ export default function MeetingDetailState({
       document.removeEventListener('mousedown', handleMouseDown);
       container.removeEventListener('copy', handleCopy);
     };
-  }, [meeting.id, meeting.title, meeting.createdAt]); // Re-run if meeting info changes
+  }, [meeting.id, meeting.title, meeting.createdAt, getSmartCopyText]);
 
-  const jumpToTime = (time: number) => {
+  const jumpToTime = useCallback((time: number) => {
     if (audioRef.current) {
       audioRef.current.currentTime = time;
       audioRef.current.play();
       setIsPlaying(true);
     }
-  };
+  }, []);
 
-  const skipTime = (seconds: number) => {
+  const skipTime = useCallback((seconds: number) => {
     if (audioRef.current) {
       const newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds));
       audioRef.current.currentTime = newTime;
       setCurrentTime(newTime);
     }
-  };
+  }, [duration]);
 
-  const togglePlaybackRate = () => {
+  const togglePlaybackRate = useCallback(() => {
     const rates = [0.5, 1.0, 1.25, 1.5, 2.0];
     const nextIdx = (rates.indexOf(playbackRate) + 1) % rates.length;
     setPlaybackRate(rates[nextIdx]);
-  };
+  }, [playbackRate]);
 
-  const handleDownloadAudio = () => {
+  const handleDownloadAudio = useCallback(() => {
     // audioSrc là Blob URL, file-saver sẽ tải nó về máy
     saveAs(audioSrc, `${meeting.title.replace(/\s+/g, "_")}.mp3`);
-  };
+  }, [audioSrc, meeting.title]);
 
-  // --- LOGIC XUẤT FILE (MỚI) ---
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     try {
       // 1. Tạo nội dung file
       let content = `TIÊU ĐỀ: ${meeting.title}\n`;
@@ -365,9 +403,9 @@ export default function MeetingDetailState({
     } catch (e) {
       alert("Lỗi khi xuất file");
     }
-  };
+  }, [meeting, formatTimeCode]);
   // 2. Xuất Biên bản (.docx) - Mới
-  const handleExportDocx = async () => {
+  const handleExportDocx = useCallback(async () => {
     if (!meeting.summary) return alert("Chưa có nội dung tóm tắt để xuất!");
 
     try {
@@ -482,10 +520,10 @@ export default function MeetingDetailState({
       console.error(e);
       alert("Lỗi khi tạo file DOCX");
     }
-  };
+  }, [meeting, formatDuration]);
 
   // --- LOGIC XUẤT PDF (Đã Fix lỗi khoảng trắng lớn) ---
-  const handleExportPdf = async () => {
+  const handleExportPdf = useCallback(async () => {
     if (!meeting.summary) return alert("Chưa có nội dung tóm tắt để xuất!");
 
     try {
@@ -605,41 +643,7 @@ export default function MeetingDetailState({
       document.body.style.cursor = 'default';
       alert("Lỗi khi tạo PDF.");
     }
-  };
-  // --- FORMATTERS ---
-  const formatDate = (ts: number) => {
-    return new Date(ts).toLocaleDateString("vi-VN", {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit'
-    });
-  };
-
-  const formatDuration = (seconds: number) => {
-    if (!seconds || isNaN(seconds) || !Number.isFinite(seconds)) return "0p 0s";
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}p ${s}s`;
-  };
-
-  const formatTimeCode = (s: number) => {
-    if (!s || isNaN(s) || !Number.isFinite(s)) return "00:00";
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-  };
-
-  // Helper chọn màu Speaker
-  const getSpeakerStyle = (speakerId: string) => {
-    const id = parseInt(speakerId.split('_')[1] || '0');
-    const colors = [
-      'bg-indigo-100 text-indigo-700 ring-indigo-200',
-      'bg-emerald-100 text-emerald-700 ring-emerald-200',
-      'bg-orange-100 text-orange-700 ring-orange-200',
-      'bg-pink-100 text-pink-700 ring-pink-200',
-      'bg-cyan-100 text-cyan-700 ring-cyan-200',
-    ];
-    return colors[id % colors.length];
-  };
+  }, [meeting, formatDuration]);
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans relative">
@@ -735,6 +739,13 @@ export default function MeetingDetailState({
         </div>
       </div>
 
+      <Breadcrumb
+        items={[
+          { label: "Dashboard", onClick: onBack },
+          { label: meeting?.title || "Cuộc họp" },
+        ]}
+      />
+
       <MeetingHeader
         meeting={meeting}
         isReadOnly={isReadOnly}
@@ -788,28 +799,25 @@ export default function MeetingDetailState({
                   id={`segment-${seg.start}`}
                   className={filteredSpeakerId && seg.speakerId !== filteredSpeakerId ? 'opacity-30 grayscale transition-all duration-300' : 'transition-all duration-300'}
                 >
-                  <TranscriptRow
-                    segment={seg}
-                    speaker={speakerInfo}
-                    allSpeakers={meeting.speakers} // Truyền danh sách speaker (nếu có)
+                    <TranscriptRow
+                      segment={seg}
+                      speaker={speakerInfo}
+                      allSpeakers={meeting.speakers}
 
-                    // Truyền biến quan trọng để Karaoke hoạt động
-                    isActive={currentTime >= seg.start && currentTime < (seg.end || seg.start + 10)}
-                    isAudioPlaying={isPlaying}
-                    currentTime={currentTime} // <--- QUAN TRỌNG NHẤT
+                      isActive={currentTime >= seg.start && currentTime < (seg.end || seg.start + 10)}
+                      isAudioPlaying={isPlaying}
+                      activeWordIndex={getActiveWordIndex(seg)}
 
-                    onTogglePlay={togglePlay}
-                    onSeek={jumpToTime}
+                      onTogglePlay={togglePlay}
+                      onSeek={jumpToTime}
 
-                    // Vì đây là trang Xem (Read-only), ta truyền hàm rỗng cho các chức năng sửa
-                    // Nếu muốn sửa, người dùng sẽ bấm nút "Sửa" trên Header để sang trang EditorState
-                    onTextChange={() => { }}
-                    onSpeakerChange={() => { }}
-                    onSplit={() => { }}
-                    onMerge={() => { }}
-                    onAddRow={() => { }}
-                    onTimeChange={() => { }}
-                  />
+                      onTextChange={() => { }}
+                      onSpeakerChange={() => { }}
+                      onSplit={() => { }}
+                      onMerge={() => { }}
+                      onAddRow={() => { }}
+                      onTimeChange={() => { }}
+                    />
                 </div>
               );
             })}

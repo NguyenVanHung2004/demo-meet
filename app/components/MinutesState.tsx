@@ -330,6 +330,7 @@ export default function MinutesState() {
                     getSummaryPreview={getSummaryPreview}
                     formatDate={formatDate}
                     formatDuration={formatDuration}
+                    onNavigateToDashboard={() => router.push('/')}
                 />
             </main>
 

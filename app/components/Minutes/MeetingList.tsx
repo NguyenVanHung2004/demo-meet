@@ -17,12 +17,14 @@ interface MeetingListProps {
   getSummaryPreview: (summary: string) => string;
   formatDate: (ts: number) => string;
   formatDuration: (sec: number) => string;
+  onNavigateToDashboard?: () => void;
 }
 
 export default function MeetingList({
   meetings, loading, searchQuery, selectedIds,
   onToggleSelect, getHighlightedSnippet, getSummaryPreview,
-  formatDate, formatDuration
+  formatDate, formatDuration,
+  onNavigateToDashboard
 }: MeetingListProps) {
   const router = useRouter();
 
@@ -82,14 +84,25 @@ export default function MeetingList({
   if (meetings.length === 0) {
     return (
       <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+        <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-300">
           <FileText className="w-8 h-8" />
         </div>
-        <p className="text-slate-500 font-medium">
+        <h3 className="text-slate-700 font-bold text-base mb-1">
+          {searchQuery.trim() ? "Không tìm thấy biên bản" : "Chưa có biên bản nào"}
+        </h3>
+        <p className="text-slate-400 text-sm mb-5">
           {searchQuery.trim()
-            ? "Không tìm thấy biên bản phù hợp"
-            : "Chưa có biên bản nào. Hãy import hoặc tạo cuộc họp mới!"}
+            ? "Thử thay đổi từ khóa tìm kiếm."
+            : "Tạo cuộc họp để biên bản xuất hiện ở đây."}
         </p>
+        {!searchQuery.trim() && onNavigateToDashboard && (
+          <button
+            onClick={onNavigateToDashboard}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all"
+          >
+            Tạo cuộc họp
+          </button>
+        )}
       </div>
     );
   }

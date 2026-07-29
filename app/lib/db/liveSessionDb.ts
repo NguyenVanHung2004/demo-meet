@@ -20,8 +20,7 @@ const LIVE_COLLECTION = "live_sessions";
 export const createLiveSession = async (session: LiveSession) => {
   try {
     const docRef = doc(db, LIVE_COLLECTION, session.id);
-    const cleanData = JSON.parse(JSON.stringify(session));
-    cleanData.expireAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const cleanData = { ...structuredClone(session), expireAt: new Date(Date.now() + 24 * 60 * 60 * 1000) };
     await setDoc(docRef, cleanData);
   } catch (error) {
     console.error("Lỗi tạo Live Session:", error);
@@ -32,7 +31,7 @@ export const createLiveSession = async (session: LiveSession) => {
 export const updateLiveSession = async (sessionId: string, segments: Segment[], summary: string) => {
   try {
     const docRef = doc(db, LIVE_COLLECTION, sessionId);
-    const cleanSegments = JSON.parse(JSON.stringify(segments));
+    const cleanSegments = structuredClone(segments);
     await updateDoc(docRef, {
       segments: cleanSegments,
       summary: summary
@@ -45,7 +44,7 @@ export const updateLiveSession = async (sessionId: string, segments: Segment[], 
         const { words, ...rest } = s;
         return rest;
       });
-      const cleanLightSegments = JSON.parse(JSON.stringify(lightSegments));
+      const cleanLightSegments = structuredClone(lightSegments);
       await updateDoc(docRef, {
         segments: cleanLightSegments,
         summary: summary

@@ -22,6 +22,11 @@ export default function SegmentList({
   onTogglePlay, onSeek, onTextChange, onSpeakerChange,
   onSplit, onMerge, onAddRow, onTimeChange
 }: SegmentListProps) {
+  const getActiveWordIndex = (seg: Segment) => {
+    if (!isPlaying || !seg.words) return -1;
+    return seg.words.findIndex(w => currentTime >= w.start && currentTime <= (w.end + 0.15));
+  };
+
   return (
     <div className="p-4 md:p-8 space-y-2">
       {segments.map((seg) => {
@@ -34,8 +39,8 @@ export default function SegmentList({
             speaker={currentSpeaker}
             allSpeakers={speakers}
             isActive={isActive}
-            currentTime={currentTime}
             isAudioPlaying={isPlaying}
+            activeWordIndex={getActiveWordIndex(seg)}
             onTogglePlay={onTogglePlay}
             onSeek={onSeek}
             onTextChange={onTextChange}

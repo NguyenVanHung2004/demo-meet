@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useCallback, useState, useRef, useEffect } from "react";
 import {
   Play, Pause, ChevronLeft, Save, Sparkles, X,
   FileText, Copy, Check,
@@ -17,6 +17,7 @@ import TemplateManagerModal from "./TemplateManagerModal";
 import SegmentList from "./Editor/SegmentList";
 import EditorHeader from "./Editor/Header";
 import SpeakerSidebar from "./Editor/SpeakerSidebar";
+import Breadcrumb from "./Breadcrumb";
 
 export default function EditorState({
   audioSrc,
@@ -79,22 +80,22 @@ export default function EditorState({
   }, [playbackRate]);
 
   // --- ACTIONS (Giữ nguyên logic cũ) ---
-  const formatTime = (time: number) => {
+  const formatTime = useCallback((time: number) => {
     if (!time || isNaN(time) || !Number.isFinite(time)) return "00:00";
     const m = Math.floor(time / 60);
     const s = Math.floor(time % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     if (audioRef.current) {
       if (isPlaying) audioRef.current.pause();
       else audioRef.current.play();
       setIsPlaying(!isPlaying);
     }
-  };
+  }, [isPlaying]);
 
-  const seekTo = (time: number) => {
+  const seekTo = useCallback((time: number) => {
     if (audioRef.current) {
       audioRef.current.currentTime = Math.max(0, time);
       if (!isPlaying) {
@@ -102,24 +103,24 @@ export default function EditorState({
         setIsPlaying(true);
       }
     }
-  };
+  }, [isPlaying]);
 
-  const skipTime = (seconds: number) => {
+  const skipTime = useCallback((seconds: number) => {
     if (audioRef.current) {
       const newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds));
       audioRef.current.currentTime = newTime;
       setCurrentTime(newTime);
     }
-  };
+  }, [duration]);
 
-  const togglePlaybackRate = () => {
+  const togglePlaybackRate = useCallback(() => {
     const rates = [0.5, 1.0, 1.25, 1.5, 2.0];
     const nextIdx = (rates.indexOf(playbackRate) + 1) % rates.length;
     setPlaybackRate(rates[nextIdx]);
-  };
+  }, [playbackRate]);
 
   // Logic Title
-  const handleSaveTitle = async () => {
+  const handleSaveTitle = useCallback(async () => {
     if (!title.trim()) {
       setTitle(initialData.title);
       setIsEditingTitle(false);
@@ -129,15 +130,15 @@ export default function EditorState({
     await saveMeeting(updatedMeeting);
     setIsEditingTitle(false);
     toast.success("Đã đổi tên cuộc họp");
-  };
+  }, [title, initialData, toast]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSaveTitle();
     if (e.key === 'Escape') { setTitle(initialData.title); setIsEditingTitle(false); }
-  };
+  }, [handleSaveTitle, initialData.title]);
 
   // Logic Speakers
-  const handleAddSpeaker = () => {
+  const handleAddSpeaker = useCallback(() => {
     let nextIndex = speakers.length;
     let newId = `SPEAKER_${String(nextIndex).padStart(2, '0')}`;
     while (speakers.some(s => s.id === newId)) {
@@ -155,9 +156,9 @@ export default function EditorState({
       name: `Người mới ${nextIndex}`,
       color: colors[Math.floor(Math.random() * colors.length)]
     }]);
-  };
+  }, [speakers]);
 
-  const handleDeleteSpeaker = async (idToDelete: string) => {
+  const handleDeleteSpeaker = useCallback(async (idToDelete: string) => {
     if (speakers.length <= 1) return toast.warning("Giữ lại ít nhất 1 người!");
     const isConfirmed = await confirm({
       title: "Xóa người nói?",
@@ -171,23 +172,23 @@ export default function EditorState({
       setSpeakers(speakers.filter(s => s.id !== idToDelete));
       toast.success("Đã xóa người nói.");
     }
-  }
+  }, [speakers, segments, confirm, toast]);
 
-  const handleUpdateSpeakerName = (id: string, newName: string) => {
+  const handleUpdateSpeakerName = useCallback((id: string, newName: string) => {
     setSpeakers(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s));
-  };
+  }, []);
 
   // Logic Editor
-  const handleUpdateText = (segId: string, newText: string) => {
+  const handleUpdateText = useCallback((segId: string, newText: string) => {
     setSegments(prev => prev.map(s =>
       s.id === segId
         ? { ...s, text: newText } // Xóa words: [] để giữ lại karaoke nếu người dùng hoàn tác text
         : s
     ));
-  };
-  const handleChangeSpeaker = (segId: string, newId: string) => setSegments(prev => prev.map(s => s.id === segId ? { ...s, speakerId: newId } : s));
+  }, []);
+  const handleChangeSpeaker = useCallback((segId: string, newId: string) => setSegments(prev => prev.map(s => s.id === segId ? { ...s, speakerId: newId } : s)), []);
 
-  const handleSplitSegment = (segId: string, cursorIndex: number) => {
+  const handleSplitSegment = useCallback((segId: string, cursorIndex: number) => {
     const idx = segments.findIndex(s => s.id === segId);
     if (idx === -1) return;
 
@@ -253,9 +254,9 @@ export default function EditorState({
     newSegments[idx] = newSeg1;
     newSegments.splice(idx + 1, 0, newSeg2);
     setSegments(newSegments);
-  };
+  }, [segments]);
 
-  const handleMergeSegment = (currentId: string) => {
+  const handleMergeSegment = useCallback((currentId: string) => {
     const index = segments.findIndex(s => s.id === currentId);
     if (index <= 0) return; // Không thể gộp dòng đầu tiên lên trên
 
@@ -278,9 +279,9 @@ export default function EditorState({
     newSegments[index - 1] = merged; // Thay thế dòng trên bằng dòng đã gộp
     newSegments.splice(index, 1);    // Xóa dòng hiện tại
     setSegments(newSegments);
-  };
+  }, [segments]);
 
-  const handleAddRow = (prevId: string) => {
+  const handleAddRow = useCallback((prevId: string) => {
     const index = segments.findIndex(s => s.id === prevId);
     if (index === -1) return;
     const prev = segments[index];
@@ -288,9 +289,9 @@ export default function EditorState({
     const newSegments = [...segments];
     newSegments.splice(index + 1, 0, newSeg);
     setSegments(newSegments);
-  };
+  }, [segments]);
 
-  const handleTimeChange = (id: string, newStart: number) => {
+  const handleTimeChange = useCallback((id: string, newStart: number) => {
     setSegments(prev => {
       const idx = prev.findIndex(s => s.id === id);
       if (idx === -1) return prev;
@@ -311,9 +312,9 @@ export default function EditorState({
       }
       return updated;
     });
-  };
+  }, []);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
       let finalMeeting = {
@@ -383,24 +384,24 @@ export default function EditorState({
       toast.error("Lỗi khi lưu! " + (e as Error).message);
       setIsSaving(false);
     }
-  };
+  }, [initialData, segments, speakers, title, audioSrc, user, toast, onBack]);
 
-  const handleSummarizeRequest = () => {
+  const handleSummarizeRequest = useCallback(() => {
     const fullText = segments.map(s => `[${speakers.find(sp => sp.id === s.speakerId)?.name}]: ${s.text}`).join("\n");
     // [UPDATE] Truyền structure của template đang chọn
     onSummarize(initialData, fullText, selectedTemplate.structure);
     toast.info(`Đang tóm tắt theo mẫu: ${selectedTemplate.name}...`);
     onBack();
-  };
+  }, [segments, speakers, selectedTemplate, initialData, onSummarize, toast, onBack]);
 
-  const handleViewTranscript = () => {
+  const handleViewTranscript = useCallback(() => {
     const txt = segments.map(s => {
       const name = speakers.find(sp => sp.id === s.speakerId)?.name;
       return `[${formatTime(s.start)}] ${name}: ${s.text}`;
     }).join("\n\n");
     setExportContent(txt);
     setShowExportModal(true);
-  };
+  }, [segments, speakers, formatTime]);
 
   return (
     <div className="flex flex-col h-screen bg-white relative font-sans text-slate-900">
@@ -446,6 +447,13 @@ export default function EditorState({
           </div>
         </div>
       )}
+
+      <Breadcrumb
+        items={[
+          { label: "Dashboard", onClick: onBack },
+          { label: `Sửa: ${title || ""}` },
+        ]}
+      />
 
       <EditorHeader
         title={title}
