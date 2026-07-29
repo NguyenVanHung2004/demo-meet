@@ -2,10 +2,13 @@
 import React, { useRef, useEffect, useState } from "react";
 import { ChevronDown, Play, Pause, ArrowUpToLine, Plus, Edit2 } from "lucide-react";
 
+import type { Segment, Speaker } from "../lib/db";
+import type { Word } from "../lib/mockData";
+
 interface TranscriptRowProps {
-  segment: any;
-  speaker: any;
-  allSpeakers: any[];
+  segment: Segment;
+  speaker: Speaker;
+  allSpeakers: Speaker[];
   isActive: boolean;
   isAudioPlaying: boolean;
   currentTime: number;
@@ -43,7 +46,7 @@ export default function TranscriptRow({
   const renderKaraokeText = () => {
     // Nếu text bị sửa thủ công khác với các từ trong mảng words, ta sẽ chỉ hiện text thường
     // (Bỏ qua khoảng trắng thừa để so sánh chính xác hơn)
-    const originalText = segment.words ? segment.words.map((w: any) => w.word).join(" ") : "";
+    const originalText = segment.words ? segment.words.map((w: Word) => w.word).join(" ") : "";
     const isEdited = segment.words && segment.words.length > 0 && 
                      segment.text.replace(/\s+/g, ' ').trim() !== originalText.replace(/\s+/g, ' ').trim();
 
@@ -67,7 +70,7 @@ export default function TranscriptRow({
         data-speaker={speaker.name}
         data-timestamp={formatTime(segment.start)}
       >
-        {segment.words.map((w: any, idx: number) => {
+        {segment.words.map((w: Word, idx: number) => {
           // Logic highlight: Thời gian hiện tại nằm trong khoảng bắt đầu và kết thúc của từ
           // Thêm sai số 0.2s để highlight mượt hơn (giữ màu lâu hơn một chút)
           const isHighlight = currentTime >= w.start && currentTime <= (w.end + 0.15);
@@ -254,7 +257,7 @@ export default function TranscriptRow({
 
               {/* Dropdown Menu */}
               <div className="absolute top-full left-0 mt-1 w-48 bg-white border rounded-lg shadow-xl z-50 py-1 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
-                {allSpeakers.map((spk: any) => (
+                {allSpeakers.map((spk: Speaker) => (
                   <div
                     key={spk.id}
                     onClick={(e) => {

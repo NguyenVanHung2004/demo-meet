@@ -3,12 +3,14 @@
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Meeting, updateMeetingProcess } from "../lib/db";
-import ReactMarkdown from 'react-markdown';
+import type { Segment, Speaker } from "../lib/db";
+import ReactMarkdown from "react-markdown";
+
 import {
   Play, Pause, ChevronLeft, Edit3, Calendar,
   Clock, Download, FileText, Sparkles, User, AlignLeft, Share2,
-  FileType, Music, RotateCcw, RotateCw, Gauge, Check,
-  LayoutTemplate, X, Plus, Trash2
+  FileType, Music, RotateCcw, RotateCw, Check,
+  Trash2
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
@@ -17,6 +19,7 @@ import { useAuth } from "../context/AuthContext";
 import { MeetingTemplate } from "../lib/templates";
 import TemplateManagerModal from "./TemplateManagerModal";
 import TranscriptRow from "./TranscriptRow";
+import SummaryPanel from "./Meeting/SummaryPanel";
 export default function MeetingDetailState({
   meeting,
   audioSrc,
@@ -46,20 +49,12 @@ export default function MeetingDetailState({
   // --- TEMPLATE STATE ---
   const [showTemplateModal, setShowTemplateModal] = useState(false);
 
-  // --- OBJECTIVES STATE ---
-  const [objectives, setObjectives] = useState(meeting.objectives || "");
-  const [isEditingObjectives, setIsEditingObjectives] = useState(false);
-  const [objectivesInput, setObjectivesInput] = useState(meeting.objectives || "");
 
-  useEffect(() => {
-    setObjectives(meeting.objectives || "");
-    setObjectivesInput(meeting.objectives || "");
-  }, [meeting.objectives]);
 
   const handleSummarizeRequest = (template: MeetingTemplate) => {
     if (!onSummarize) return;
-    const fullText = meeting.segments.map((s: any) => {
-      const name = meeting.speakers.find((sp: any) => sp.id === s.speakerId)?.name || `Speaker ${s.speakerId.split('_')[1] || '00'}`;
+    const fullText = meeting.segments.map((s: Segment) => {
+      const name = meeting.speakers.find((sp: Speaker) => sp.id === s.speakerId)?.name || `Speaker ${s.speakerId.split('_')[1] || '00'}`;
       return `[${name}]: ${s.text}`;
     }).join("\n");
     onSummarize(meeting, fullText, template.structure);
@@ -77,7 +72,7 @@ export default function MeetingDetailState({
   // --- ACTIONS ---
   const scrollToSegment = (time: number) => {
     // Tìm segment gần nhất
-    const segment = meeting.segments.find((s: any) => time >= s.start && (s.end ? time < s.end : time < s.start + 10))
+    const segment = meeting.segments.find((s: Segment) => time >= s.start && (s.end ? time < s.end : time < s.start + 10))
       || [...meeting.segments].sort((a, b) => Math.abs(a.start - time) - Math.abs(b.start - time))[0];
 
     const targetTime = segment ? segment.start : time;
@@ -102,54 +97,7 @@ export default function MeetingDetailState({
     }
   };
 
-  // Helper render text có mốc thời gian
-  const renderTextWithTimestamps = (text: any) => {
-    if (typeof text !== 'string') return text;
 
-    const parts = text.split(/(\[\d{1,2}:\d{2}\])/g);
-    return parts.map((part, i) => {
-      const match = part.match(/\[(\d{1,2}):(\d{2})\]/);
-      if (match) {
-        const mins = parseInt(match[1]);
-        const secs = parseInt(match[2]);
-        const totalSecs = mins * 60 + secs;
-        return (
-          <span
-            key={i}
-            role="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              scrollToSegment(totalSecs);
-            }}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-mono text-[11px] font-bold transition-colors mx-0.5 border border-indigo-100 shadow-sm cursor-pointer select-none"
-          >
-            {part}
-          </span>
-        );
-      }
-      return part;
-    });
-  };
-
-  // Cấu hình custom cho ReactMarkdown
-  const MarkdownComponents = {
-    p: ({ children }: any) => <p className="mb-4 leading-relaxed">{React.Children.map(children, child => renderTextWithTimestamps(child))}</p>,
-    li: ({ children }: any) => <li className="mb-2">{React.Children.map(children, child => renderTextWithTimestamps(child))}</li>,
-    h1: ({ children }: any) => <h1 className="text-xl font-bold text-slate-900 mt-6 mb-3 border-b pb-1">{children}</h1>,
-    h2: ({ children }: any) => <h2 className="text-lg font-bold text-indigo-700 mt-5 mb-2">{children}</h2>,
-    h3: ({ children }: any) => <h3 className="text-base font-bold text-slate-800 mt-4 mb-2">{children}</h3>,
-  };
-
-  // Helper cho HTML Summary
-  const formatHtmlSummary = (html: string) => {
-    if (!html) return "";
-    return html.replace(/\[(\d{1,2}):(\d{2})\]/g, (match, mins, secs) => {
-      const totalSecs = parseInt(mins) * 60 + parseInt(secs);
-      // Sử dụng span thay vì button để tránh tab-focus/scroll behavior
-      return `<span role="button" class="timestamp-btn inline-block cursor-pointer select-none px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-mono text-[11px] font-bold border border-indigo-100 shadow-sm mx-0.5 hover:bg-indigo-100 transition-colors" data-time="${totalSecs}">${match}</span>`;
-    });
-  };
 
   // --- AUDIO CONTROL ---
   useEffect(() => {
@@ -970,146 +918,13 @@ export default function MeetingDetailState({
           </div>
         </div>
 
-        {/* COLUMN 2: SUMMARY & METADATA */}
-        <div className={`md:w-[400px] bg-slate-50 flex flex-col shrink-0 ${activeTab === 'summary' ? 'flex flex-1' : 'hidden md:flex'}`}>
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 pb-32">
-
-            {/* Summary Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-5">
-              <div className="flex items-center justify-between mb-4 pb-2 border-b border-orange-50">
-                <h3 className="text-sm font-bold text-orange-800 uppercase tracking-wider flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" /> AI Tóm tắt
-                </h3>
-                {!isReadOnly && (
-                  <Link
-                    href={`/minutes/${meeting.id}`}
-                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 hover:underline uppercase tracking-tight flex items-center gap-1 transition-colors"
-                  >
-                    <FileText className="w-3 h-3" /> Xem chi tiết
-                  </Link>
-                )}
-              </div>
-              {meeting.summary ? (
-                <div
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.classList.contains('timestamp-btn')) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const time = parseInt(target.getAttribute('data-time') || '0');
-                      scrollToSegment(time);
-                    }
-                  }}
-                >
-                  {meeting.summary.startsWith('<') ? (
-                    // If HTML, render directly
-                    <div
-                      className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none"
-                      dangerouslySetInnerHTML={{ __html: formatHtmlSummary(meeting.summary) }}
-                    />
-                  ) : (
-                    // If Markdown, use ReactMarkdown
-                    <div className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none">
-                      <ReactMarkdown components={MarkdownComponents as any}>{meeting.summary}</ReactMarkdown>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                  <Sparkles className="w-12 h-12 mb-2 opacity-20" />
-                  <p className="text-sm italic">Chưa có tóm tắt nào.</p>
-                  {!isReadOnly && (
-                    <button onClick={onEdit} className="mt-3 text-xs text-indigo-600 hover:underline font-medium">Tạo ngay trong Edit</button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Meeting Objectives Section */}
-            <div className="bg-white rounded-xl shadow-sm border p-5">
-              <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <AlignLeft className="w-4 h-4 text-indigo-500" /> Mục tiêu cuộc họp
-                </h3>
-                {!isReadOnly && (
-                  <button
-                    onClick={() => {
-                      if (isEditingObjectives) {
-                        setObjectivesInput(objectives);
-                        setIsEditingObjectives(false);
-                      } else {
-                        setIsEditingObjectives(true);
-                      }
-                    }}
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1"
-                  >
-                    {isEditingObjectives ? (
-                      <>Hủy</>
-                    ) : (
-                      <>
-                        <Edit3 className="w-3.5 h-3.5" /> Sửa
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-
-              {isEditingObjectives ? (
-                <div className="space-y-3">
-                  <textarea
-                    value={objectivesInput}
-                    onChange={(e) => setObjectivesInput(e.target.value)}
-                    placeholder="Nhập mục tiêu cuộc họp..."
-                    rows={3}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium text-slate-700 resize-none"
-                  />
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      onClick={async () => {
-                        try {
-                          setObjectives(objectivesInput);
-                          meeting.objectives = objectivesInput;
-                          await updateMeetingProcess(meeting.id, { objectives: objectivesInput.trim() || undefined });
-                          setIsEditingObjectives(false);
-                          toast.success("Đã cập nhật mục tiêu cuộc họp!");
-                        } catch (err) {
-                          toast.error("Lỗi khi lưu mục tiêu: " + (err as Error).message);
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm transition-all"
-                    >
-                      Lưu mục tiêu
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-600 leading-relaxed italic">
-                  {objectives ? objectives : "Chưa cấu hình mục tiêu cuộc họp."}
-                </p>
-              )}
-            </div>
-
-            {/* Metadata (Desktop Only) */}
-            <div className="bg-white rounded-xl shadow-sm border p-5 hidden md:block">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Metadata</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between border-b border-dashed border-slate-100 pb-2">
-                  <span className="text-slate-500">Duration</span>
-                  <span className="font-mono font-medium text-slate-700">{formatTimeCode(meeting.duration)}</span>
-                </div>
-                <div className="flex justify-between border-b border-dashed border-slate-100 pb-2">
-                  <span className="text-slate-500">Segments</span>
-                  <span className="font-mono font-medium text-slate-700">{meeting.segments.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Format</span>
-                  <span className="font-mono font-medium uppercase text-slate-700">AUDIO</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
+        <SummaryPanel
+          meeting={meeting}
+          isReadOnly={isReadOnly}
+          activeTab={activeTab}
+          onEdit={onEdit}
+          onScrollToSegment={scrollToSegment}
+        />
 
       </div>
 

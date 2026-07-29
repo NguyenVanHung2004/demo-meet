@@ -111,8 +111,20 @@ export const requestSummary = async (text: string, templateStructure?: string, o
   }
 };
 
+export interface RunPodJobStatus {
+  id?: string;
+  status: string;
+  output?: {
+    transcript?: string;
+    segments?: Record<string, unknown>[];
+    [key: string]: unknown;
+  };
+  error?: string;
+  [key: string]: unknown;
+}
+
 // --- HÀM 4: CHECK TRẠNG THÁI JOB ---
-export const checkJobStatusOnce = async (jobId: string): Promise<any> => {
+export const checkJobStatusOnce = async (jobId: string): Promise<RunPodJobStatus> => {
   try {
     const statusUrl = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/status/${jobId}`;
     const response = await fetch(statusUrl, {
@@ -130,7 +142,7 @@ export const checkJobStatusOnce = async (jobId: string): Promise<any> => {
 };
 
 // --- HÀM 5: HYBRID TRANSCRIPTION (RunPod Serverless) ---
-export const startHybridTranscriptionJob = async (audioUrl: string, diarization: any[], language: "vi" | "en" = "vi"): Promise<string> => {
+export const startHybridTranscriptionJob = async (audioUrl: string, diarization: Record<string, unknown>[], language: "vi" | "en" = "vi"): Promise<string> => {
   try {
     const response = await fetch(`https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`, {
       method: "POST",

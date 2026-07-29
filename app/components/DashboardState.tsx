@@ -4,23 +4,17 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   UploadCloud,
   Mic,
-  FileText,
   Trash2,
   FolderOpen,
-  AlertCircle,
   Loader2,
-  CheckCircle,
-  Sparkles,
   Search,
   Calendar,
   Clock,
-  MoreVertical,
   RotateCcw,
   Wand2,
   LogOut,
   ClipboardList,
   User,
-  Edit3,
   FileText as FileTextIcon,
   Bot,
   Database
@@ -35,6 +29,9 @@ import { useGlobalUI } from "../context/GlobalUIProvider";
 import { useAuth } from "../context/AuthContext";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import UploadModal from "./Dashboard/UploadModal";
+import LiveSetupModal from "./Dashboard/LiveSetupModal";
+import Badge from "./ui/Badge";
 type DashboardTab = "all" | "trash";
 
 export default function DashboardState({
@@ -294,50 +291,6 @@ export default function DashboardState({
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
-  };
-
-  // --- HELPER: Badge ---
-  const getStatusBadge = (m: Meeting) => {
-    switch (m.status) {
-      case "transcribing":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-            <Loader2 className="w-3 h-3 animate-spin" /> Đang xử lí
-          </span>
-        );
-      case "transcribed":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-100">
-            <FileText className="w-3 h-3" /> Đã ghi xong{" "}
-          </span>
-        );
-      case "summarizing":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-100">
-            <Sparkles className="w-3 h-3 animate-pulse" /> Đang tóm tắt
-          </span>
-        );
-      case "completed":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-100">
-            <CheckCircle className="w-3 h-3" /> Hoàn thành
-          </span>
-        );
-      case "failed":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 border border-red-100">
-            <AlertCircle className="w-3 h-3" /> Lỗi
-          </span>
-        );
-      case "draft":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
-            <Edit3 className="w-3 h-3" /> Bản nháp
-          </span>
-        );
-      default:
-        return null;
-    }
   };
 
   const formatDuration = (sec: number) => {
@@ -732,7 +685,7 @@ export default function DashboardState({
                                 "vi-VN"
                               )}
                             </td>
-                            <td className="px-6 py-4">{getStatusBadge(m)}</td>
+                            <td className="px-6 py-4"><Badge status={m.status} /></td>
                             <td className="px-6 py-4 text-right">
                               <div className="flex justify-end gap-2 transition-opacity">
                                 {currentTab === "all" ? (
@@ -863,7 +816,7 @@ export default function DashboardState({
                             </span>
                           </div>
                           <div className="flex justify-between items-center pt-1">
-                            {getStatusBadge(m)}
+                            <Badge status={m.status} />
                             {currentTab === "all" && (
                               <div className="flex gap-2">
                                 {["completed", "transcribed", "failed"].includes(
@@ -981,151 +934,40 @@ export default function DashboardState({
           </button>
         </div>
       </div>
-      {/* Upload Confirmation Modal */}
       {selectedFileForUpload && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xl w-full max-w-lg p-6 md:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-200">
-            <div>
-              <h2 className="text-xl font-bold text-slate-800">Cấu hình tải file lên</h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Tệp: <span className="font-semibold text-slate-700">{selectedFileForUpload.name}</span> ({(selectedFileForUpload.size / (1024 * 1024)).toFixed(2)} MB)
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              {/* Custom Title */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Tiêu đề cuộc họp</label>
-                <input
-                  type="text"
-                  value={uploadTitle}
-                  onChange={(e) => setUploadTitle(e.target.value)}
-                  placeholder="Nhập tên cuộc họp..."
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium text-slate-700"
-                />
-              </div>
-
-              {/* Language Selector */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Ngôn ngữ ghi âm</label>
-                <select
-                  value={uploadLanguageState}
-                  onChange={(e) => setUploadLanguageState(e.target.value as "vi" | "en")}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium text-slate-700"
-                >
-                  <option value="vi">🇻🇳 Tiếng Việt</option>
-                  <option value="en">🇬🇧 English</option>
-                </select>
-              </div>
-
-              {/* Objectives Textarea */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Mục tiêu cuộc họp (Objectives)</label>
-                <textarea
-                  value={uploadObjectives}
-                  onChange={(e) => setUploadObjectives(e.target.value)}
-                  placeholder="Nhập mục tiêu để AI bám sát và tóm tắt cuộc họp chuẩn hơn..."
-                  rows={4}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium text-slate-700 resize-none animate-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => {
-                  setSelectedFileForUpload(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                className="flex-1 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold transition-all text-sm"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                onClick={() => {
-                  onImport(selectedFileForUpload, uploadLanguageState, uploadTitle, uploadObjectives);
-                  setSelectedFileForUpload(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all text-sm shadow-lg shadow-indigo-100"
-              >
-                Bắt đầu tải lên
-              </button>
-            </div>
-          </div>
-        </div>
+        <UploadModal
+          selectedFile={selectedFileForUpload}
+          uploadTitle={uploadTitle}
+          uploadObjectives={uploadObjectives}
+          uploadLanguage={uploadLanguageState}
+          onTitleChange={setUploadTitle}
+          onObjectivesChange={setUploadObjectives}
+          onLanguageChange={setUploadLanguageState}
+          onConfirm={() => {
+            onImport(selectedFileForUpload, uploadLanguageState, uploadTitle, uploadObjectives);
+            setSelectedFileForUpload(null);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+          }}
+          onCancel={() => {
+            setSelectedFileForUpload(null);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+          }}
+        />
       )}
-      {/* Live Recording Setup Modal */}
       {showLiveSetupModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xl w-full max-w-lg p-6 md:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-200">
-            <div>
-              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <Mic className="w-5 h-5 text-red-500 animate-pulse" /> Cấu hình ghi âm trực tiếp
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Thiết lập thông tin cuộc họp trước khi bắt đầu thu âm trực tiếp
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              {/* Custom Title */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Tiêu đề cuộc họp</label>
-                <input
-                  type="text"
-                  value={liveTitle}
-                  onChange={(e) => setLiveTitle(e.target.value)}
-                  placeholder="Nhập tên cuộc họp..."
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-sm font-medium text-slate-700"
-                />
-              </div>
-
-              {/* Language Selector */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Ngôn ngữ phiên âm</label>
-                <select
-                  value={liveLanguageState}
-                  onChange={(e) => setLiveLanguageState(e.target.value as "vi" | "en")}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-sm font-medium text-slate-700"
-                >
-                  <option value="vi">🇻🇳 Tiếng Việt</option>
-                  <option value="en">🇬🇧 English</option>
-                </select>
-              </div>
-
-              {/* Objectives Textarea */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Mục tiêu cuộc họp (Objectives)</label>
-                <textarea
-                  value={liveObjectives}
-                  onChange={(e) => setLiveObjectives(e.target.value)}
-                  placeholder="Nhập mục tiêu để AI bám sát và tóm tắt cuộc họp chuẩn hơn..."
-                  rows={4}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-sm font-medium text-slate-700 resize-none animate-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setShowLiveSetupModal(false)}
-                className="flex-1 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold transition-all text-sm"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                onClick={() => {
-                  onLive(liveLanguageState, liveTitle, liveObjectives);
-                  setShowLiveSetupModal(false);
-                }}
-                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-all text-sm shadow-lg shadow-red-100 flex items-center justify-center gap-1.5"
-              >
-                <Mic className="w-4 h-4" /> Bắt đầu ghi âm
-              </button>
-            </div>
-          </div>
-        </div>
+        <LiveSetupModal
+          liveTitle={liveTitle}
+          liveObjectives={liveObjectives}
+          liveLanguage={liveLanguageState}
+          onTitleChange={setLiveTitle}
+          onObjectivesChange={setLiveObjectives}
+          onLanguageChange={setLiveLanguageState}
+          onConfirm={() => {
+            onLive(liveLanguageState, liveTitle, liveObjectives);
+            setShowLiveSetupModal(false);
+          }}
+          onCancel={() => setShowLiveSetupModal(false)}
+        />
       )}
     </div>
   );

@@ -2,16 +2,17 @@
 
 import { useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getActiveTranscribingMeetings, subscribeToActiveMeetings, updateMeetingProcess } from "../lib/db";
+import { subscribeToActiveMeetings, updateMeetingProcess } from "../lib/db";
+import type { Meeting, Segment, Speaker } from "../lib/db";
+import { deleteField } from "firebase/firestore";
 import { checkJobStatusOnce } from "../lib/api";
 import { parseTranscriptFile } from "../lib/parser";
-import { deleteField } from "firebase/firestore";
-import { formatTranscriptText, formatWords } from "../lib/utils";
+import { formatWords, formatTranscriptText } from "../lib/utils";
 
 export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
   const { user } = useAuth();
   // Ref để lưu danh sách các job đang active (từ Firestore)
-  const activeJobsRef = useRef<any[]>([]);
+  const activeJobsRef = useRef<Meeting[]>([]);
 
   // 1. LISTEN: Lắng nghe danh sách job 'transcribing' từ Firestore (Real-time)
   useEffect(() => {
@@ -55,22 +56,26 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
         // --- XỬ LÝ KHI THÀNH CÔNG ---
         if (jobData.status === 'COMPLETED') {
           if (jobData.output) {
-            let finalSegments: any[] = [];
-            let finalSpeakers: any[] = [];
+            let finalSegments: Segment[] = [];
+            let finalSpeakers: Speaker[] = [];
 
             // [LOGIC CŨ GIỮ NGUYÊN] Xử lý output JSON (Karaoke) hoặc Text
             const rawOutput = jobData.output;
-            const jsonSegments = rawOutput.transcript || rawOutput.segments || (Array.isArray(rawOutput) ? rawOutput : null);
+            const rawSegments = Array.isArray(rawOutput.transcript)
+              ? (rawOutput.transcript as Record<string, unknown>[])
+              : rawOutput.segments;
+            const jsonSegments: Record<string, unknown>[] | null =
+              rawSegments || (Array.isArray(rawOutput) ? (rawOutput as Record<string, unknown>[]) : null);
 
             if (jsonSegments && jsonSegments.length > 0) {
-              finalSegments = jsonSegments.map((s: any) => ({
+              finalSegments = jsonSegments.map((s: Record<string, unknown>) => ({
                 ...s,
-                text: formatTranscriptText(s.text),
-                words: formatWords(s.words || [])
-              }));
+                text: formatTranscriptText(s.text as string),
+                words: formatWords((s.words || []) as any[])
+              })) as Segment[];
 
               // Tạo Speaker giả lập từ ID
-              const uniqueIds = Array.from(new Set(finalSegments.map((s: any) => s.speakerId)));
+              const uniqueIds = Array.from(new Set(finalSegments.map((s: Segment) => s.speakerId)));
               const colors = [
                 "bg-indigo-50 text-indigo-700 border-indigo-200",
                 "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -78,7 +83,7 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
                 "bg-pink-50 text-pink-700 border-pink-200"
               ];
 
-              finalSpeakers = uniqueIds.map((id: any, index) => ({
+              finalSpeakers = uniqueIds.map((id: string, index: number) => ({
                 id: id,
                 name: `Người nói ${index + 1}`,
                 color: colors[index % colors.length]
@@ -108,7 +113,7 @@ export default function PollingManager({ onUpdate }: { onUpdate: () => void }) {
               } catch (error) {
                 console.warn("⚠️ Firestore 1MB limit hit. Đang thử lược bỏ mảng words để giảm dung lượng...", error);
                 try {
-                  const lightSegments = finalSegments.map((s: any) => {
+                  const lightSegments = finalSegments.map((s: Segment) => {
                     const { words, ...rest } = s;
                     return rest;
                   });

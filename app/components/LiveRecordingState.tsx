@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, Pause, ChevronLeft, Save, Sparkles, AlignLeft, Trash2, Loader2, MonitorPlay, Link as LinkIcon, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, Save, Sparkles, AlignLeft, Trash2, Loader2, Link as LinkIcon, CheckCircle2 } from "lucide-react";
 import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api";
 import { saveMeeting, createLiveSession, updateLiveSession, endLiveSession } from "../lib/db";
 import { useAuth } from "../context/AuthContext";
 import useLocalTranscription from "../hooks/useLocalTranscription";
 import { useGlobalUI } from "../context/GlobalUIProvider";
+import LiveControls from "./Live/Controls";
 
 type SummaryItem = {
   id: number;
@@ -15,7 +16,14 @@ type SummaryItem = {
   timestamp?: number;
 };
 
-const MobileTabBtn = ({ active, onClick, icon: Icon, label }: any) => (
+interface MobileTabBtnProps {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}
+
+const MobileTabBtn = ({ active, onClick, icon: Icon, label }: MobileTabBtnProps) => (
   <button
     onClick={onClick}
     className={`flex-1 py-2 text-sm font-medium flex items-center justify-center gap-2 rounded-lg transition-all ${active ? "bg-white text-indigo-600 shadow-sm border border-slate-200" : "text-slate-500 hover:bg-slate-100"
@@ -49,12 +57,12 @@ export default function LiveRecordingState({
   const liveSessionIdRef = useRef<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
-  const wakeLockRef = useRef<any>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   const requestWakeLock = async () => {
     try {
       if ('wakeLock' in navigator) {
-        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
       }
     } catch (err) {
       console.warn(`Wake Lock error: ${err}`);
@@ -329,9 +337,9 @@ export default function LiveRecordingState({
   useEffect(() => { if (mobileTab === 'summary') summariesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [summaries, mobileTab]);
   useEffect(() => { if (mobileTab === 'transcript') transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [segments, interimContent, mobileTab]);
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (isListening) interval = setInterval(() => setTimer(t => t + 1), 1000);
-    return () => clearInterval(interval);
+    return () => { if (interval !== null) clearInterval(interval); };
   }, [isListening]);
   const setupVisualizer = (stream: MediaStream) => {
     let audioCtx = audioContextRef.current;
@@ -741,43 +749,14 @@ export default function LiveRecordingState({
       <div className="flex-1 overflow-hidden flex flex-col md:flex-row p-4 gap-4 md:gap-6">
         {/* LEFT COLUMN */}
         <div className="flex-1 flex flex-col gap-4 min-h-0">
-          {/* VISUALIZER & CONTROLS */}
-          <div className="bg-slate-900 rounded-2xl p-4 pt-14 md:p-6 shadow-lg shrink-0 flex items-center justify-between gap-4 md:flex-col md:justify-center md:h-64 transition-all relative overflow-hidden">
-
-            {/* [FEATURE] System Audio Toggle */}
-            <div className="absolute top-3 right-4 md:top-4 md:right-4 z-10">
-              <button
-                onClick={() => !isListening && toggleCaptureSystemAudio()}
-                disabled={isListening} // Không cho đổi khi đang ghi
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${captureSystemAudio
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-green-500/20 shadow-lg'
-                  : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
-                  }`}
-                title="Thu âm cả tiếng từ tab Google Meet/Youtube (Cần chọn tab)"
-              >
-                <MonitorPlay className="w-4 h-4" />
-                {captureSystemAudio ? "Đã bật thu Tab" : "Thu âm Tab"}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-center gap-1 h-12 md:h-32 flex-1 md:w-full">
-              {[...Array(20)].map((_, i) => {
-                const height = isListening ? Math.min(100, Math.max(15, volume * (1 + Math.random()) * 2)) : 5;
-                return <div key={i} className="w-1.5 md:w-2 bg-indigo-500 rounded-full transition-all duration-75" style={{ height: `${height}%` }}></div>
-              })}
-            </div>
-
-            <div className="flex flex-col items-center gap-3">
-              <button onClick={handleToggleRecord} className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center text-white shadow-xl border-4 border-slate-800 transition-transform active:scale-95 shrink-0 ${isListening ? 'bg-yellow-500 animate-pulse' : 'bg-red-600'}`}>
-                {isListening ? <Pause className="w-5 h-5 md:w-6 md:h-6" /> : <Mic className="w-5 h-5 md:w-6 md:h-6" />}
-              </button>
-              {!isListening && (
-                <p className="text-slate-500 text-xs animate-pulse">
-                  {captureSystemAudio ? "Sẵn sàng (Mic + Tab Audio)" : "Sẵn sàng (Mic Only)"}
-                </p>
-              )}
-            </div>
-          </div>
+          <LiveControls
+            isListening={isListening}
+            volume={volume}
+            captureSystemAudio={captureSystemAudio}
+            onToggleRecord={handleToggleRecord}
+            onToggleCaptureSystemAudio={toggleCaptureSystemAudio}
+            canToggleSystemAudio={!isListening}
+          />
 
           {/* TRANSCRIPT */}
           <div className="flex md:hidden bg-slate-200 p-1 rounded-xl shrink-0">

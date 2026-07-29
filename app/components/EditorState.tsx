@@ -3,16 +3,17 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
   Play, Pause, ChevronLeft, Save, Sparkles, X,
-  FileText, Copy, Check, Keyboard, ArrowRight,
+  FileText, Copy, Check,
   Plus, Trash2, Pencil, Type, Eye, Users,
   RotateCcw, RotateCw, LayoutTemplate
 } from "lucide-react";
-import TranscriptRow from "./TranscriptRow";
 import { Meeting, saveMeeting, updateMeetingTitle } from "../lib/db";
+import type { Word } from "../lib/mockData";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { useAuth } from "../context/AuthContext";
 import { MeetingTemplate, DEFAULT_TEMPLATES } from "../lib/templates";
 import TemplateManagerModal from "./TemplateManagerModal";
+import SegmentList from "./Editor/SegmentList";
 
 export default function EditorState({
   audioSrc,
@@ -191,8 +192,8 @@ export default function EditorState({
 
     // 1. Tính toán thời điểm cắt (Split Time)
     // Nếu có mảng words, ta sẽ tìm chính xác điểm cắt dựa vào cursorIndex
-    let words1: any[] = [];
-    let words2: any[] = [];
+    let words1: Word[] = [];
+    let words2: Word[] = [];
     let newMidTime = original.start + ((original.end - original.start) * 0.5);
     
     let text1 = original.text.slice(0, cursorIndex).trim();
@@ -204,12 +205,11 @@ export default function EditorState({
       
       for (let i = 0; i < original.words.length; i++) {
         const wordLen = original.words[i].word.length;
-        // Chia đôi word: nếu cursor quá nửa từ thì đẩy từ đó lên dòng trên, ngược lại xuống dòng dưới
         if (charCount + (wordLen / 2) > cursorIndex) {
           splitIdx = i;
           break;
         }
-        charCount += wordLen + 1; // +1 cho space
+        charCount += wordLen + 1;
       }
 
       words1 = original.words.slice(0, splitIdx);
@@ -221,9 +221,8 @@ export default function EditorState({
         newMidTime = words1[words1.length - 1].end;
       }
 
-      // Snap text theo word để tránh desync
-      text1 = words1.length > 0 ? words1.map((w: any) => w.word).join(" ") : text1;
-      text2 = words2.length > 0 ? words2.map((w: any) => w.word).join(" ") : text2;
+      text1 = words1.length > 0 ? words1.map((w: Word) => w.word).join(" ") : text1;
+      text2 = words2.length > 0 ? words2.map((w: Word) => w.word).join(" ") : text2;
     } else {
       const splitRatio = original.text.length > 0 ? cursorIndex / original.text.length : 0.5;
       newMidTime = original.start + ((original.end - original.start) * splitRatio);
@@ -551,33 +550,21 @@ export default function EditorState({
         <div className="flex-1 overflow-y-auto bg-slate-100/50 scroll-smooth relative">
           <div className="max-w-3xl mx-auto min-h-full bg-white border-x shadow-sm pb-32">
 
-            {/* MODE: EDIT */}
             {mobileTab === 'edit' && (
-              <div className="p-4 md:p-8 space-y-2">
-                {segments.map((seg) => {
-                  const currentSpeaker = speakers.find(s => s.id === seg.speakerId) || speakers[0];
-                  const isActive = currentTime >= seg.start && currentTime <= seg.end;
-                  return (
-                    <TranscriptRow
-                      key={seg.id}
-                      segment={seg}
-                      speaker={currentSpeaker}
-                      allSpeakers={speakers}
-                      isActive={isActive}
-                      currentTime={currentTime}
-                      isAudioPlaying={isPlaying}
-                      onTogglePlay={togglePlay}
-                      onSeek={seekTo}
-                      onTextChange={handleUpdateText}
-                      onSpeakerChange={handleChangeSpeaker}
-                      onSplit={handleSplitSegment}
-                      onMerge={handleMergeSegment}
-                      onAddRow={handleAddRow}
-                      onTimeChange={handleTimeChange}
-                    />
-                  );
-                })}
-              </div>
+              <SegmentList
+                segments={segments}
+                speakers={speakers}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+                onTogglePlay={togglePlay}
+                onSeek={seekTo}
+                onTextChange={handleUpdateText}
+                onSpeakerChange={handleChangeSpeaker}
+                onSplit={handleSplitSegment}
+                onMerge={handleMergeSegment}
+                onAddRow={handleAddRow}
+                onTimeChange={handleTimeChange}
+              />
             )}
 
             {/* MODE: PREVIEW (Read Only) */}
