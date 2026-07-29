@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState, useEffect, useRef } from "react";
-import { Sparkles, AlignLeft } from "lucide-react";
+import { Sparkles, AlignLeft, AlertCircle } from "lucide-react";
 import { requestSegmentSummary, uploadAudioToFirebase } from "../lib/api";
 import { saveMeeting, createLiveSession, updateLiveSession, endLiveSession } from "../lib/db";
 import { useAuth } from "../context/AuthContext";
@@ -190,7 +190,7 @@ export default function LiveRecordingState({
     }, timeoutMs);
   }, [flushBuffer]);
 
-  const { segments, interimContent, isListening, startListening, stopListening, resetTranscript } = useLocalTranscription(handleDeepgramFinal);
+  const { segments, interimContent, isListening, connectionError, startListening, stopListening, resetTranscript } = useLocalTranscription(handleDeepgramFinal);
 
 
   useEffect(() => {
@@ -691,6 +691,13 @@ export default function LiveRecordingState({
       {/* BODY */}
       <div className="flex-1 overflow-hidden flex flex-col md:flex-row p-4 gap-4 md:gap-6">
         <div className="flex-1 flex flex-col gap-4 min-h-0">
+          {connectionError && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium p-3 rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {connectionError}
+            </div>
+          )}
+
           <LiveControls
             isListening={isListening}
             volume={volume}

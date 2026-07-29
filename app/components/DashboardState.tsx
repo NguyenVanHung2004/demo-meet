@@ -12,11 +12,11 @@ import { useGlobalUI } from "../context/GlobalUIProvider";
 import { useAuth } from "../context/AuthContext";
 import UploadModal from "./Dashboard/UploadModal";
 import LiveSetupModal from "./Dashboard/LiveSetupModal";
-import Sidebar from "./Dashboard/Sidebar";
 import Header from "./Dashboard/Header";
 import StatsCards from "./Dashboard/StatsCards";
 import MeetingListView from "./Dashboard/MeetingListView";
 import { MEETING_STATUS } from "../lib/constants";
+import { Trash2 } from "lucide-react";
 type DashboardTab = "all" | "trash";
 
 export default function DashboardState({
@@ -305,22 +305,43 @@ export default function DashboardState({
   }, []);
 
   return (
-    <div className="flex h-full bg-slate-50 overflow-hidden relative font-sans">
-      <Sidebar currentTab={currentTab} onTabChange={handleTabChange} onLogout={logout} />
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+      {/* Inline tab switcher (replaces sidebar All/Trash) */}
+      <div className="flex items-center gap-4 px-4 md:px-8 py-3 bg-white border-b shrink-0">
+        <button
+          onClick={() => handleTabChange("all")}
+          className={`text-sm font-bold px-4 py-2 rounded-lg transition-colors ${
+            currentTab === "all"
+              ? "bg-indigo-600 text-white shadow-sm"
+              : "text-slate-500 hover:bg-slate-100"
+          }`}
+        >
+          Tất cả cuộc họp
+        </button>
+        <button
+          onClick={() => handleTabChange("trash")}
+          className={`text-sm font-bold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 ${
+            currentTab === "trash"
+              ? "bg-red-600 text-white shadow-sm"
+              : "text-slate-500 hover:bg-slate-100"
+          }`}
+        >
+          <Trash2 className="w-4 h-4" /> Thùng rác
+        </button>
+      </div>
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <Header
-          currentTab={currentTab}
-          liveLanguage={liveLanguage}
-          onLive={onLive}
-          onOpenDrive={onOpenDrive}
-          onOpenBot={onOpenBot}
-          onLogout={logout}
-        />
+      <Header
+        currentTab={currentTab}
+        liveLanguage={liveLanguage}
+        onLive={onLive}
+        onOpenDrive={onOpenDrive}
+        onOpenBot={onOpenBot}
+        onLogout={logout}
+      />
 
-        {/* SCROLLABLE AREA */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
-          {currentTab === "all" && (
+      {/* SCROLLABLE AREA */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
+        {currentTab === "all" && (
             <StatsCards
               uploadLanguage={uploadLanguage}
               liveLanguage={liveLanguage}
@@ -382,8 +403,6 @@ export default function DashboardState({
               setShowLiveSetupModal(true);
             }}
           />
-      </div>
-
       </div>
 
       {selectedFileForUpload && (

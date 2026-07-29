@@ -46,11 +46,17 @@ export interface Meeting {
 
 const COLLECTION_NAME = "meetings";
 
+const stripUndefined = (obj: Record<string, unknown>): Record<string, unknown> => {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  );
+};
+
 export const saveMeeting = async (meeting: Meeting) => {
   try {
     const docRef = doc(db, COLLECTION_NAME, meeting.id);
-    const cleanData = structuredClone(meeting);
-    await setDoc(docRef, cleanData);
+    const cleanData = structuredClone(meeting) as unknown as Record<string, unknown>;
+    await setDoc(docRef, stripUndefined(cleanData));
   } catch (error) {
     console.warn("⚠️ Lỗi lưu meeting (có thể do limit 1MB). Đang thử giảm dung lượng...", error);
     try {
@@ -60,8 +66,8 @@ export const saveMeeting = async (meeting: Meeting) => {
         return rest;
       });
       const lightMeeting = { ...meeting, segments: lightSegments };
-      const cleanData = structuredClone(lightMeeting);
-      await setDoc(docRef, cleanData);
+      const cleanData = structuredClone(lightMeeting) as unknown as Record<string, unknown>;
+      await setDoc(docRef, stripUndefined(cleanData));
     } catch (fallbackError) {
       console.error("Vẫn lỗi sau khi giảm dung lượng:", fallbackError);
       throw fallbackError;
@@ -145,7 +151,7 @@ export const getMeetingByShareId = async (shareId: string): Promise<Meeting | un
 
 export const updateMeetingProcess = async (id: string, updates: Partial<Meeting>) => {
   const docRef = doc(db, COLLECTION_NAME, id);
-  await updateDoc(docRef, updates);
+  await updateDoc(docRef, stripUndefined(updates as unknown as Record<string, unknown>));
 };
 
 export const toggleTrashMeeting = async (id: string, isDeleted: boolean) => {

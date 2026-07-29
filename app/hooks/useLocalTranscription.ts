@@ -62,6 +62,7 @@ export default function useLocalTranscription(
     const [segments, setSegments] = useState<TranscriptSegment[]>([]);
     const [interimContent, setInterimContent] = useState<string>("");
     const [isListening, setIsListening] = useState(false);
+    const [connectionError, setConnectionError] = useState<string | null>(null);
 
     // --- REFS ---
     const socketRef = useRef<WebSocket | null>(null);
@@ -90,14 +91,16 @@ export default function useLocalTranscription(
         const ws = new WebSocket(finalUrl);
         socketRef.current = ws;
 
-        ws.onopen = () => {};
+        ws.onopen = () => { setConnectionError(null); };
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
                 handleServerResponse(data);
             } catch (e) { console.error("Parse error:", e); }
         };
-        ws.onerror = (e) => console.error("WS Error:", e);
+        ws.onerror = () => {
+            setConnectionError("Không thể kết nối đến server xử lý giọng nói. Kiểm tra lại kết nối mạng.");
+        };
 
         // 3. AUDIO PROCESSING (Raw Int16 16kHz)
         const audioContext = new AudioContext();
@@ -227,5 +230,5 @@ export default function useLocalTranscription(
         setInterimContent("");
     };
 
-    return { segments, interimContent, isListening, startListening, stopListening, resetTranscript };
+    return { segments, interimContent, isListening, connectionError, startListening, stopListening, resetTranscript };
 }

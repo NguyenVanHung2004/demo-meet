@@ -741,7 +741,7 @@ export default function MeetingDetailState({
 
       <Breadcrumb
         items={[
-          { label: "Dashboard", onClick: onBack },
+          { label: "Dashboard", href: "/" },
           { label: meeting?.title || "Cuộc họp" },
         ]}
       />

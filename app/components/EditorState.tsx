@@ -450,7 +450,7 @@ export default function EditorState({
 
       <Breadcrumb
         items={[
-          { label: "Dashboard", onClick: onBack },
+          { label: "Dashboard", href: "/" },
           { label: `Sửa: ${title || ""}` },
         ]}
       />

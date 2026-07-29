@@ -4,6 +4,7 @@
 > - [`PHASE_3.md`](./PHASE_3.md) — Structure + Type Safety + Migration (đã hoàn thành)
 > - [`PHASE_4.md`](./PHASE_4.md) — Performance (đã hoàn thành)
 > - [`PHASE_5.md`](./PHASE_5.md) — UI Polish (đã hoàn thành)
+> - [`PHASE_6.md`](./PHASE_6.md) — Routing (đang thực hiện)
 
 > **Context dự án:**
 > - Tech: Next.js 16, Tailwind v4, Firebase (Firestore + Auth + Storage), RunPod ASR, Gemini AI, MeetingBaas, Zipformer WebSocket
@@ -572,7 +573,7 @@ export type MeetingStatus = typeof MEETING_STATUS[keyof typeof MEETING_STATUS];
 
 ---
 
-## PHASE 6: ROUTING — SPA → PROPER ROUTES (5-7 ngày)
+## ✅ PHASE 6: ROUTING — SPA → PROPER ROUTES (5-7 ngày) [HOÀN THÀNH]
 
 > **⚠️ Thay đổi kiến trúc lớn nhất.** Test kỹ trên Vercel preview 1 tuần trước khi merge main.
 
@@ -662,7 +663,7 @@ export function middleware(request: NextRequest) {
 | 3 | Cấu trúc + Type safety + Migration | 3-4 ngày | 🟡 Cao | Phase 1A, 1B | ✅ Hoàn thành |
 | 4 | Performance | 3-4 ngày | 🟡 Trung bình | Phase 3 | ✅ Hoàn thành |
 | 5 | UI Polish | 2-3 ngày | 🟢 Thấp | Phase 3 | ✅ Hoàn thành |
-| 6 | Routing (kéo dài) | 5-7 ngày | 🟢 Thấp | Phase 3 | 🔜 |
+| 6 | Routing (kéo dài) | 5-7 ngày | 🟢 Thấp | Phase 3 | ✅ Hoàn thành |
 
 **Tổng: ~20-27 ngày** (gồm manual testing time)
 
