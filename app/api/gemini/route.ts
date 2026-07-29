@@ -1,22 +1,35 @@
 // app/api/gemini/route.ts
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
-// --- BẮT ĐẦU ĐOẠN CODE MỚI ---
-const PRIMARY_MODEL = "gemini-2.5-flash"; // Model chính
-const BACKUP_MODEL = "gemini-1.5-flash"; // Model dự phòng
+const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
+const BASE_URL = "https://opencode.ai/zen/go/v1";
+const MODEL = "mimo-v2.5";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function generateWithRetry(modelName: string, prompt: string, retries = 3) {
-  const model = genAI.getGenerativeModel({ model: modelName });
+async function generateWithRetry(prompt: string, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const result = await model.generateContent(prompt);
-      return (await result.response).text();
+      const response = await fetch(`${BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 8192,
+        }),
+      });
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => "");
+        throw new Error(`API error: ${response.status} ${response.statusText} — ${errorBody}`);
+      }
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || "";
     } catch (error: any) {
-      if (attempt < retries && (error.status === 503 || error.status >= 500)) {
+      if (attempt < retries) {
         await delay(1000 * attempt);
         continue;
       }
@@ -24,15 +37,6 @@ async function generateWithRetry(modelName: string, prompt: string, retries = 3)
     }
   }
   throw new Error("Retry failed");
-}
-
-async function generateContentSafe(prompt: string) {
-  try {
-    return await generateWithRetry(PRIMARY_MODEL, prompt);
-  } catch (error) {
-    console.warn("Model chính lỗi, chuyển sang backup...");
-    return await generateWithRetry(BACKUP_MODEL, prompt);
-  }
 }
 
 export async function POST(req: Request) {
@@ -47,7 +51,7 @@ export async function POST(req: Request) {
 
     if (mode === "extract_json") {
       const deptListStr = departments?.join(", ") || "";
-      const teamListStr = teams?.join(", ") || ""; // [MỚI]
+      const teamListStr = teams?.join(", ") || "";
       prompt = `
       Bạn là trợ lý AI chuyên trích xuất công việc (Action Item) từ biên bản cuộc họp.
       THÔNG TIN NGỮ CẢNH:
@@ -88,7 +92,7 @@ export async function POST(req: Request) {
       ]
       QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
-      const rawText = await generateContentSafe(prompt);
+      const rawText = await generateWithRetry(prompt);
       const cleanText = rawText.replace(/```json|```/g, "").trim();
       return NextResponse.json({ summary: cleanText });
     } else if (mode === "segment") {
@@ -145,7 +149,6 @@ export async function POST(req: Request) {
       4. Sử dụng format Markdown cho câu trả lời dễ đọc (bold, list...).
       `;
     } else {
-      // [PROMPT NÂNG CẤP] Cho tóm tắt tổng hợp (Full Summary)
       const structureInstruction = templateStructure || `
       # BIÊN BẢN TÓM TẮT CUỘC HỌP
 
@@ -202,13 +205,14 @@ export async function POST(req: Request) {
       `;
     }
 
-    const summary = await generateContentSafe(prompt);
+    const summary = await generateWithRetry(prompt);
     return NextResponse.json({ summary });
 
   } catch (error: any) {
+    console.error("Gemini route error:", error);
     const errorMessage = error.status === 503
       ? "Hệ thống AI đang quá tải, vui lòng thử lại sau."
       : (error.message || "Lỗi xử lý AI.");
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: errorMessage, detail: error.message }, { status: 500 });
   }
 }

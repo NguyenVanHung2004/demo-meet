@@ -230,7 +230,7 @@ export default function AIChatModal({ isOpen, onClose, onClearContext, contextTe
                         </button>
                     </div>
                     <p className="text-center text-xs text-slate-400 mt-3 flex items-center justify-center gap-1">
-                        <Sparkles className="w-3 h-3" /> Powered by Gemini AI
+                        <Sparkles className="w-3 h-3" /> Powered by DeepSeek V4
                     </p>
                 </div>
             </div>
