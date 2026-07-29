@@ -20,8 +20,8 @@ export default function BotJoinModal({ isOpen, onClose, onUpdate }: { isOpen: bo
     const [objectives, setObjectives] = useState("");
 
     const validateMeetingUrl = (url: string): boolean => {
-        const googleMeetRegex = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/;
-        const zoomRegex = /^https:\/\/(?:[\w-]+\.)?zoom\.(?:us|com|gov)\/j\/\d+/;
+        const googleMeetRegex = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i;
+        const zoomRegex = /^https:\/\/(?:[\w-]+\.)?zoom\.(?:us|com|gov)\/j\/[\w-]+/i;
         return googleMeetRegex.test(url) || zoomRegex.test(url);
     };
 

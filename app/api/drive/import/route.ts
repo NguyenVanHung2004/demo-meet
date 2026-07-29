@@ -79,7 +79,7 @@ export async function POST(request: Request) {
 
         const [signedUrl] = await fileRef.getSignedUrl({
             action: 'read',
-            expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+            expires: Date.now() + 365 * 24 * 60 * 60 * 1000,
         });
 
         const jobId = await startTranscriptionJob(signedUrl);

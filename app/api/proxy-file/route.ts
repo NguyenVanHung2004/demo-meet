@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { lookup } from 'dns/promises';
+import { checkRateLimit } from '@/app/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,12 @@ async function validateUrl(target: string): Promise<string | null> {
 }
 
 export async function GET(request: Request) {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const { allowed } = checkRateLimit(`proxy-file:${ip}`, 30, 60 * 1000);
+    if (!allowed) {
+        return new NextResponse('Too many requests', { status: 429 });
+    }
+
     const { searchParams } = new URL(request.url);
     const url = searchParams.get('url');
 
