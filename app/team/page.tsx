@@ -2,14 +2,17 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft, Plus, Trash2, Edit2, Search, Users,
-  Briefcase, Building2, Save, X, ChevronRight, ChevronDown, User, FolderTree
-} from "lucide-react";
+import { Plus, Users, ChevronRight, ChevronDown, Building2, Search, Edit2, Trash2, X, Save } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useGlobalUI } from "../context/GlobalUIProvider";
-// THÊM: import hàm lấy danh sách phòng ban existing
 import { getMembers, saveMember, deleteMember, getExistingDepartments, Member } from "../lib/db";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import Avatar from "../components/ui/Avatar";
+import EmptyState from "../components/ui/EmptyState";
+import Spinner from "../components/ui/Spinner";
+import MemberFormModal from "../components/Team/MemberFormModal";
 
 // Danh sách gợi ý mặc định (Base suggestions)
 const DEFAULT_DEPARTMENTS = [
@@ -183,42 +186,22 @@ export default function TeamPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
-      {/* HEADER - Giữ nguyên */}
-      <header className="bg-white border-b px-4 py-3 md:px-6 md:py-4 flex items-center justify-between sticky top-0 z-10 gap-2">
-        <div className="flex items-center gap-2 md:gap-4 min-w-0">
-          <button
-            onClick={() => router.push("/")}
-            className="p-1.5 md:p-2 hover:bg-slate-100 rounded-full text-slate-500 transition shrink-0"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="min-w-0">
-            <h1 className="text-lg md:text-xl font-bold flex items-center gap-1.5 md:gap-2 truncate">
-              <Users className="w-5 h-5 md:w-6 md:h-6 text-indigo-600 shrink-0" />
-              <span className="truncate">Quản lý Nhân sự</span>
-            </h1>
-            <p className="text-[10px] md:text-xs text-slate-500 truncate sm:block">Danh bạ dùng để giao việc tự động</p>
-          </div>
-        </div>
-        <button
-          onClick={() => openModal()}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 md:px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 md:gap-2 text-sm shadow-sm transition shrink-0"
-        >
-          <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Thêm</span><span className="hidden lg:inline"> nhân sự</span>
-        </button>
-      </header>
+      {/* HEADER */}
+      <PageHeader
+        variant="default"
+        sticky
+        onBack={() => router.push("/")}
+        title="Quản lý Nhân sự"
+        subtitle="Danh bạ dùng để giao việc tự động"
+        icon={<Users className="w-5 h-5" />}
+        actions={<Button variant="primary" onClick={() => openModal()} leftIcon={<Plus className="w-4 h-4" />}>Thêm nhân sự</Button>}
+      />
 
       {/* CONTENT */}
       <main className="max-w-5xl mx-auto p-3 sm:p-4 md:p-6">
         {/* Search Bar */}
         <div className="mb-6 relative">
-          <input
-            type="text"
-            placeholder="Tìm theo tên hoặc email..."
-            className="w-full pl-10 p-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <Input placeholder="Tìm theo tên hoặc email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} leftIcon={<Search className="w-4 h-4" />} />
         </div>
 
         {/* List Member - Tree View */}
@@ -226,7 +209,7 @@ export default function TeamPage() {
           <div className="text-center py-12 text-slate-400">Đang tải danh sách...</div>
         ) : filteredMembers.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-            <FolderTree className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+            <Building2 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
             <p className="text-slate-500 mb-4">Chưa có nhân sự nào khớp với tìm kiếm.</p>
             {!searchTerm && (
               <button onClick={() => openModal()} className="text-indigo-600 font-medium hover:underline">
@@ -283,7 +266,7 @@ export default function TeamPage() {
                                 <button className="text-slate-300 group-hover:text-slate-500 transition-colors shrink-0">
                                   {isTeamExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                 </button>
-                                <Briefcase className="w-4 h-4 md:w-5 md:h-5 text-emerald-500 shrink-0" />
+                                <Building2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-500 shrink-0" />
                                 <h3 className="font-semibold text-sm md:text-base text-slate-700 truncate">{teamName}</h3>
                                 <span className="text-slate-400 text-[10px] md:text-xs ml-1 shrink-0">({membersInTeam.length})</span>
                               </div>
@@ -337,99 +320,14 @@ export default function TeamPage() {
         )}
       </main>
 
-      {/* MODAL FORM */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="p-6 border-b flex justify-between items-center">
-              <h2 className="text-lg font-bold">
-                {editingMember.id ? "Sửa thông tin" : "Thêm nhân sự mới"}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              {/* Tên - Giữ nguyên */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Họ và Tên *</label>
-                <input
-                  required
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="VD: Nguyễn Văn A"
-                  value={editingMember.name || ""}
-                  onChange={e => setEditingMember({ ...editingMember, name: e.target.value })}
-                />
-              </div>
-
-              {/* Email - Giữ nguyên */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Email (Google) *</label>
-                <input
-                  required
-                  type="email"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="nhanvien@congty.com"
-                  value={editingMember.email || ""}
-                  onChange={e => setEditingMember({ ...editingMember, email: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {/* --- PHẦN SỬA ĐỔI: COMBOBOX PHÒNG BAN --- */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Phòng ban *</label>
-
-                  {/* Input nhập liệu bình thường nhưng có thêm list="..." */}
-                  <input
-                    required
-                    list="department-suggestions" // Link với datalist bên dưới
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="Chọn hoặc nhập..."
-                    value={editingMember.department || ""}
-                    onChange={e => setEditingMember({ ...editingMember, department: e.target.value })}
-                  />
-
-                  {/* Danh sách gợi ý ẩn */}
-                  <datalist id="department-suggestions">
-                    {deptSuggestions.map(dept => (
-                      <option key={dept} value={dept} />
-                    ))}
-                  </datalist>
-                </div>
-                {/* --- HẾT PHẦN SỬA ĐỔI --- */}
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Team (Optional)</label>
-                  <input
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="VD: Mobile"
-                    value={editingMember.team || ""}
-                    onChange={e => setEditingMember({ ...editingMember, team: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-3 text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-3 text-white font-bold bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-200 transition flex justify-center items-center gap-2"
-                >
-                  <Save className="w-4 h-4" /> Lưu lại
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <MemberFormModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => { fetchMembers(); fetchDepartmentSuggestions(); }}
+        editingMember={editingMember}
+        userId={user!.uid}
+        departmentSuggestions={deptSuggestions}
+      />
     </div>
   );
 }
