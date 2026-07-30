@@ -2,9 +2,12 @@
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { QueryDocumentSnapshot } from "firebase/firestore";
+import { QueryDocumentSnapshot, onSnapshot, query, where, orderBy, collection } from "firebase/firestore";
+import { db } from "../lib/firebase";
 import {
+  PAGE_SIZE,
   getMeetingsPaginated,
+  getAllMeetings,
   Meeting,
   toggleTrashMeeting,
   deleteMeetingPermanent,
@@ -64,6 +67,44 @@ export default function DashboardState({
   const [isLiveLoading, setIsLiveLoading] = useState(false);
   const [liveLanguageState, setLiveLanguageState] = useState<"vi" | "en">("vi");
 
+  const COLLECTION_NAME = "meetings"; // matches the Firestore collection name
+
+  // Real-time snapshot listener for cloud meetings
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
+    const unsubscribe = onSnapshot(q, async () => {
+      // Trigger reload when any meeting data changes in Firestore
+      // This catches all status updates, deletes, etc.
+      const { getAllDraftsMeta } = await import("../lib/indexedDB");
+      const [paginated, allCloud, localDrafts] = await Promise.all([
+        getMeetingsPaginated(user.uid, undefined, false),
+        getAllMeetings(user.uid),
+        getAllDraftsMeta(user.uid),
+      ]);
+      const cloudActive = paginated.meetings.filter(m => !m.isMinuteOnly);
+      const cloudTrash = allCloud.filter(m => m.isDeleted);
+      const all = [...localDrafts, ...cloudActive, ...cloudTrash].sort((a, b) => b.createdAt - a.createdAt);
+      setMeetings(all);
+      setLastDoc(paginated.lastDoc);
+      setHasMore(paginated.hasMore);
+      setLoading(false);
+
+      if (localDrafts.length > 0 && !hasShownDraftWarning.current) {
+        toast.info(`Bạn có ${localDrafts.length} bản nháp chưa lưu lên Cloud`);
+        hasShownDraftWarning.current = true;
+      }
+    }, (error) => {
+      console.error("Snapshot error:", error);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [user, toast]);
+
   const handleTabChange = useCallback((tab: DashboardTab) => {
     setSelectedIds([]);
     const params = new URLSearchParams(searchParams.toString());
@@ -76,26 +117,20 @@ export default function DashboardState({
     if (user) {
       setLoading(true);
       try {
-        const { meetings: activeCloud, lastDoc: newLastDoc, hasMore: newHasMore } = await getMeetingsPaginated(user.uid, undefined, false);
-        const cloudActive = activeCloud.filter(m => !m.isMinuteOnly);
-
-        const { getAllMeetings } = await import("../lib/db");
+        const paginated = await getMeetingsPaginated(user.uid, undefined, false);
+        const cloudActive = paginated.meetings.filter(m => !m.isMinuteOnly);
         const allCloud = await getAllMeetings(user.uid);
         const cloudTrash = allCloud.filter(m => m.isDeleted);
-
         const { getAllDraftsMeta } = await import("../lib/indexedDB");
         const localDrafts = await getAllDraftsMeta(user.uid);
-
         const all = [...localDrafts, ...cloudActive, ...cloudTrash].sort((a, b) => b.createdAt - a.createdAt);
         setMeetings(all);
-        setLastDoc(newLastDoc);
-        setHasMore(newHasMore);
-
+        setLastDoc(paginated.lastDoc);
+        setHasMore(paginated.hasMore);
         if (localDrafts.length > 0 && !hasShownDraftWarning.current) {
           toast.info(`Bạn có ${localDrafts.length} bản nháp chưa lưu lên Cloud`);
           hasShownDraftWarning.current = true;
         }
-
       } catch (error) {
         console.error("Error loading meetings:", error);
       } finally {
@@ -125,10 +160,6 @@ export default function DashboardState({
       setLoadingMore(false);
     }
   }, [user, lastDoc, hasMore, loadingMore]);
-
-  useEffect(() => {
-    loadMeetings();
-  }, [refreshSignal, user, loadMeetings]);
 
   // --- ACTIONS ---
   const handleMoveToTrash = useCallback(async (e: React.MouseEvent, id: string) => {
