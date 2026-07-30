@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { auth, googleProvider } from "../lib/firebase";
-import { signInWithRedirect, signOut, onAuthStateChanged, User } from "firebase/auth";
+import { signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth";
 
 interface AuthContextType {
   user: User | null;
@@ -26,7 +26,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async () => {
     try {
-      await signInWithRedirect(auth, googleProvider);
+      await signInWithPopup(auth, googleProvider);
     } catch (error) {
       console.error("Login failed:", error);
     }
