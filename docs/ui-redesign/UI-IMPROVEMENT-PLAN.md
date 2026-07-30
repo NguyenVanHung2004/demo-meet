@@ -1,437 +1,177 @@
-# KẾ HOẠCH CẢI THIỆN UI TOÀN DIỆN
+# Kế hoạch cải thiện UI — Smart Meeting Assistant
 
-> **Dự án**: Smart Meeting Assistant (Next.js 16 + Tailwind 4 + TypeScript)
-> **Phạm vi**: Toàn bộ ứng dụng
-> **Palette**: Giữ nguyên **indigo + slate**
-> **Dark mode**: Chưa triển khai (tập trung light mode)
-> **Ngày tạo**: 2026-07-30
+> **Tài liệu liên quan (file chi tiết thực thi):**
+> - [`PHASE_0.md`](./PHASE_0.md) — Design System Foundation
+> - [`PHASE_1.md`](./PHASE_1.md) — AppShell + Topbar + Sidebar
+> - [`PHASE_2.md`](./PHASE_2.md) — Dashboard Redesign
+> - [`PHASE_3.md`](./PHASE_3.md) — Editor & Meeting Detail
+> - [`PHASE_4.md`](./PHASE_4.md) — Minutes (Kho biên bản)
+> - [`PHASE_5.md`](./PHASE_5.md) — Trang phụ (Tasks / Team / Training / Live)
+> - [`PHASE_6.md`](./PHASE_6.md) — Auth & Onboarding
+> - [`PHASE_7.md`](./PHASE_7.md) — Micro-interactions & Polish
 
----
-
-## 📋 Tổng quan codebase hiện tại
-
-| Khu vực | Vấn đề chính |
-|---|---|
-| `app/(dashboard)/layout.tsx` (Sidebar) | Màu tối (`bg-slate-900`) đứt gãy với content sáng, dùng inline style |
-| `app/components/Dashboard/*` | Card "Tải file" / "Ghi âm" dùng border-dashed trông "demo", buttons rời rạc |
-| `app/components/MeetingListView.tsx` | Có 2 phiên bản table (md) + card (mobile) lặp lại logic; hover action trên row khó bấm |
-| `app/components/MeetingDetailState.tsx` | 904 dòng, lẫn logic + UI, dùng `prose` Tailwind + raw `dangerouslySetInnerHTML` |
-| `app/components/EditorState.tsx` | 643 dòng, audio player bị duplicate với `Editor/AudioPlayer.tsx` |
-| `app/components/TranscriptRow.tsx` | 302 dòng, dùng `dangerouslySetInnerHTML` raw HTML escape, button `group-hover` khó dùng trên mobile |
-| `app/components/TemplateManagerModal.tsx`, `BotJoinModal.tsx`, `DriveImportModal.tsx` | 3 modal dùng 3 phong cách khác nhau (gradient, flat, ring) |
-| `app/components/Dashboard/Sidebar.tsx` | **Được tạo nhưng KHÔNG ĐƯỢC SỬ DỤNG** (DashboardState có inline tab riêng) |
-| `app/components/ui/*` | Chỉ có 4 component: Button, Badge, Card, LoadingSkeleton — hầu hết page KHÔNG dùng |
-| `app/globals.css` | Chỉ 154 dòng, toàn bộ custom cho tour driver, không có design token |
-| `app/(dashboard)/page.tsx` | Dùng 2 hệ tab song song (inline + đáng lẽ có trong Sidebar) |
+> **Context dự án:**
+> - Tech: Next.js 16 + Tailwind 4 + TypeScript + Firebase
+> - UI lib hiện tại: chỉ 4 component (`Button`, `Badge`, `Card`, `LoadingSkeleton`)
+> - Palette: giữ nguyên **indigo + slate**
+> - Dark mode: chưa triển khai (tập trung light mode)
+> - Deploy: Vercel auto-deploy từ `main`, dùng branch `ui-redesign` cho preview
+> - Testing: Manual only (giống refactor phase)
+>
+> **Đánh giá tổng thể hiện tại:** Component consistency 3/10, Layout coherence 4/10, Design system 2/10, UX polish 4/10
 
 ---
 
-## 🎨 PHASE 0 — Design System Foundation
-
-> **Đây là nền tảng, các phase sau phụ thuộc vào đây.**
-
-### 0.1. Khai báo Design Tokens trong `app/globals.css`
-
-Thay vì hardcode `indigo-600`, `slate-50`, etc. trong từng component → dùng **CSS variables** với `@theme` của Tailwind 4:
-
-- **Brand**: `--color-primary-50…900` (indigo)
-- **Neutral**: `--color-surface`, `--color-surface-muted`, `--color-border`, `--color-foreground`, `--color-foreground-muted`
-- **Semantic**: `--color-success`, `--color-warning`, `--color-danger`, `--color-info`
-- **Spacing scale**: thống nhất 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64
-- **Radius**: `--radius-sm/md/lg/xl/2xl` (8 / 12 / 16 / 20 / 24 px)
-- **Shadow**: `--shadow-card`, `--shadow-popover`, `--shadow-modal` (giảm bớt, dùng 1 hệ)
-- **Typography**: scale `xs/sm/base/lg/xl/2xl/3xl` với line-height mặc định
-- **Z-index scale**: `--z-base/dropdown/sticky/fixed/modal/popover/toast`
-
-**Kết quả**: 1 chỗ thay đổi → cả app cập nhật theo.
-
-### 0.2. Mở rộng Component Library `app/components/ui/`
-
-Hiện tại chỉ có 4 component. Cần thêm:
-
-- `Input.tsx` — label, hint, error state
-- `Modal.tsx` — wrapper thống nhất, không mỗi modal tự code
-- `Select.tsx` — dùng chung cho tất cả dropdown ngôn ngữ
-- `Tabs.tsx` — thay cho inline tab buttons
-- `Tooltip.tsx`
-- `Toast.tsx` — chuyển logic từ `GlobalUIProvider` ra đây
-- `EmptyState.tsx` — icon + title + description + CTA (gộp từ 4 chỗ lặp lại)
-- `StatCard.tsx` — cho dashboard metrics
-- `Avatar.tsx` — cho speakers, members
-- `PageHeader.tsx` — gộp pattern Header có title + actions
-- `Dropdown.tsx` — cho menu export, speaker picker, etc.
-- `ProgressBar.tsx`
-- `SegmentedControl.tsx` — cho toggle trạng thái
-- `ConfirmDialog.tsx` — UI chuẩn cho confirm flow
-- `Spinner.tsx` + `FullPageLoader.tsx` — thay thế `<Loader2>` lẻ tẻ
-- `MarkdownContent.tsx` — render markdown an toàn (thay thế `prose prose-sm`)
-
-### 0.3. Tạo `app/lib/cn.ts`
-
-Utility gộp `clsx` + `tailwind-merge` để tránh conflict class khi extend component.
-
-### 0.4. Cài thêm dev dependencies
-
-- `clsx`
-- `tailwind-merge`
-- `class-variance-authority` — cho variants
-
-Không thêm UI lib nặng (Radix chỉ thêm khi cần Dropdown/Tooltip phức tạp ở phase sau).
+# PHẦN A: PHÂN TÍCH VẤN ĐỀ UI
 
 ---
 
-## 🏗 PHASE 1 — Layout Shell (Sidebar + Topbar thống nhất)
+## 1. Vấn đề tổng quan
 
-> Fix vấn đề layout đứt gãy giữa dark sidebar và light content.
+### 🔴 Nghiêm trọng (gây "rối mắt")
 
-### 1.1. Thiết kế AppShell mới (`app/components/AppShell.tsx`)
+| # | Vấn đề | File:Line | Mô tả |
+|---|--------|-----------|-------|
+| 1.1 | **Sidebar tối đứt gãy với content sáng** | `app/(dashboard)/layout.tsx:51` | `bg-slate-900` cho sidebar vs `bg-slate-50` cho content → 2 vùng màu xung khắc |
+| 1.2 | **Dead code Sidebar.tsx không dùng** | `app/components/Dashboard/Sidebar.tsx` (toàn file) | Được tạo nhưng DashboardState có inline tab riêng, file này không được import ở đâu |
+| 1.3 | **Inline tabs lặp với Sidebar logic** | `app/components/DashboardState.tsx:310-331` | 2 button "Tất cả / Thùng rác" inline trong khi Sidebar (dead code) cũng có |
+| 1.4 | **3 modal dùng 3 phong cách khác nhau** | `BotJoinModal.tsx:241-254` (gradient), `LiveSetupModal.tsx:23` (flat), `DriveImportModal.tsx` (ring) | Cùng chức năng modal nhưng UI lệch nhau hoàn toàn |
+| 1.5 | **`MeetingDetailState.tsx` 904 dòng** | `app/components/MeetingDetailState.tsx` | Lẫn logic + UI + export function. Khó đọc, khó test |
+| 1.6 | **2 audio player duplicate** | `EditorState.tsx:535-586` + `Editor/AudioPlayer.tsx` | Cùng chức năng play/pause/seek, code lặp |
+| 1.7 | **`dangerouslySetInnerHTML` raw** | `MeetingDetailState.tsx`, `Minutes/MeetingList.tsx:159-164`, `Meeting/SummaryPanel.tsx:115-117` | XSS risk nếu AI trả về content không sạch |
 
-**Layout 2 cột**: Sidebar trái (rộng 260px, **light surface** — KHÔNG dùng slate-900 nữa) + Main content.
+### 🟡 Trung bình
 
-**Sidebar light style**:
+| # | Vấn đề | File:Line | Mô tả |
+|---|--------|-----------|-------|
+| 1.8 | **UI library chỉ có 4 components, hầu hết page không dùng** | `app/components/ui/*` | Button, Badge, Card, LoadingSkeleton — 90% page hardcode className |
+| 1.9 | **Hardcode color ở khắp nơi** | Tất cả component | `indigo-600`, `slate-900`, `red-500`... không có token |
+| 1.10 | **2 button styles lẫn lộn blue vs indigo** | `ui/Button.tsx:16` (blue-600) vs phần còn lại (indigo-600) | Cùng primary style nhưng khác màu |
+| 1.11 | **Hover-only action trên touch** | `MeetingListView.tsx:201-242` | Action bar ẩn sau hover → mobile không thấy |
+| 1.12 | **2 phiên bản list (table + card) song song** | `MeetingListView.tsx:149-322` | Logic trùng, dễ lệch khi sửa |
+| 1.13 | **Border-dashed trên CTA chính** | `Dashboard/StatsCards.tsx:34-55` | Card "Tải file lên" / "Ghi âm" trông "placeholder" thay vì "hành động chính" |
+| 1.14 | **2 button size tự định nghĩa (sm/md/lg) + responsive tự code** | `Editor/Header.tsx:89-91`, `Live/Header.tsx:39-55` | `<span class="hidden md:inline">` lặp khắp nơi |
 
-- Background trắng / xám rất nhạt, border phải 1px
-- Logo "Smart Meeting" ở top + search box dưới
-- Nav group: "Quản lý" (Dashboard, Minutes, Tasks) / "Hệ thống" (Team, Training)
-- Active state dùng `bg-primary-50` + `text-primary-700` thay vì `bg-indigo-600 text-white` (gây nặng mắt)
-- Trạng thái collapsed/expanded lưu `localStorage`
-- Nút "Thu gọn" → chỉ hiện icon (cho người dùng thích gọn)
+### 🟢 Nhẹ
 
-**Topbar mới** (`app/components/Topbar.tsx`):
-
-- Breadcrumb tự động (dùng route) — thay cho `Breadcrumb` component đang tự truyền items
-- Search global (Cmd+K) — placeholder, có thể wire sau
-- Notification bell
-- User avatar + dropdown (Profile, Settings, Logout)
-
-**Mobile**: Sidebar ẩn → drawer trượt từ trái (dùng `useState` + transition).
-
-### 1.2. Refactor `app/(dashboard)/layout.tsx`
-
-- Xóa hardcoded sidebar → dùng `<AppShell>`
-- Xóa `PollingManager` ra khỏi main, đặt trong AppShell
-
-### 1.3. Xóa dead code
-
-- **Xóa `app/components/Dashboard/Sidebar.tsx`** (không dùng)
-- Gộp inline tabs `Tất cả / Thùng rác` từ `DashboardState.tsx` → chuyển thành 2 route hoặc query param `?tab=all|trash` để Sidebar quản lý
-
----
-
-## 📊 PHASE 2 — Dashboard Redesign
-
-### 2.1. `Dashboard/Header.tsx` → dùng `PageHeader`
-
-- Title lớn, subtitle mô tả, action group bên phải (Import Drive, Mời Bot, Ghi âm mới)
-- Mobile: action nhóm thu gọn vào dropdown `⋯`
-
-### 2.2. `Dashboard/StatsCards.tsx` → redesign
-
-- Bỏ 2 card dashed (trông "đang chờ upload" thay vì "hành động chính")
-- Thay bằng:
-  - **1 Hero card** gradient (indigo-50 → white) nổi bật, có 2 CTA: "Tải file lên" / "Bắt đầu ghi âm". Có stepper nhỏ "Bước 1/3"
-  - **4 Stat card** dạng KPI: Tổng cuộc họp, Tổng thời lượng, Đang xử lý, Thùng rác — mỗi card có icon, label, value, mini-trend (tăng/giảm)
-- Dùng `<StatCard>` từ ui library
-
-### 2.3. `Dashboard/MeetingListView.tsx` → redesign
-
-- Bỏ 2 phiên bản (table + card) song song phức tạp
-- **Dùng 1 component Card-based** hiển thị tốt cả desktop + mobile (responsive với `grid-cols-1 lg:grid-cols-2`)
-- Mỗi card có:
-  - Avatar (chữ cái đầu hoặc icon status)
-  - Title (1 dòng, truncate), subtitle (date + duration)
-  - Status badge
-  - Action bar LUÔN HIỂN THỊ (đừng ẩn sau hover — khó bấm trên touch)
-  - Click toàn card → mở meeting
-- Filter bar phía trên: Tabs "Tất cả / Thùng rác" + search + sort dropdown + filter theo status
-- Bulk action bar nổi (đã có pattern trong `MinutesState` → rút ra thành `<BulkActionBar>`)
-
-### 2.4. `Dashboard/UploadModal.tsx` & `LiveSetupModal.tsx`
-
-- 2 modal gần giống nhau 90% → **gộp thành `<RecordSetupModal mode="upload|live">`**
-- Dùng `<Modal>` từ ui library thay vì code tay
-- Dùng `<Input>`, `<Select>` từ ui library
-- Bố cục: 2 cột (metadata trái, options phải) trên desktop; 1 cột mobile
-
-### 2.5. `BotJoinModal.tsx` & `DriveImportModal.tsx`
-
-- Cùng chuẩn hóa với `<Modal>`, header có icon + title, body scrollable, footer cố định
-- Bỏ gradient header → dùng icon block màu `primary-50`
-
-### 2.6. `app/(dashboard)/page.tsx`
-
-- Bỏ inline upload progress card → dùng `<Toast variant="loading">` hoặc `<ProgressOverlay>`
-- Component gọn hơn (tách upload logic ra hook `useUpload`)
+| # | Vấn đề | File:Line | Mô tả |
+|---|--------|-----------|-------|
+| 1.15 | **Toast tự code trong GlobalUIProvider** | `app/context/GlobalUIProvider.tsx` | Không có progress bar, không có stack management |
+| 1.16 | **Spinner lẻ tẻ `<Loader2 class="animate-spin">`** | 15+ file | Nên có `<Spinner />` chuẩn |
+| 1.17 | **Empty state 4 chỗ khác nhau** | `MeetingListView.tsx:67-105`, `Minutes/MeetingList.tsx:84-107`, `team/page.tsx:228-235` | Cùng pattern icon + text + CTA, code 3 lần |
+| 1.18 | **Driver.js tour highlight yếu** | `OnboardingTour.tsx` + `globals.css:23-152` | Highlight border mỏng, dễ miss |
 
 ---
 
-## 🎬 PHASE 3 — Editor & Meeting Detail Redesign
+## 2. Phân tích theo khu vực
 
-### 3.1. `Editor/Header.tsx` → redesign
+### 2.1. Dashboard
+- **Header** (`Dashboard/Header.tsx`): Quá nhiều button trên mobile, không có primary/secondary phân cấp rõ
+- **StatsCards** (`Dashboard/StatsCards.tsx`): Dashed border cho CTA chính → counter-intuitive
+- **MeetingListView** (`Dashboard/MeetingListView.tsx`): 2 phiên bản (table + card) lặp, hover action
+- **UploadModal / LiveSetupModal**: Gần giống nhau 90%, nên gộp
+- **BotJoinModal / DriveImportModal**: 3 style modal khác nhau (gradient/flat/ring)
 
-- Topbar compact, dùng `PageHeader` variant "compact"
-- Action group: "Mẫu tóm tắt" (dropdown inline thay vì modal), "Tóm tắt lại", "Lưu" (primary)
-- Title inline-edit đẹp hơn với hover state rõ ràng
+### 2.2. Editor & Meeting Detail
+- **`EditorState.tsx` (643 dòng)**: Audio player inline dù đã có `Editor/AudioPlayer.tsx`
+- **`MeetingDetailState.tsx` (904 dòng)**: Quá lớn, lẫn UI + logic + export
+- **`TranscriptRow.tsx` (302 dòng)**: `dangerouslySetInnerHTML` raw, hover-only trên touch
+- **`SpeakerSidebar.tsx`**: Quá tối giản, không có duration %
 
-### 3.2. `Editor/SegmentList.tsx` & `TranscriptRow.tsx`
+### 2.3. Minutes
+- **`Minutes/MeetingList.tsx`**: 2 phiên bản (table + card) lặp, `dangerouslySetInnerHTML`
+- **`AIChatModal.tsx`**: Header gradient, message bubble sơ sài
+- **`TemplateManagerModal.tsx`**: Inline form, không consistent với modal khác
 
-- **Bỏ `dangerouslySetInnerHTML`** → dùng React rendering an toàn
-- Card row có:
-  - Avatar người nói (màu theo `speaker.color`) — chuyển từ badge text sang avatar tròn
-  - Timestamp (clickable → seek)
-  - Play button nhỏ (always visible, không hover-only)
-  - Text content (click để edit, double-click vào dòng)
-  - Action mini-bar: "Sửa / Chèn / Gộp" — visible on focus hoặc mobile long-press
-- Word karaoke highlight: dùng `<span>` có `data-` attributes, không inline style từ JSX
-- Keyboard shortcuts: hiển thị ở góc phải dưới (popover) — thay vì modal intro to chỉ hiện 1 lần
+### 2.4. Tasks / Team / Training / Live
+- **`tasks/page.tsx` (534 dòng)**: Lẫn logic AI extract + UI render
+- **`team/page.tsx` (435 dòng)**: Form modal inline, không dùng Modal component
+- **`Live/*`**: Áp dụng riêng lẻ, chưa có design system
 
-### 3.3. `Editor/AudioPlayer.tsx` (bị duplicate)
-
-- **Xóa file duplicate logic** trong `EditorState.tsx` (đoạn 535-586) → dùng `<Editor/AudioPlayer>`
-- Redesign player:
-  - Waveform mini-view (dùng `<canvas>` hoặc lib nhẹ như `wavesurfer.js` — optional)
-  - Progress bar dùng `<input type="range">` styled (đã có ở `Meeting/AudioPlayer`)
-  - Nhóm control: Play/Pause, Skip 5s, Skip 10s, Speed, Volume
-  - Hiển thị "đang nghe đến câu X / Y" ở góc
-
-### 3.4. `Editor/SpeakerSidebar.tsx`
-
-- Width 280px, drag-to-resize (optional, advanced)
-- Mỗi speaker: avatar + tên + thời lượng nói (% của tổng meeting)
-- Nút "Thêm" ở cuối list, kéo để reorder
-- Nút "Xem toàn văn" → mở `<FullTranscriptModal>` toàn màn hình
-
-### 3.5. `MeetingDetailState.tsx` (904 dòng — quá lớn)
-
-**Tách thành nhiều hook + component**:
-
-- `useMeetingDetail.ts` — load, save, share logic
-- `useAudioPlayer.ts` — play, seek, rate
-- `useExport.ts` — xuất txt/docx/pdf
-- Tách UI: `<MeetingHeader>`, `<MeetingTranscript>`, `<MeetingSummaryPanel>`, `<MeetingExportMenu>`
-
-**Mục tiêu**: file `<400 dòng`, mỗi component riêng biệt dễ test.
-
-Bỏ `prose prose-sm` Tailwind (gây style đè khó control) → tự style markdown content bằng `<MarkdownContent>`.
-
-### 3.6. `Meeting/SummaryPanel.tsx`
-
-Redesign card "AI Tóm tắt":
-
-- Header có chip "Tóm tắt tự động" + nút "Tạo lại"
-- Body render markdown đẹp, có thể collapse/expand các section dài
-- Action "Copy", "Phát biểu thành slide" (nếu có)
-
-Card "Mục tiêu cuộc họp" — gọn hơn, inline edit, có placeholder đẹp.
-
-Card "Metadata" — dạng 2 cột, icon cho mỗi dòng.
-
-### 3.7. `Meeting/Header.tsx`
-
-- Dùng `PageHeader` thống nhất
-- Export menu chuyển thành `<Dropdown>` thay vì tự code `showExportMenu`
-
-### 3.8. `Meeting/SpeakerFilter.tsx`
-
-- Pill-style đẹp hơn, có counter `(5)` cho mỗi speaker
-- Search input ngay trên filter bar (optional)
+### 2.5. Auth & Onboarding
+- **`LoginState.tsx`**: Đã đẹp, cần polish nhỏ
+- **`OnboardingTour.tsx`**: Highlight yếu, cần mini-tour cho từng trang
 
 ---
 
-## 📁 PHASE 4 — Minutes (Kho biên bản)
+## 3. Nguyên tắc redesign
 
-### 4.1. `Minutes/Header.tsx` → `PageHeader` (đã có pattern)
-
-- Bỏ search bar tách rời → đưa vào trong header, nút bên phải
-
-### 4.2. `Minutes/FolderGrid.tsx`
-
-- Card folder dùng `<EmptyState>` / `<StatCard>` style thống nhất
-- Hover: lift + shadow mạnh hơn
-- Right-click → context menu (Rename, Delete, Share)
-
-### 4.3. `Minutes/MeetingList.tsx`
-
-- Giống dashboard list, dùng chung `<MeetingCard>` component
-- Có preview nội dung summary inline (snippet highlight khi search)
-
-### 4.4. `AIChatModal.tsx`
-
-- Header gradient → dùng surface trung tính, icon block màu primary
-- Message bubble đẹp hơn (avatar + name + time)
-- Input area có "đính kèm" (cite meeting) — dùng chip hiển thị các meeting đang context
-
-### 4.5. `TemplateManagerModal.tsx`
-
-- Chuẩn hóa với `<Modal>`
-- List template dạng card (thay vì list dọc), mỗi card có preview cấu trúc collapse được
-
----
-
-## 👥 PHASE 5 — Trang phụ (Tasks / Team / Training / Live)
-
-### 5.1. `app/tasks/page.tsx`
-
-534 dòng → tách:
-
-- `useTaskExtraction.ts` (AI extract logic)
-- `<TaskList>` component
-- `<TaskItem>` component (với editable form)
-
-Badge trạng thái dùng `<Badge>` từ ui lib. Loading state dùng `<MeetingListSkeleton>` đã có.
-
-### 5.2. `app/team/page.tsx`
-
-435 dòng → tách:
-
-- `<MemberFormModal>` (tách từ inline form)
-- `<DepartmentTree>` (gộp logic tree render)
-- `<MemberCard>`
-
-Modal form dùng `<Modal>` + `<Input>` + `<Select>` chuẩn.
-
-### 5.3. `app/training/page.tsx` (nếu có) — áp design system.
-
-### 5.4. `Live/Controls.tsx`, `Live/StatusBar.tsx`, `Live/TranscriptView.tsx`
-
-- Áp dụng cùng design tokens, card style
-- Transcript view: dùng chung `<TranscriptRow>` (đã refactor ở Phase 3)
-
----
-
-## 🔐 PHASE 6 — Auth & Onboarding polish
-
-### 6.1. `app/components/LoginState.tsx`
-
-Đẹp rồi nhưng cần:
-
-- Thêm testimonial/feature list ở panel phải (desktop)
-- Card ngôn ngữ / theme toggle (optional)
-- Animation lúc load (skeleton logo)
-
-### 6.2. `app/components/OnboardingTour.tsx`
-
-- Highlight element rõ hơn (ring 3px primary + offset)
-- Có nút "Bỏ qua" floating luôn hiển thị
-- Mini-tour cho từng trang (Editor, Minutes, Tasks)
-
----
-
-## ⚙️ PHASE 7 — Micro-interactions & Polish
-
-### 7.1. Loading states
-
-- Tất cả chỗ dùng `<Loader2>` lẻ tẻ → tạo `<Spinner>` + `<FullPageLoader>`
-- Skeleton chuẩn cho từng loại list
-
-### 7.2. Empty states
-
-`<EmptyState icon title description action>` — dùng cho:
-
-- Không có meeting
-- Không có kết quả search
-- Thùng rác trống
-- Folder trống
-
-### 7.3. Toast system (`GlobalUIProvider`)
-
-- Hiện đang inline. Refactor: dùng `sonner` hoặc `react-hot-toast` thay vì tự code → stack gọn, animation đẹp
-- Có progress bar cho loading toast
-
-### 7.4. Animations
-
-- Page transition: fade-in 150ms khi navigate
-- Modal: scale + fade 200ms
-- Card hover: lift 2px
-- List item: stagger animation khi load (tuỳ chọn)
-
-### 7.5. Keyboard shortcuts
-
-- `Cmd+K`: mở search/command palette
-- `Esc`: đóng modal
-- `Space`: play/pause audio (khi không focus vào input)
-- Hiển thị cheat sheet ở `?` (nút help ở topbar)
-
-### 7.6. Accessibility (a11y)
-
-- Tất cả button có `aria-label` nếu chỉ có icon
-- Focus ring rõ ràng (outline 2px primary-500)
-- Color contrast đạt WCAG AA
-- Modal trap focus
-
----
-
-## 📂 PHASE 8 — File-level Cleanup
-
-### Component cần XÓA
-
-- `app/components/Dashboard/Sidebar.tsx` (dead code)
-
-### Component cần GỘP
-
-- `UploadModal.tsx` + `LiveSetupModal.tsx` → `RecordSetupModal`
-- `EditorState.tsx` audio player block → dùng `Editor/AudioPlayer.tsx`
-- 2 instances Header (Dashboard, Editor, Meeting, Minutes, Live) → `<PageHeader variant="...">`
-- 2 instances AudioPlayer (Editor, Meeting) → `<AudioPlayer variant="...">`
-- Inline `prose` markdown render → `<MarkdownContent>` component
-
-### Constants/Typing cần thống nhất
-
-- Tạo `app/lib/design-tokens.ts` — export type cho variants Button, Badge, Card, v.v.
-- Tạo `app/lib/icons.ts` — tập trung icon mapping (nếu dùng 1 icon cho nhiều state)
-
-### `tailwind.config` (vì dùng v4 → dùng `@theme` trong CSS)
-
-- Khai báo 1 lần, xóa các hardcoded color trong JSX
-
----
-
-## 📅 Lộ trình thực hiện
-
-| Sprint | Nội dung | Output |
-|---|---|---|
-| **Sprint 1** (2-3 ngày) | Phase 0: Design tokens + UI library + cn utility | `globals.css` mới, `ui/*` mở rộng lên ~16 components, `cn.ts` |
-| **Sprint 2** (2 ngày) | Phase 1: AppShell + Topbar + Sidebar mới + xóa dead code | Toàn bộ layout đồng nhất, sidebar light, topbar có user menu |
-| **Sprint 3** (2-3 ngày) | Phase 2: Dashboard redesign | Dashboard đẹp, dùng tokens, modal gộp |
-| **Sprint 4** (2-3 ngày) | Phase 3: Editor + Meeting Detail | Editor UX mượt hơn, transcript đẹp, audio player chuẩn |
-| **Sprint 5** (1-2 ngày) | Phase 4: Minutes | Kho biên bản đẹp, AI chat polish |
-| **Sprint 6** (1-2 ngày) | Phase 5: Tasks/Team/Training/Live | Áp design system cho các trang phụ |
-| **Sprint 7** (1 ngày) | Phase 6: Auth & Onboarding polish | Login + tour đẹp hơn |
-| **Sprint 8** (1 ngày) | Phase 7-8: Polish + cleanup | Animation, a11y, xóa dead code, lint sạch |
-
-**Tổng cộng ước tính**: ~10-15 ngày làm việc (tùy tốc độ review).
-
----
-
-## ⚠️ Rủi ro & Lưu ý
-
-1. **Không phá vỡ logic**: Tất cả refactor chỉ đổi UI, KHÔNG đổi data layer / API calls
-2. **Tailwind 4 + `@theme`**: syntax hơi khác v3, cần test kỹ PostCSS compile
-3. **Component import paths**: dùng `@/` alias đã có sẵn (`@/app/lib/...`) — không cần đổi
-4. **Driver.js tour**: Phase 6 cần test tour sau khi layout đổi, vì highlight dựa vào `id` có thể bị mất
-5. **Dark mode sau**: khi cần, chỉ cần thêm 1 set CSS variables `[data-theme="dark"]` là chuyển được (đã design sẵn từ đầu)
+1. **Design tokens trước, components sau**: Phase 0 phải xong trước khi sửa page nào
+2. **Không phá vỡ logic**: Refactor chỉ đổi UI, KHÔNG đổi data layer / API
+3. **Component reuse tối đa**: 1 component dùng được ở 5 chỗ tốt hơn 5 component riêng
+4. **Mobile-first**: 70% user truy cập từ mobile (theo analytics nếu có, nếu không estimate)
+5. **Accessibility**: Focus ring, aria-label, color contrast WCAG AA
 6. **Test thủ công từng phase** trước khi qua phase tiếp theo
-7. **Backup branch**: tạo branch `ui-redesign` riêng để dễ rollback nếu cần
 
 ---
 
-## 💡 Quick wins (làm ngay trong 1-2 giờ nếu muốn thấy cải thiện tức thì)
+# PHẦN B: KẾ HOẠCH THỰC THI (8 PHASES)
 
-Nếu bạn chưa muốn làm full redesign, 3 thay đổi nhỏ này sẽ giảm "rối mắt" ngay:
+> Chi tiết từng phase ở file riêng (xem danh sách ở đầu file).
 
-1. **Đổi màu Sidebar từ `bg-slate-900` → `bg-white border-r`** trong `app/(dashboard)/layout.tsx` (1 dòng)
-2. **Xóa `app/components/Dashboard/Sidebar.tsx`** (dead code)
-3. **Thống nhất button primary** trong `app/components/ui/Button.tsx` từ `blue-600` → `indigo-600` (đang lẫn lộn blue/indigo)
+| Phase | Nội dung | Output | Effort |
+|-------|----------|--------|--------|
+| **0** | Design System Foundation | Tokens, 16 UI components, `cn.ts` | 2-3 ngày |
+| **1** | AppShell + Topbar + Sidebar | Layout đồng nhất, xóa dead code | 2 ngày |
+| **2** | Dashboard Redesign | Dashboard đẹp, modal gộp | 2-3 ngày |
+| **3** | Editor & Meeting Detail | Editor UX mượt, transcript đẹp | 2-3 ngày |
+| **4** | Minutes | Kho biên bản đẹp, AI chat polish | 1-2 ngày |
+| **5** | Tasks/Team/Training/Live | Áp design system | 1-2 ngày |
+| **6** | Auth & Onboarding | Login + tour đẹp hơn | 1 ngày |
+| **7** | Micro-interactions & Polish | Animation, a11y, cleanup | 1 ngày |
+
+**Tổng:** ~10-15 ngày làm việc.
 
 ---
 
-## 🎯 Bước tiếp theo
+# PHẦN C: QUICK WINS (làm ngay nếu muốn)
 
-Bạn có thể chọn 1 trong các hướng:
+3 thay đổi nhỏ trong 1-2 giờ sẽ giảm "rối mắt" tức thì:
 
-- **[A]** Bắt đầu **Sprint 1 (Design System)** — làm nền tảng trước, các phase sau sẽ mượt hơn nhiều
-- **[B]** Làm **Quick wins** trước để thấy cải thiện tức thì, rồi quyết định có làm tiếp không
-- **[C]** Nhảy thẳng vào **Sprint 2 (AppShell)** nếu muốn thấy layout đổi ngay
-- **[D]** Điều chỉnh plan (thêm/bớt phase, đổi thứ tự ưu tiên)
+### QW-1: Đổi sidebar từ tối sang sáng
+**File**: `app/(dashboard)/layout.tsx:51`
+```diff
+- <div className="hidden md:flex w-64 bg-slate-900 text-slate-300 p-6 flex-col gap-8 shrink-0">
++ <div className="hidden md:flex w-64 bg-white border-r text-slate-700 p-6 flex-col gap-8 shrink-0">
+```
+Và đổi toàn bộ text class trong sidebar từ `text-slate-300` → `text-slate-600`, `text-slate-500` → `text-slate-400`, `hover:bg-slate-800` → `hover:bg-slate-100`.
 
-Gõ **[A]** / **[B]** / **[C]** / **[D]** để tôi tiếp tục.
+### QW-2: Xóa dead code
+```bash
+rm app/components/Dashboard/Sidebar.tsx
+```
+
+### QW-3: Đồng bộ button primary
+**File**: `app/components/ui/Button.tsx:16`
+```diff
+- "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200",
++ "bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200",
+```
+
+---
+
+# PHẦN D: RỦI RO & LƯU Ý
+
+1. **Tailwind 4 + `@theme`**: syntax khác v3, cần test kỹ PostCSS compile
+2. **Component import paths**: dùng `@/` alias đã có sẵn — không cần đổi
+3. **Driver.js tour**: Phase 6 cần test tour sau khi layout đổi, vì highlight dựa vào `id` có thể bị mất
+4. **Dark mode sau**: Phase 0 design tokens sẵn sàng cho dark mode (chỉ cần thêm 1 set CSS variables)
+5. **Backup branch**: tạo branch `ui-redesign` riêng
+6. **Migration path**: Phase 0 → Phase 1 có thể merge riêng, các phase sau cũng vậy (chia PR nhỏ)
+
+---
+
+# PHẦN E: TIÊU CHÍ HOÀN THÀNH
+
+Mỗi phase chỉ tính "xong" khi:
+
+- [ ] Build không lỗi (`npm run build`)
+- [ ] TypeScript không lỗi (`npm run lint`)
+- [ ] Test thủ công 5 flow chính:
+  1. Login → Dashboard
+  2. Upload file → xem meeting detail
+  3. Edit transcript → save
+  4. Xem minutes → search → AI chat
+  5. Mobile responsive (Chrome DevTools 375px)
+- [ ] Không regression so với phase trước
+- [ ] Screenshot before/after (optional nhưng nên có)
