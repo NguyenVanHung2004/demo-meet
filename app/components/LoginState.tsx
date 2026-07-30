@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { BrainCircuit, NotebookPen, Zap, Sparkles } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Spinner from "./ui/Spinner";
@@ -8,11 +9,20 @@ import Button from "./ui/Button";
 import LoginFeaturePanel from "./LoginFeaturePanel";
 
 export default function LoginState() {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      router.push("/");
+    }
+  }, [user, router]);
 
   const handleLogin = async () => {
     setLoading(true);

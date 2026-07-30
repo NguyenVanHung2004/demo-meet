@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { auth, googleProvider } from "../lib/firebase";
-import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, User } from "firebase/auth";
+import { signInWithRedirect, signOut, onAuthStateChanged, User } from "firebase/auth";
 
 interface AuthContextType {
   user: User | null;
@@ -26,16 +26,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error: any) {
-      // If popup blocked by COOP or browser, fallback to redirect
-      if (error?.code === "auth/popup-blocked" || error?.code === "auth/popup-closed-by-user") {
-        await signInWithRedirect(auth, googleProvider);
-      } else if (error?.message?.includes("Cross-Origin-Opener-Policy")) {
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        console.error("Login failed:", error);
-      }
+      await signInWithRedirect(auth, googleProvider);
+    } catch (error) {
+      console.error("Login failed:", error);
     }
   };
 
