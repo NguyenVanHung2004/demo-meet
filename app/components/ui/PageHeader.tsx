@@ -23,9 +23,9 @@ export default function PageHeader({
 }: PageHeaderProps) {
   return (
     <header className={cn(
-      "bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between gap-3 shrink-0 z-20",
+      "bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between gap-3 shrink-0",
       variant === "compact" ? "h-14 md:h-16" : "py-3 md:py-4",
-      sticky && "sticky top-0",
+      sticky && "sticky top-0 z-30",
       !children && "min-h-[64px]",
       className
     )}>

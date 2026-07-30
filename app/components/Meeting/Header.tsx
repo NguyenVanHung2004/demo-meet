@@ -61,7 +61,7 @@ export default function MeetingHeader({
               <span className="hidden md:inline">Tải xuống</span>
             </Button>
             {showExportMenu && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-100">
                 <button onClick={() => { onDownloadAudio(); setShowExportMenu(false); }} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700">
                   <Music className="w-4 h-4 text-pink-500" /> Audio (.mp3)
                 </button>

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Home, FileText, ClipboardList, Users, Database, LogOut,
   ChevronsLeft, ChevronsRight, NotebookPen, Trash2
@@ -11,6 +11,8 @@ import { cn } from "@/app/lib/cn";
 import SidebarNavItem from "./SidebarNavItem";
 import Avatar from "./ui/Avatar";
 import Tooltip from "./ui/Tooltip";
+
+const STORAGE_KEY = "sidebar-collapsed-session";
 
 const NAV_ITEMS = [
   {
@@ -30,15 +32,18 @@ const NAV_ITEMS = [
   },
 ];
 
-function isActive(pathname: string, href: string): boolean {
+function isActive(
+  pathname: string,
+  searchParam: string | null,
+  href: string
+): boolean {
   // Handle tab query param for trash
   if (href.startsWith("/?tab=")) {
     const tab = href.split("=")[1];
-    if (typeof window === "undefined") return false;
-    const params = new URLSearchParams(window.location.search);
-    return pathname === "/" && params.get("tab") === tab;
+    return pathname === "/" && searchParam === tab;
   }
-  if (href === "/") return pathname === "/";
+  // Dashboard is only active if no tab param
+  if (href === "/") return pathname === "/" && searchParam === null;
   return pathname.startsWith(href);
 }
 
@@ -49,12 +54,24 @@ interface SidebarProps {
 
 export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { user, logout } = useAuth();
   const { toast } = useGlobalUI();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem(STORAGE_KEY) === "true";
+  });
 
-  const toggleCollapsed = () => setCollapsed((prev) => !prev);
+  const currentTab = searchParams.get("tab");
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      sessionStorage.setItem(STORAGE_KEY, String(next));
+      return next;
+    });
+  };
 
   const handleLogout = async () => {
     try {
@@ -106,7 +123,7 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
             )}
             <div className="space-y-1">
               {group.items.map((item) => {
-                const active = isActive(pathname, item.href);
+                const active = isActive(pathname, currentTab, item.href);
                 const handleClick = onNavigate
                   ? () => { onNavigate(); }
                   : undefined;
@@ -120,9 +137,11 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
                 );
                 if (collapsed && !forceOpen) {
                   return (
-                    <Tooltip key={item.href} content={item.label} side="right">
-                      {link}
-                    </Tooltip>
+                    <div key={item.href}>
+                      <Tooltip content={item.label} side="right">
+                        {link}
+                      </Tooltip>
+                    </div>
                   );
                 }
                 return <div key={item.href}>{link}</div>;
@@ -159,11 +178,13 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
         )}
 
         {collapsed && !forceOpen ? (
-          <Tooltip content="Đăng xuất" side="right">
-            <button onClick={handleLogout} className="w-full p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center">
-              <LogOut className="w-4 h-4" />
-            </button>
-          </Tooltip>
+          <div>
+            <Tooltip content="Đăng xuất" side="right">
+              <button onClick={handleLogout} className="w-full p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </div>
         ) : (
           <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
             <LogOut className="w-4 h-4" />

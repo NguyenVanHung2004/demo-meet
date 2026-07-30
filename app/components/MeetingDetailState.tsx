@@ -75,7 +75,7 @@ export default function MeetingDetailState({
   }, [seekTo]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 font-sans text-slate-900 overflow-hidden">
+    <div className="flex flex-col h-full bg-slate-50 font-sans text-slate-900">
       <MeetingHeader
         meeting={meeting}
         isReadOnly={isReadOnly}

@@ -10,7 +10,7 @@ interface SpeakerFilterProps {
 
 export default function SpeakerFilter({ speakers, filteredSpeakerId, onFilterChange }: SpeakerFilterProps) {
   return (
-    <div className="px-4 py-3 md:px-8 border-b border-slate-200 flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-hide sticky top-0 bg-white/95 backdrop-blur z-20 shadow-sm">
+    <div className="px-4 py-3 md:px-8 border-b border-slate-200 flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-hide sticky top-0 bg-white z-20 shadow-sm">
       <span className="text-xs font-bold text-slate-500 uppercase flex items-center mr-2 shrink-0">
         <User className="w-3.5 h-3.5 mr-1" /> Người nói:
       </span>

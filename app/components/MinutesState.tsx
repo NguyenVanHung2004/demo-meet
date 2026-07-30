@@ -277,7 +277,7 @@ export default function MinutesState() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans">
+        <div className="h-full bg-slate-50 font-sans overflow-y-auto">
             <MinutesHeader
                 loading={loading}
                 searchQuery={searchQuery}

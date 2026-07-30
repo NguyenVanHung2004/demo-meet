@@ -21,7 +21,7 @@ export default function Tooltip({ content, children, side = "top", className }: 
 
   return (
     <span
-      className="relative inline-flex"
+      className="relative flex w-full"
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
       onFocus={() => setVisible(true)}

@@ -45,7 +45,7 @@ export default function DashboardState({
   const searchParams = useSearchParams();
   const router = useRouter();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
   const currentTab = (searchParams.get("tab") === "trash" ? "trash" : "all") as DashboardTab;
