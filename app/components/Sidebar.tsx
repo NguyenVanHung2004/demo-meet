@@ -117,11 +117,14 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
             <div className="space-y-1">
               {group.items.map((item) => {
                 const active = isActive(pathname, item.href);
+                const handleClick = onNavigate
+                  ? () => { onNavigate(); }
+                  : undefined;
                 const link = (
                   <SidebarNavItem
                     {...item}
                     isActive={active}
-                    onClick={() => onNavigate?.()}
+                    onClick={handleClick}
                   />
                 );
                 if (collapsed && !forceOpen) {

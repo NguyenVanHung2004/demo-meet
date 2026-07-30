@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "@/app/lib/cn";
 import type { ReactNode } from "react";
 
@@ -16,6 +17,8 @@ interface SidebarNavItemProps {
 export default function SidebarNavItem({
   href, icon, label, badge, isActive, isExternal, onClick
 }: SidebarNavItemProps) {
+  const router = useRouter();
+
   const className = cn(
     "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
     "transition-all duration-150 group",
@@ -44,9 +47,16 @@ export default function SidebarNavItem({
     </>
   );
 
+  // When onClick is provided (mobile drawer close), use button with router.push
   if (onClick) {
     return (
-      <button onClick={onClick} className={cn(className, "w-full text-left")}>
+      <button
+        onClick={() => {
+          if (!isExternal) router.push(href);
+          onClick();
+        }}
+        className={cn(className, "w-full text-left")}
+      >
         {content}
       </button>
     );
