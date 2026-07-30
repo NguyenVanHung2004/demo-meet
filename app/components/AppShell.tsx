@@ -8,6 +8,7 @@ import Topbar from "./Topbar";
 import MobileDrawer from "./MobileDrawer";
 import { useAuth } from "@/app/context/AuthContext";
 import PollingManager from "./PollingManager";
+import CommandPalette from "./CommandPalette";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -50,6 +51,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           }
         }} />
 
+        <CommandPalette />
         <main className="flex-1 overflow-hidden relative">
           {children}
         </main>

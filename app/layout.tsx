@@ -25,6 +25,7 @@ export const metadata: Metadata = {
 };
 
 import OnboardingTour from "./components/OnboardingTour";
+import ToastProvider from "./components/ToastProvider";
 
 export default function RootLayout({
   children,
@@ -38,8 +39,9 @@ export default function RootLayout({
         className={`${inter.variable} font-sans`}
       >
          <AuthProvider>
-          <GlobalUIProvider>
+           <GlobalUIProvider>
             <OnboardingTour />
+            <ToastProvider />
             {children}
           </GlobalUIProvider>
         </AuthProvider>
