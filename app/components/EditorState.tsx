@@ -16,6 +16,7 @@ import { MeetingTemplate, DEFAULT_TEMPLATES } from "../lib/templates";
 import TemplateManagerModal from "./TemplateManagerModal";
 import SegmentList from "./Editor/SegmentList";
 import EditorHeader from "./Editor/Header";
+import EditorAudioPlayer from "./Editor/AudioPlayer";
 import SpeakerSidebar from "./Editor/SpeakerSidebar";
 import Breadcrumb from "./Breadcrumb";
 
@@ -465,7 +466,6 @@ export default function EditorState({
         onSaveTitle={handleSaveTitle}
         onTitleKeyDown={handleKeyDown}
         onTitleChange={setTitle}
-        onOpenSpeakerModal={() => setShowSpeakerModal(true)}
         onOpenTemplateModal={() => setShowTemplateModal(true)}
         onSummarize={handleSummarizeRequest}
         onSave={handleSave}
@@ -532,58 +532,24 @@ export default function EditorState({
       </div>
 
       {/* ------------------- FOOTER PLAYER ------------------- */}
-      <div className="h-20 bg-white border-t px-4 md:px-8 flex items-center gap-4 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] z-20 shrink-0">
-        <button onClick={togglePlay} className="w-10 h-10 md:w-12 md:h-12 bg-slate-900 text-white rounded-full flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
-          {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
-        </button>
-
-        
-        <div className="flex items-center gap-1 md:gap-2">
-          <button onClick={() => skipTime(-10)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition" title="-10s">
-            <RotateCcw className="w-5 h-5" />
-          </button>
-          <button onClick={() => skipTime(10)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition" title="+10s">
-            <RotateCw className="w-5 h-5" />
-          </button>
-          <button onClick={togglePlaybackRate} className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg transition text-xs font-bold min-w-[3rem]" title="Tốc độ">
-            {playbackRate}x
-          </button>
-        </div>
-
-        <div className="flex-1 flex flex-col gap-1">
-          <div className="flex justify-between text-[10px] md:text-xs font-medium text-slate-500">
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
-          <div className="w-full h-2 bg-slate-100 rounded-full cursor-pointer relative overflow-hidden group"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const percent = (e.clientX - rect.left) / rect.width;
-              if (duration > 0) seekTo(percent * duration);
-            }}
-          >
-            <div className="absolute inset-0 bg-indigo-500 origin-left" style={{ width: `${(currentTime / (duration || 1)) * 100}%` }} />
-          </div>
-        </div>
-
-        {/* Mobile Extra Action */}
-        <div className="md:hidden">
-          <button onClick={handleSummarizeRequest} className="p-2 bg-orange-100 text-orange-600 rounded-full">
-            <Sparkles className="w-5 h-5" />
-          </button>
-        </div>
-
-        <audio
-          ref={audioRef}
-          src={audioSrc}
-          onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
-          onLoadedMetadata={(e) => {
-            const d = e.currentTarget.duration;
-            if (Number.isFinite(d)) setDuration(d);
-          }}
-          onEnded={() => setIsPlaying(false)}
-        />
-      </div>
+      <EditorAudioPlayer
+        audioSrc={audioSrc}
+        isPlaying={isPlaying}
+        currentTime={currentTime}
+        duration={duration}
+        playbackRate={playbackRate}
+        onTogglePlay={togglePlay}
+        onSkip={skipTime}
+        onRateChange={togglePlaybackRate}
+        onSeek={seekTo}
+        onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
+        onLoadedMetadata={(e) => {
+          const d = e.currentTarget.duration;
+          if (Number.isFinite(d)) setDuration(d);
+        }}
+        onEnded={() => setIsPlaying(false)}
+        formatTime={formatTime}
+      />
 
       {/* ------------------- MODALS CŨ ------------------- */}
       {showIntroModal && (
