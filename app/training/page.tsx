@@ -3,13 +3,14 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Database, Play, Pause, DownloadCloud, Clock,
-  Info, Rocket, GitCommit, GitBranch, Hash, User,
-  ChevronRight, CheckCircle2, History, Calendar,
-  TrendingUp, Activity, Award, FileText
+  Database, Play, Pause, DownloadCloud, Clock,
+  ChevronRight, Calendar, Rocket, Info, User, History,
+  Activity
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getAllTrainingSamples, TrainingDataSample } from "../lib/trainingData";
+import AppShell from "../components/AppShell";
+import Spinner from "../components/ui/Spinner";
 
 export default function TrainingDataPage() {
   const { user, loading } = useAuth();
@@ -155,19 +156,14 @@ export default function TrainingDataPage() {
     }
   };
 
-  if (loading) return <div className="p-8 text-center bg-slate-50 min-h-screen">Đang xác thực...</div>;
+  if (loading) return <div className="p-8 text-center"><Spinner /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col">
+    <AppShell hideTopbar>
+    <div className="h-full bg-slate-50 font-sans text-slate-800 flex flex-col overflow-y-auto">
       {/* HEADER */}
       <header className="bg-white border-b px-4 py-3 md:px-6 md:py-4 flex items-center justify-between sticky top-0 z-10 gap-2 shadow-sm">
         <div className="flex items-center gap-2 md:gap-4 min-w-0">
-          <button
-            onClick={() => router.push("/")}
-            className="p-1.5 md:p-2 hover:bg-slate-100 rounded-full text-slate-500 transition shrink-0"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
           <div className="min-w-0">
             <h1 className="text-lg md:text-xl font-bold flex items-center gap-1.5 md:gap-2 truncate">
               <Database className="w-5 h-5 md:w-6 md:h-6 text-indigo-600 shrink-0" />
@@ -397,7 +393,8 @@ export default function TrainingDataPage() {
             </div>
           )
         }
-      </main >
-    </div >
+      </main>
+    </div>
+    </AppShell>
   );
 }

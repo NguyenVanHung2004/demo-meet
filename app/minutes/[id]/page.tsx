@@ -310,12 +310,12 @@ function MinuteDetailPage() {
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4 flex-1 min-w-0">
-                            <Link
-                                href="/minutes"
+                            <button
+                                onClick={() => window.history.back()}
                                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors shrink-0"
                             >
                                 <ArrowLeft className="w-5 h-5 text-slate-600" />
-                            </Link>
+                            </button>
                             <div className="flex-1 min-w-0">
                                 <h1 className="text-xl md:text-2xl font-bold text-slate-800 truncate">
                                     {meeting.title}

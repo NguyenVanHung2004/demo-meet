@@ -43,6 +43,7 @@ export default function DashboardState({
   const router = useRouter();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
   const currentTab = (searchParams.get("tab") === "trash" ? "trash" : "all") as DashboardTab;
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
@@ -106,17 +107,24 @@ export default function DashboardState({
   }, [user, toast]);
 
   const loadMoreMeetings = useCallback(async () => {
-    if (!user || !lastDoc || !hasMore) return;
+    if (!user || !lastDoc || !hasMore || loadingMore) return;
+    setLoadingMore(true);
     try {
       const { meetings: moreMeetings, lastDoc: newLastDoc, hasMore: newHasMore } = await getMeetingsPaginated(user.uid, lastDoc, false);
       const filteredMore = moreMeetings.filter(m => !m.isMinuteOnly);
-      setMeetings(prev => [...prev, ...filteredMore]);
+      setMeetings(prev => {
+        const existingIds = new Set(prev.map(m => m.id));
+        const uniqueNew = filteredMore.filter(m => !existingIds.has(m.id));
+        return [...prev, ...uniqueNew];
+      });
       setLastDoc(newLastDoc);
       setHasMore(newHasMore);
     } catch (error) {
       console.error("Error loading more meetings:", error);
+    } finally {
+      setLoadingMore(false);
     }
-  }, [user, lastDoc, hasMore]);
+  }, [user, lastDoc, hasMore, loadingMore]);
 
   useEffect(() => {
     loadMeetings();
@@ -323,14 +331,6 @@ export default function DashboardState({
       <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
         {currentTab === "all" && (
             <StatsCards
-              totalMeetings={meetings.filter(m => !m.isDeleted).length}
-              totalDuration={meetings.filter(m => !m.isDeleted).reduce((sum, m) => sum + (m.duration || 0), 0)}
-              processingCount={meetings.filter(m => m.status === MEETING_STATUS.TRANSCRIBING || m.status === MEETING_STATUS.SUMMARIZING).length}
-              trashCount={meetings.filter(m => m.isDeleted).length}
-              uploadLanguage={uploadLanguage}
-              liveLanguage={liveLanguage}
-              onUploadLanguageChange={setUploadLanguage}
-              onLiveLanguageChange={setLiveLanguage}
               onFileSelected={(file) => {
                 setSelectedFileForUpload(file);
                 setUploadTitle(file.name.replace(/\.[^/.]+$/, ""));
@@ -351,6 +351,7 @@ export default function DashboardState({
             currentTab={currentTab}
             selectedIds={selectedIds}
             loading={loading}
+            loadingMore={loadingMore}
             isFinalizing={isFinalizing}
             hasMore={hasMore}
             onLoadMore={loadMoreMeetings}

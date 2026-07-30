@@ -11,17 +11,21 @@ interface SidebarNavItemProps {
   badge?: string | number;
   isActive?: boolean;
   isExternal?: boolean;
+  collapsed?: boolean;
   onClick?: () => void;
 }
 
 export default function SidebarNavItem({
-  href, icon, label, badge, isActive, isExternal, onClick
+  href, icon, label, badge, isActive, isExternal, collapsed, onClick
 }: SidebarNavItemProps) {
   const router = useRouter();
 
   const className = cn(
-    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
+    "flex items-center rounded-lg text-sm font-medium",
     "transition-all duration-150 group",
+    collapsed
+      ? "justify-center px-0 py-2.5 w-full"
+      : "gap-3 px-3 py-2.5",
     isActive
       ? "bg-primary-50 text-primary-700"
       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
@@ -35,8 +39,10 @@ export default function SidebarNavItem({
       )}>
         {icon}
       </span>
-      <span className="truncate flex-1">{label}</span>
-      {badge !== undefined && (
+      {!collapsed && (
+        <span className="truncate flex-1">{label}</span>
+      )}
+      {!collapsed && badge !== undefined && (
         <span className={cn(
           "px-1.5 py-0.5 text-[10px] rounded-full font-bold shrink-0",
           isActive ? "bg-primary-200 text-primary-800" : "bg-slate-200 text-slate-600"
@@ -47,7 +53,6 @@ export default function SidebarNavItem({
     </>
   );
 
-  // When onClick is provided (mobile drawer close), use button with router.push
   if (onClick) {
     return (
       <button
@@ -55,7 +60,7 @@ export default function SidebarNavItem({
           if (!isExternal) router.push(href);
           onClick();
         }}
-        className={cn(className, "w-full text-left")}
+        className={cn(className, "w-full text-left", collapsed && "flex justify-center")}
       >
         {content}
       </button>

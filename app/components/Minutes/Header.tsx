@@ -1,6 +1,6 @@
 "use client";
 import { useRef } from "react";
-import { ArrowLeft, Plus, RefreshCw, FolderPlus, Search, FileText } from "lucide-react";
+import { Plus, RefreshCw, FolderPlus, Search, FileText } from "lucide-react";
 import PageHeader from "../ui/PageHeader";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
@@ -25,7 +25,6 @@ export default function MinutesHeader({
       <PageHeader
         variant="default"
         sticky
-        onBack={() => window.history.back()}
         title="Biên bản cuộc họp"
         subtitle="Quản lý và chỉnh sửa biên bản các cuộc họp"
         icon={<FileText className="w-5 h-5" />}

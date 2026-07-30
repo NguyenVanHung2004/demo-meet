@@ -12,8 +12,6 @@ import SidebarNavItem from "./SidebarNavItem";
 import Avatar from "./ui/Avatar";
 import Tooltip from "./ui/Tooltip";
 
-const STORAGE_KEY = "sidebar-collapsed";
-
 const NAV_ITEMS = [
   {
     group: "Quản lý",
@@ -56,18 +54,7 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
   const { toast } = useGlobalUI();
   const [collapsed, setCollapsed] = useState(false);
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "true") setCollapsed(true);
-  }, []);
-
-  const toggleCollapsed = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem(STORAGE_KEY, String(next));
-      return next;
-    });
-  };
+  const toggleCollapsed = () => setCollapsed((prev) => !prev);
 
   const handleLogout = async () => {
     try {
@@ -90,10 +77,10 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
 
   return (
     <aside className={cn(
-      "bg-white border-r border-slate-200 flex flex-col shrink-0",
+      "bg-white border-r border-slate-200 flex flex-col shrink-0 overflow-hidden",
       "transition-all duration-200",
       forceOpen || !collapsed ? "w-64" : "w-16",
-      "hidden md:flex"
+      forceOpen ? "flex" : "hidden md:flex"
     )}>
       {/* Logo */}
       <div className="h-16 flex items-center gap-2 px-4 border-b border-slate-200 shrink-0">
@@ -106,7 +93,10 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-6">
+      <nav className={cn(
+        "flex-1 overflow-y-auto overflow-x-hidden space-y-6",
+        collapsed && !forceOpen ? "p-1" : "p-3"
+      )}>
         {allNavItems.map((group) => (
           <div key={group.group}>
             {(forceOpen || !collapsed) && (
@@ -124,6 +114,7 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
                   <SidebarNavItem
                     {...item}
                     isActive={active}
+                    collapsed={collapsed && !forceOpen}
                     onClick={handleClick}
                   />
                 );
@@ -142,7 +133,10 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-slate-200 p-3 space-y-2">
+      <div className={cn(
+        "border-t border-slate-200 space-y-2",
+        collapsed && !forceOpen ? "p-1" : "p-3"
+      )}>
         {user && (
           <div className={cn(
             "flex items-center gap-2 p-2 rounded-lg",
@@ -178,8 +172,13 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
         )}
 
         {!forceOpen && (
-          <button onClick={toggleCollapsed} className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-[10px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded transition-colors" aria-label={collapsed ? "Mở rộng" : "Thu gọn"}>
-            {collapsed ? <ChevronsRight className="w-3.5 h-3.5" /> : <ChevronsLeft className="w-3.5 h-3.5" />}
+          <button onClick={toggleCollapsed} className={cn(
+            "flex items-center justify-center transition-colors rounded",
+            collapsed
+              ? "w-full py-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+              : "w-full gap-1 px-3 py-1.5 text-[10px] text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+          )} aria-label={collapsed ? "Mở rộng" : "Thu gọn"}>
+            {collapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-3.5 h-3.5" />}
             {!collapsed && <span>Thu gọn</span>}
           </button>
         )}

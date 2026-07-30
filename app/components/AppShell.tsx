@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import Spinner from "./ui/Spinner";
 import Sidebar from "./Sidebar";
@@ -10,7 +10,10 @@ import { useAuth } from "@/app/context/AuthContext";
 import PollingManager from "./PollingManager";
 import CommandPalette from "./CommandPalette";
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({ children, hideTopbar: hideTopbarProp = false }: { children: React.ReactNode; hideTopbar?: boolean }) {
+  const pathname = usePathname();
+  // Auto-hide topbar for live recording (full-screen experience)
+  const hideTopbar = hideTopbarProp || pathname.startsWith("/live");
   const { user, loading } = useAuth();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -43,7 +46,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Topbar onOpenMobileMenu={() => setMobileMenuOpen(true)} />
+        {!hideTopbar && <Topbar onOpenMobileMenu={() => setMobileMenuOpen(true)} />}
 
         <PollingManager onUpdate={() => {
           if (typeof window !== "undefined") {

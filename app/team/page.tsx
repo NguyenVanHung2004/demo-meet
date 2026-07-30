@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Users, ChevronRight, ChevronDown, Building2, Search, Edit2, Trash2, X, Save } from "lucide-react";
+import { Plus, Users, ChevronRight, ChevronDown, Building2, Search, Edit2, Trash2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { getMembers, saveMember, deleteMember, getExistingDepartments, Member } from "../lib/db";
@@ -12,6 +12,7 @@ import Input from "../components/ui/Input";
 import Avatar from "../components/ui/Avatar";
 import EmptyState from "../components/ui/EmptyState";
 import Spinner from "../components/ui/Spinner";
+import AppShell from "../components/AppShell";
 import MemberFormModal from "../components/Team/MemberFormModal";
 
 // Danh sách gợi ý mặc định (Base suggestions)
@@ -182,15 +183,15 @@ export default function TeamPage() {
     setExpandedNodes(newSet);
   };
 
-  if (loading) return <div className="p-8 text-center">Đang tải...</div>;
+  if (loading) return <div className="p-8 text-center"><Spinner /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+    <AppShell hideTopbar>
+    <div className="h-full bg-slate-50 font-sans text-slate-800 overflow-y-auto">
       {/* HEADER */}
       <PageHeader
         variant="default"
         sticky
-        onBack={() => router.push("/")}
         title="Quản lý Nhân sự"
         subtitle="Danh bạ dùng để giao việc tự động"
         icon={<Users className="w-5 h-5" />}
@@ -329,5 +330,6 @@ export default function TeamPage() {
         departmentSuggestions={deptSuggestions}
       />
     </div>
+    </AppShell>
   );
 }

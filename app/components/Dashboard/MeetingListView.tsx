@@ -16,6 +16,7 @@ interface MeetingListViewProps {
   currentTab: DashboardTab;
   selectedIds: string[];
   loading: boolean;
+  loadingMore?: boolean;
   isFinalizing: string | null;
   hasMore: boolean;
   onLoadMore: () => void;
@@ -35,7 +36,7 @@ interface MeetingListViewProps {
 }
 
 export default function MeetingListView({
-  meetings, currentTab, selectedIds, loading, isFinalizing, hasMore, onLoadMore,
+  meetings, currentTab, selectedIds, loading, loadingMore, isFinalizing, hasMore, onLoadMore,
   onToggleSelect, onToggleSelectAll, onOpenMeeting, onReprocess, onFinalizeDraft,
   onMoveToTrash, onRestore, onDeleteForever,
   onMoveSelectedToTrash, onDeleteSelected, onEmptyTrash,
@@ -155,7 +156,9 @@ export default function MeetingListView({
 
       {hasMore && currentTab === "all" && (
         <div className="text-center py-4">
-          <Button variant="outline" onClick={onLoadMore}>Tải thêm</Button>
+          <Button variant="outline" onClick={onLoadMore} loading={loadingMore} disabled={loadingMore}>
+            {loadingMore ? "Đang tải..." : "Tải thêm"}
+          </Button>
         </div>
       )}
 
