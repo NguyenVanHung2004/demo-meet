@@ -11,6 +11,7 @@ import AIChatModal from "./AIChatModal";
 import MinutesHeader from "./Minutes/Header";
 import FolderGrid from "./Minutes/FolderGrid";
 import MeetingList from "./Minutes/MeetingList";
+import BulkActionBar from "./ui/BulkActionBar";
 
 export default function MinutesState() {
     const { user } = useAuth();
@@ -335,64 +336,37 @@ export default function MinutesState() {
             </main>
 
             {/* 🟢 FLOATING ACTION PANEL */}
-            {selectedIds.size > 0 && (
-                <div id="tour-minutes-ai-panel" className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-full shadow-xl flex items-center gap-3 md:gap-6 z-50 animate-in slide-in-from-bottom-4 transition-all hover:scale-105 cursor-default w-[90%] md:w-auto max-w-sm md:max-w-none justify-between md:justify-start">
-                    <span className="font-semibold text-xs md:text-sm whitespace-nowrap"><span className="hidden sm:inline">Đã chọn </span>{selectedIds.size}</span>
-                    <div className="h-4 md:h-6 w-px bg-slate-700"></div>
-                    <button
-                        onClick={() => setShowAIChat(true)}
-                        className="flex items-center gap-1.5 md:gap-2 text-indigo-300 hover:text-white transition-colors font-bold text-xs md:text-sm whitespace-nowrap"
-                    >
-                        <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                        Hỏi AI
-                    </button>
-                    
-                    <div className="relative">
-                        <button
-                            onClick={() => setShowMoveDropdown(!showMoveDropdown)}
-                            className="flex items-center gap-1.5 md:gap-2 text-emerald-300 hover:text-white transition-colors font-bold text-xs md:text-sm whitespace-nowrap"
-                        >
-                            <FolderOpen className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                            <span className="hidden sm:inline">Chuyển vào...</span>
-                            <span className="sm:hidden">Di chuyển</span>
-                        </button>
-                        {showMoveDropdown && folders.length > 0 && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 animate-in fade-in slide-in-from-bottom-2 text-slate-800">
-                                <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Chọn thư mục</div>
-                                {folders.map(f => (
-                                    <button
-                                        key={f.id}
-                                        onClick={() => handleMoveToFolder(f.id)}
-                                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors flex items-center gap-2"
-                                    >
-                                        <FolderIcon className="w-4 h-4 text-slate-400" />
-                                        <span className="truncate">{f.name}</span>
-                                    </button>
-                                ))}
-                                <div className="h-px bg-slate-100 my-1"></div>
-                                <button
-                                    onClick={() => handleMoveToFolder(null)}
-                                    className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-                                >
-                                    Đưa ra ngoài (Gỡ khỏi thư mục)
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="h-4 md:h-6 w-px bg-slate-700"></div>
-
-                    {/* Clear selection */}
-                    <button
-                        onClick={() => {
-                            setSelectedIds(new Set());
-                            setShowMoveDropdown(false);
-                        }}
-                        className="text-slate-500 hover:text-white transition-colors ml-1 md:ml-0"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
+            <BulkActionBar
+              selectedCount={selectedIds.size}
+              actions={[
+                {
+                  label: "Hỏi AI",
+                  icon: <Sparkles className="w-4 h-4" />,
+                  onClick: () => setShowAIChat(true),
+                  intent: "primary",
+                },
+                {
+                  label: "Chuyển vào...",
+                  icon: <FolderOpen className="w-4 h-4" />,
+                  onClick: () => setShowMoveDropdown(!showMoveDropdown),
+                  intent: "success",
+                },
+              ]}
+              onClear={() => { setSelectedIds(new Set()); setShowMoveDropdown(false); }}
+            />
+            {showMoveDropdown && folders.length > 0 && (
+              <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-bottom-2">
+                <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Chọn thư mục</div>
+                {folders.map(f => (
+                  <button key={f.id} onClick={() => handleMoveToFolder(f.id)} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-primary-600 transition-colors flex items-center gap-2">
+                    <FolderIcon className="w-4 h-4 text-slate-400" /> <span className="truncate">{f.name}</span>
+                  </button>
+                ))}
+                <div className="h-px bg-slate-100 my-1" />
+                <button onClick={() => handleMoveToFolder(null)} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                  Đưa ra ngoài (Gỡ khỏi thư mục)
+                </button>
+              </div>
             )}
 
             {/* 🟢 AI CHAT MODAL */}

@@ -1,12 +1,13 @@
 "use client";
-import { Folder as FolderIcon } from "lucide-react";
-import type { Folder } from "@/app/lib/db";
+import { FolderOpen, Folder } from "lucide-react";
+import { cn } from "@/app/lib/cn";
+import type { Folder as FolderType } from "@/app/lib/db";
 
 interface FolderGridProps {
-  folders: Folder[];
-  currentFolder: Folder | null;
+  folders: FolderType[];
+  currentFolder: FolderType | null;
   dragOverFolderId: string | null;
-  onSelectFolder: (folder: Folder) => void;
+  onSelectFolder: (folder: FolderType | null) => void;
   onDragOver: (e: React.DragEvent, folderId: string) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, folderId: string) => void;
@@ -16,32 +17,44 @@ export default function FolderGrid({
   folders, currentFolder, dragOverFolderId,
   onSelectFolder, onDragOver, onDragLeave, onDrop
 }: FolderGridProps) {
-  if (currentFolder) return null;
   if (folders.length === 0) return null;
 
   return (
-    <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-        <FolderIcon className="w-5 h-5 text-indigo-500" />
-        Thư mục của bạn
+    <section className="mb-6">
+      <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <Folder className="w-4 h-4" /> Thư mục của bạn
       </h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {folders.map(folder => (
-          <div
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        {folders.map((folder) => (
+          <button
             key={folder.id}
             onClick={() => onSelectFolder(folder)}
             onDragOver={(e) => onDragOver(e, folder.id)}
             onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, folder.id)}
-            className={`bg-white p-4 rounded-xl shadow-sm border ${dragOverFolderId === folder.id ? "border-emerald-500 bg-emerald-50 scale-105" : "border-slate-200 hover:border-indigo-400"} hover:shadow-md transition-all cursor-pointer flex flex-col items-center text-center group z-10`}
+            className={cn(
+              "group relative bg-white rounded-2xl border p-4 text-left transition-all",
+              "hover:shadow-md hover:-translate-y-0.5",
+              currentFolder?.id === folder.id
+                ? "border-primary-300 ring-2 ring-primary-200"
+                : "border-slate-200",
+              dragOverFolderId === folder.id && "border-primary-400 bg-primary-50 ring-2 ring-primary-300"
+            )}
           >
-            <FolderIcon className={`w-10 h-10 mb-2 transition-colors ${dragOverFolderId === folder.id ? "text-emerald-500 fill-emerald-100" : "text-indigo-400 group-hover:text-indigo-500 fill-indigo-50"}`} />
-            <span className="font-medium text-slate-700 text-sm line-clamp-1 w-full" title={folder.name}>
-              {folder.name}
-            </span>
-          </div>
+            <div className="flex items-start justify-between mb-3">
+              <div className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
+                currentFolder?.id === folder.id
+                  ? "bg-primary-600 text-white"
+                  : "bg-primary-50 text-primary-600 group-hover:bg-primary-100"
+              )}>
+                <FolderOpen className="w-5 h-5" />
+              </div>
+            </div>
+            <h3 className="font-bold text-slate-800 truncate text-sm">{folder.name}</h3>
+          </button>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
