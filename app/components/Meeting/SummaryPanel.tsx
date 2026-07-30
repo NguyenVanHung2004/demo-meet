@@ -67,12 +67,23 @@ export default function SummaryPanel({
     });
   };
 
+  const processChildren = (children: React.ReactNode): React.ReactNode => {
+    return React.Children.map(children, child => {
+      if (typeof child === "string") {
+        return renderTextWithTimestamps(child);
+      }
+      return child;
+    });
+  };
+
   const MarkdownComponents: Components = {
-    p: ({ children }) => <p className="mb-4 leading-relaxed">{React.Children.map(children, child => renderTextWithTimestamps(String(child)))}</p>,
-    li: ({ children }) => <li className="mb-2">{React.Children.map(children, child => renderTextWithTimestamps(String(child)))}</li>,
+    p: ({ children }) => <p className="mb-4 leading-relaxed">{processChildren(children)}</p>,
+    li: ({ children }) => <li className="mb-2">{processChildren(children)}</li>,
     h1: ({ children }) => <h1 className="text-xl font-bold text-slate-900 mt-6 mb-3 border-b pb-1">{children}</h1>,
     h2: ({ children }) => <h2 className="text-lg font-bold text-indigo-700 mt-5 mb-2">{children}</h2>,
     h3: ({ children }) => <h3 className="text-base font-bold text-slate-800 mt-4 mb-2">{children}</h3>,
+    strong: ({ children }) => <strong className="font-bold text-slate-900">{children}</strong>,
+    em: ({ children }) => <em className="italic">{children}</em>,
   };
 
   const formatTimeCode = (s: number) => {
