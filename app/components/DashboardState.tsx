@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { QueryDocumentSnapshot } from "firebase/firestore";
 import {
   getMeetingsPaginated,
@@ -40,10 +41,12 @@ export default function DashboardState({
 }) {
   const { user, login, logout } = useAuth();
   const { toast, confirm } = useGlobalUI();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
-  const [currentTab, setCurrentTab] = useState<DashboardTab>("all");
+  const currentTab = (searchParams.get("tab") === "trash" ? "trash" : "all") as DashboardTab;
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,9 +66,12 @@ export default function DashboardState({
   const [liveLanguageState, setLiveLanguageState] = useState<"vi" | "en">("vi");
 
   const handleTabChange = useCallback((tab: DashboardTab) => {
-    setCurrentTab(tab);
     setSelectedIds([]);
-  }, []);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "all") params.delete("tab");
+    else params.set("tab", "trash");
+    router.replace(`/?${params.toString()}`);
+  }, [searchParams, router]);
 
   const loadMeetings = useCallback(async () => {
     if (user) {
@@ -306,30 +312,6 @@ export default function DashboardState({
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      {/* Inline tab switcher (replaces sidebar All/Trash) */}
-      <div className="flex items-center gap-4 px-4 md:px-8 py-3 bg-white border-b shrink-0">
-        <button
-          onClick={() => handleTabChange("all")}
-          className={`text-sm font-bold px-4 py-2 rounded-lg transition-colors ${
-            currentTab === "all"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "text-slate-500 hover:bg-slate-100"
-          }`}
-        >
-          Tất cả cuộc họp
-        </button>
-        <button
-          onClick={() => handleTabChange("trash")}
-          className={`text-sm font-bold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 ${
-            currentTab === "trash"
-              ? "bg-red-600 text-white shadow-sm"
-              : "text-slate-500 hover:bg-slate-100"
-          }`}
-        >
-          <Trash2 className="w-4 h-4" /> Thùng rác
-        </button>
-      </div>
-
       <Header
         currentTab={currentTab}
         liveLanguage={liveLanguage}
