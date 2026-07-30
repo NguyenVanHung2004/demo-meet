@@ -11,13 +11,11 @@ import {
 } from "../lib/db";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { useAuth } from "../context/AuthContext";
-import UploadModal from "./Dashboard/UploadModal";
-import LiveSetupModal from "./Dashboard/LiveSetupModal";
+import RecordSetupModal from "./Dashboard/RecordSetupModal";
 import Header from "./Dashboard/Header";
 import StatsCards from "./Dashboard/StatsCards";
 import MeetingListView from "./Dashboard/MeetingListView";
 import { MEETING_STATUS } from "../lib/constants";
-import { Trash2 } from "lucide-react";
 type DashboardTab = "all" | "trash";
 
 export default function DashboardState({
@@ -325,6 +323,10 @@ export default function DashboardState({
       <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
         {currentTab === "all" && (
             <StatsCards
+              totalMeetings={meetings.filter(m => !m.isDeleted).length}
+              totalDuration={meetings.filter(m => !m.isDeleted).reduce((sum, m) => sum + (m.duration || 0), 0)}
+              processingCount={meetings.filter(m => m.status === MEETING_STATUS.TRANSCRIBING || m.status === MEETING_STATUS.SUMMARIZING).length}
+              trashCount={meetings.filter(m => m.isDeleted).length}
               uploadLanguage={uploadLanguage}
               liveLanguage={liveLanguage}
               onUploadLanguageChange={setUploadLanguage}
@@ -387,53 +389,55 @@ export default function DashboardState({
           />
       </div>
 
-      {selectedFileForUpload && (
-        <UploadModal
-          selectedFile={selectedFileForUpload}
-          uploadTitle={uploadTitle}
-          uploadObjectives={uploadObjectives}
-          uploadLanguage={uploadLanguageState}
-          onTitleChange={setUploadTitle}
-          onObjectivesChange={setUploadObjectives}
-          onLanguageChange={setUploadLanguageState}
-          loading={isUploadLoading}
-          onConfirm={async () => {
-            setIsUploadLoading(true);
-            try {
+      <RecordSetupModal
+        mode="upload"
+        isOpen={!!selectedFileForUpload}
+        selectedFile={selectedFileForUpload}
+        defaultTitle={uploadTitle}
+        defaultObjectives={uploadObjectives}
+        defaultLanguage={uploadLanguageState}
+        loading={isUploadLoading}
+        onTitleChange={setUploadTitle}
+        onObjectivesChange={setUploadObjectives}
+        onLanguageChange={setUploadLanguageState}
+        onConfirm={async () => {
+          setIsUploadLoading(true);
+          try {
+            if (selectedFileForUpload) {
               await onImport(selectedFileForUpload, uploadLanguageState, uploadTitle, uploadObjectives);
-            } finally {
-              setIsUploadLoading(false);
             }
-            setSelectedFileForUpload(null);
-            if (fileInputRef.current) fileInputRef.current.value = "";
-          }}
-          onCancel={() => {
-            setSelectedFileForUpload(null);
-            if (fileInputRef.current) fileInputRef.current.value = "";
-          }}
-        />
-      )}
-      {showLiveSetupModal && (
-        <LiveSetupModal
-          liveTitle={liveTitle}
-          liveObjectives={liveObjectives}
-          liveLanguage={liveLanguageState}
-          loading={isLiveLoading}
-          onTitleChange={setLiveTitle}
-          onObjectivesChange={setLiveObjectives}
-          onLanguageChange={setLiveLanguageState}
-          onConfirm={async () => {
-            setIsLiveLoading(true);
-            try {
-              await onLive(liveLanguageState, liveTitle, liveObjectives);
-            } finally {
-              setIsLiveLoading(false);
-            }
-            setShowLiveSetupModal(false);
-          }}
-          onCancel={() => setShowLiveSetupModal(false)}
-        />
-      )}
+          } finally {
+            setIsUploadLoading(false);
+          }
+          setSelectedFileForUpload(null);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }}
+        onCancel={() => {
+          setSelectedFileForUpload(null);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }}
+      />
+      <RecordSetupModal
+        mode="live"
+        isOpen={showLiveSetupModal}
+        defaultTitle={liveTitle}
+        defaultObjectives={liveObjectives}
+        defaultLanguage={liveLanguageState}
+        loading={isLiveLoading}
+        onTitleChange={setLiveTitle}
+        onObjectivesChange={setLiveObjectives}
+        onLanguageChange={setLiveLanguageState}
+        onConfirm={async () => {
+          setIsLiveLoading(true);
+          try {
+            await onLive(liveLanguageState, liveTitle, liveObjectives);
+          } finally {
+            setIsLiveLoading(false);
+          }
+          setShowLiveSetupModal(false);
+        }}
+        onCancel={() => setShowLiveSetupModal(false)}
+      />
     </div>
   );
 }

@@ -1,12 +1,13 @@
 "use client";
+import { useState, useMemo } from "react";
 import type { Meeting } from "@/app/lib/db";
-import { MEETING_STATUS, MeetingStatus } from "@/app/lib/constants";
-import Badge from "../ui/Badge";
-import Button from "../ui/Button";
-import {
-  Calendar, Trash2, RotateCcw,
-  Wand2, FolderOpen, Edit3, Eye, Loader2, Clock
-} from "lucide-react";
+import { MEETING_STATUS } from "@/app/lib/constants";
+import { Calendar, Trash2 } from "lucide-react";
+import MeetingCard from "./MeetingCard";
+import MeetingListFilter, { type SortBy, type StatusFilter } from "./MeetingListFilter";
+import BulkActionBar from "@/app/components/ui/BulkActionBar";
+import EmptyState from "@/app/components/ui/EmptyState";
+import Button from "@/app/components/ui/Button";
 
 type DashboardTab = "all" | "trash";
 
@@ -35,301 +36,138 @@ interface MeetingListViewProps {
 
 export default function MeetingListView({
   meetings, currentTab, selectedIds, loading, isFinalizing, hasMore, onLoadMore,
-  onToggleSelect, onToggleSelectAll,
-  onOpenMeeting, onReprocess, onFinalizeDraft,
+  onToggleSelect, onToggleSelectAll, onOpenMeeting, onReprocess, onFinalizeDraft,
   onMoveToTrash, onRestore, onDeleteForever,
   onMoveSelectedToTrash, onDeleteSelected, onEmptyTrash,
   onNavigateToUpload, onNavigateToLive
 }: MeetingListViewProps) {
-  const formatDuration = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("newest");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const filteredMeetings = useMemo(() => {
+    let result = meetings;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(m => m.title.toLowerCase().includes(q));
+    }
+    if (statusFilter !== "all") {
+      result = result.filter(m => m.status === statusFilter);
+    }
+    result = [...result].sort((a, b) => {
+      switch (sortBy) {
+        case "newest": return b.createdAt - a.createdAt;
+        case "oldest": return a.createdAt - b.createdAt;
+        case "title": return a.title.localeCompare(b.title);
+        case "duration": return (b.duration || 0) - (a.duration || 0);
+        default: return 0;
+      }
+    });
+    return result;
+  }, [meetings, search, sortBy, statusFilter]);
 
   if (loading) {
     return (
       <div className="space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4 animate-pulse">
-            <div className="h-10 w-10 rounded-full bg-slate-200" />
-            <div className="flex-1 space-y-2">
-              <div className="h-4 bg-slate-200 rounded w-1/2" />
-              <div className="h-3 bg-slate-100 rounded w-1/4" />
+          <div key={i} className="bg-white rounded-2xl border border-slate-200 p-4 animate-pulse">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-slate-200" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-slate-200 rounded w-1/2" />
+                <div className="h-3 bg-slate-100 rounded w-1/4" />
+              </div>
+              <div className="h-6 w-16 rounded-full bg-slate-200" />
             </div>
-            <div className="h-6 w-16 rounded-full bg-slate-200" />
           </div>
         ))}
       </div>
     );
   }
 
-  if (meetings.length === 0) {
+  if (filteredMeetings.length === 0) {
     if (currentTab === "trash") {
       return (
-        <div className="text-center py-12 md:py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-          <div className="w-12 h-12 md:w-16 md:h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-300">
-            <Trash2 className="w-6 h-6 md:w-8 md:h-8" />
-          </div>
-          <p className="text-slate-500 font-medium text-sm">Thùng rác trống.</p>
-        </div>
+        <EmptyState
+          icon={<Trash2 className="w-8 h-8" />}
+          title="Thùng rác trống"
+          description="Các cuộc họp đã xóa sẽ xuất hiện ở đây."
+        />
       );
     }
-
     return (
-      <div className="text-center py-12 md:py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-        <div className="w-12 h-12 md:w-16 md:h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-300">
-          <Calendar className="w-6 h-6 md:w-8 md:h-8" />
-        </div>
-        <h3 className="text-slate-700 font-bold text-base mb-1">Chưa có cuộc họp nào</h3>
-        <p className="text-slate-400 text-sm mb-5">Tải lên file audio hoặc ghi âm trực tiếp để bắt đầu.</p>
-        <div className="flex items-center justify-center gap-3">
-          {onNavigateToUpload && (
-            <button
-              onClick={onNavigateToUpload}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all"
-            >
-              Tải file lên
-            </button>
-          )}
-          {onNavigateToLive && (
-            <button
-              onClick={onNavigateToLive}
-              className="px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl border border-slate-200 transition-all"
-            >
-              Ghi âm trực tiếp
-            </button>
-          )}
-        </div>
-      </div>
+      <EmptyState
+        icon={<Calendar className="w-8 h-8" />}
+        title="Chưa có cuộc họp nào"
+        description="Tải lên file audio hoặc ghi âm trực tiếp để bắt đầu."
+        action={
+          <div className="flex gap-3">
+            {onNavigateToUpload && (
+              <Button variant="primary" onClick={onNavigateToUpload}>Tải file lên</Button>
+            )}
+            {onNavigateToLive && (
+              <Button variant="outline" onClick={onNavigateToLive}>Ghi âm trực tiếp</Button>
+            )}
+          </div>
+        }
+      />
     );
   }
 
-  const isInteractiveStatuses: MeetingStatus[] = [
-    MEETING_STATUS.TRANSCRIBED, MEETING_STATUS.SUMMARIZING,
-    MEETING_STATUS.COMPLETED, MEETING_STATUS.FAILED, MEETING_STATUS.DRAFT
-  ];
-
   return (
-    <div id="tour-list" className="space-y-3">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-          {meetings.length} Cuộc họp
-        </h3>
-        {meetings.length > 0 && (
-          <div className="flex gap-2">
-            {selectedIds.length > 0 && currentTab === "all" && (
-              <button
-                onClick={onMoveSelectedToTrash}
-                className="text-xs text-red-600 font-medium hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-colors shadow-sm"
-              >
-                Xóa đã chọn ({selectedIds.length})
-              </button>
-            )}
-            {selectedIds.length > 0 && currentTab === "trash" && (
-              <button
-                onClick={onDeleteSelected}
-                className="text-xs text-red-600 font-medium hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-colors shadow-sm"
-              >
-                Xóa vĩnh viễn ({selectedIds.length})
-              </button>
-            )}
-            {currentTab === "trash" && (
-              <button
-                onClick={onEmptyTrash}
-                className="text-xs text-white bg-red-600 hover:bg-red-700 font-medium px-3 py-1.5 rounded-lg transition-colors shadow-sm"
-              >
-                Dọn sạch thùng rác
-              </button>
-            )}
+    <div>
+      {currentTab === "all" && meetings.length > 0 && (
+        <MeetingListFilter
+          search={search}
+          sortBy={sortBy}
+          statusFilter={statusFilter}
+          onSearchChange={setSearch}
+          onSortChange={setSortBy}
+          onStatusFilterChange={setStatusFilter}
+        />
+      )}
+
+      <div id="tour-list" className="space-y-2 md:space-y-3">
+        {currentTab === "trash" && (
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-slate-500">{meetings.length} mục trong thùng rác</p>
+            <Button variant="danger" size="sm" onClick={onEmptyTrash}>Dọn sạch thùng rác</Button>
           </div>
         )}
+
+        {filteredMeetings.map((m) => (
+          <MeetingCard
+            key={m.id}
+            meeting={m}
+            currentTab={currentTab}
+            isSelected={selectedIds.includes(m.id)}
+            isFinalizing={isFinalizing === m.id}
+            onToggleSelect={() => onToggleSelect(m.id)}
+            onOpen={() => onOpenMeeting(m)}
+            onReprocess={() => onReprocess(m)}
+            onFinalizeDraft={() => onFinalizeDraft({ stopPropagation: () => {} } as any, m)}
+            onMoveToTrash={() => onMoveToTrash({ stopPropagation: () => {} } as any, m.id)}
+            onRestore={() => onRestore({ stopPropagation: () => {} } as any, m.id)}
+            onDeleteForever={() => onDeleteForever({ stopPropagation: () => {} } as any, m.id)}
+          />
+        ))}
       </div>
 
-      <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
-            <tr>
-              <th className="px-4 py-4 w-12">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.length === meetings.length && meetings.length > 0}
-                  onChange={onToggleSelectAll}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                />
-              </th>
-              <th className="px-6 py-4">Tên cuộc họp</th>
-              <th className="px-6 py-4">Thời lượng</th>
-              <th className="px-6 py-4">Ngày tạo</th>
-              <th className="px-6 py-4">Trạng thái</th>
-              <th className="px-6 py-4 text-right">Hành động</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {meetings.map((m) => {
-              const isInteractive = isInteractiveStatuses.includes(m.status);
-              return (
-                <tr
-                  key={m.id}
-                  onClick={() => isInteractive && onOpenMeeting(m)}
-                  className={`group transition-colors ${isInteractive ? "hover:bg-indigo-50/50 cursor-pointer" : "bg-slate-50 opacity-70"}`}
-                >
-                  <td className="px-4 py-4 w-12" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(m.id)}
-                      onChange={() => onToggleSelect(m.id)}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                    />
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs ${m.status === MEETING_STATUS.FAILED ? "bg-red-100 text-red-600" : "bg-indigo-100 text-indigo-600"}`}>
-                        {m.title.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-medium text-slate-700 group-hover:text-indigo-700 transition-colors line-clamp-1 max-w-[200px]">
-                        {m.title}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-slate-500 font-mono text-sm">{formatDuration(m.duration)}</td>
-                  <td className="px-6 py-4 text-slate-500 text-sm">
-                    {new Date(m.createdAt).toLocaleDateString("vi-VN")}
-                  </td>
-                  <td className="px-6 py-4"><Badge status={m.status} /></td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2 transition-opacity">
-                      {currentTab === "all" && ([MEETING_STATUS.COMPLETED, MEETING_STATUS.TRANSCRIBED, MEETING_STATUS.FAILED] as MeetingStatus[]).includes(m.status) && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onReprocess(m); }}
-                          className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                          title="Xử lý lại"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                        </button>
-                      )}
-                      {m.status === MEETING_STATUS.DRAFT && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            loading={isFinalizing === m.id}
-                            onClick={(e) => { e.stopPropagation(); onFinalizeDraft(e, m); }}
-                            className="text-indigo-600"
-                            title="Đồng bộ lên cloud"
-                          >
-                            <Wand2 className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
-                      {([MEETING_STATUS.COMPLETED, MEETING_STATUS.TRANSCRIBED] as MeetingStatus[]).includes(m.status) && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onOpenMeeting(m); }}
-                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                          title="Xem/Sửa"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                      )}
-                      {currentTab === "all" && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onMoveToTrash(e, m.id); }}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Xóa"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                      {currentTab === "trash" && (
-                        <>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onRestore(e, m.id); }}
-                            className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                            title="Khôi phục"
-                          >
-                            <FolderOpen className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onDeleteForever(e, m.id); }}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Xóa vĩnh viễn"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="md:hidden grid grid-cols-1 gap-3">
-        {meetings.map((m) => {
-          const isInteractive = isInteractiveStatuses.includes(m.status);
-          return (
-            <div
-              key={m.id}
-              onClick={() => isInteractive && onOpenMeeting(m)}
-              className={`bg-white rounded-2xl border shadow-sm p-4 transition-all ${isInteractive ? "cursor-pointer hover:shadow-md active:scale-[0.99]" : "opacity-70"}`}
-            >
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm ${m.status === MEETING_STATUS.FAILED ? "bg-red-100 text-red-600" : m.status === MEETING_STATUS.COMPLETED ? "bg-green-100 text-green-700" : "bg-indigo-100 text-indigo-600"}`}>
-                    {m.title.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <span className="block font-medium text-slate-700 line-clamp-1">{m.title}</span>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
-                      <Clock className="w-3 h-3" /> {formatDuration(m.duration)}
-                      <span>·</span>
-                      <Calendar className="w-3 h-3" /> {new Date(m.createdAt).toLocaleDateString("vi-VN")}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Badge status={m.status} />
-                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                  {m.status === MEETING_STATUS.DRAFT && (
-                    <button
-                      onClick={(e) => onFinalizeDraft(e, m)}
-                      disabled={isFinalizing === m.id}
-                      className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                      title="Lưu lên cloud"
-                    >
-                      {isFinalizing === m.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  )}
-                  {([MEETING_STATUS.COMPLETED, MEETING_STATUS.TRANSCRIBED] as MeetingStatus[]).includes(m.status) && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onOpenMeeting(m); }}
-                      className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                      title="Xem"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
       {hasMore && currentTab === "all" && (
         <div className="text-center py-4">
-          <button
-            onClick={onLoadMore}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors shadow-sm"
-          >
-            Tải thêm
-          </button>
+          <Button variant="outline" onClick={onLoadMore}>Tải thêm</Button>
         </div>
       )}
+
+      <BulkActionBar
+        selectedCount={selectedIds.length}
+        actions={
+          currentTab === "all"
+            ? [{ label: "Xóa đã chọn", icon: <Trash2 className="w-4 h-4" />, onClick: onMoveSelectedToTrash, intent: "danger" }]
+            : [{ label: "Xóa vĩnh viễn", icon: <Trash2 className="w-4 h-4" />, onClick: onDeleteSelected, intent: "danger" }]
+        }
+        onClear={() => onToggleSelectAll()}
+      />
     </div>
   );
 }
