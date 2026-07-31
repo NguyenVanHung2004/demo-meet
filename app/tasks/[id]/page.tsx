@@ -26,6 +26,7 @@ import {
 import { useAuth } from "@/app/context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { useGlobalUI } from "@/app/context/GlobalUIProvider";
+import { sendTaskEmails } from "@/app/lib/api";
 export default function ActionItemPage() {
   const { id } = useParams(); // Lấy ID meeting
   const router = useRouter();
@@ -225,30 +226,30 @@ export default function ActionItemPage() {
     setIsSendingMail(true);
 
     try {
-      // Gọi API Backend
-      const response = await fetch("/api/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tasks: validTasks,
-          meetingTitle: meetingTitle,
-        }),
-      });
+      // Gọi helper gửi mail (tự đính kèm Firebase ID token)
+      const data = await sendTaskEmails(validTasks, meetingTitle);
+      toast.success(`Đã gửi thành công cho ${data.count} người!`);
 
-      if (response.ok) {
-        const data = await response.json();
-        toast.success(`Đã gửi thành công cho ${data.count} người!`);
+      // Cập nhật trạng thái 'sent' vào DB
+      await updateMeetingProcess(id as string, { actionStatus: "sent" });
 
-        // Cập nhật trạng thái 'sent' vào DB
-        await updateMeetingProcess(id as string, { actionStatus: "sent" });
-
-        router.push("/tasks");
-      } else {
-        throw new Error("API Error");
-      }
-    } catch (e) {
+      router.push("/tasks");
+    } catch (e: any) {
       console.error(e);
-      toast.error("Gửi mail thất bại. Vui lòng kiểm tra lại cấu hình server.");
+      const message = e?.message;
+      if (message === "AUTH_REQUIRED") {
+        toast.error("Bạn chưa đăng nhập. Vui lòng đăng nhập để gửi email.");
+      } else if (message === "AUTH_EXPIRED") {
+        toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+      } else if (message === "RATE_LIMITED") {
+        toast.error("Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau.");
+      } else if (message === "SERVER_CONFIG") {
+        toast.error(
+          "Máy chủ chưa cấu hình Firebase Admin. Liên hệ admin để thêm FIREBASE_SERVICE_ACCOUNT_KEY."
+        );
+      } else {
+        toast.error("Gửi mail thất bại. Vui lòng kiểm tra lại cấu hình server.");
+      }
     } finally {
       setIsSendingMail(false);
     }

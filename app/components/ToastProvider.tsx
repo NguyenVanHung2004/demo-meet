@@ -4,7 +4,7 @@ import { Toaster } from "sonner";
 export default function ToastProvider() {
   return (
     <Toaster
-      position="bottom-right"
+      position="top-right"
       richColors
       closeButton
       duration={4000}

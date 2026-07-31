@@ -1,8 +1,51 @@
 // app/lib/api.ts
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { storage } from "./firebase";
+import { storage, auth } from "./firebase";
 const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
 const RUNPOD_ENDPOINT_ID = process.env.NEXT_PUBLIC_RUNPOD_ENDPOINT_ID;
+
+interface SendTaskEmailResult {
+  count: number;
+  failures: number;
+}
+
+// Gửi email phân công nhiệm vụ (bắt buộc kèm Firebase ID token)
+export const sendTaskEmails = async (
+  tasks: { task: string; deadline: string; email: string[] }[],
+  meetingTitle: string
+): Promise<SendTaskEmailResult> => {
+  const token = await auth.currentUser?.getIdToken().catch(() => null);
+  if (!token) {
+    throw new Error("AUTH_REQUIRED");
+  }
+
+  const response = await fetch("/api/email", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ tasks, meetingTitle }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message =
+      data?.error === "Unauthorized" || data?.error === "Invalid token"
+        ? "AUTH_EXPIRED"
+        : data?.error === "Too many requests"
+        ? "RATE_LIMITED"
+        : data?.error === "Server misconfigured"
+        ? "SERVER_CONFIG"
+        : "SERVER_ERROR";
+    const error = new Error(message) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+
+  return { count: data?.count ?? 0, failures: data?.failures ?? 0 };
+};
 
 // --- HÀM 1: GỠ BĂNG (Audio -> Text) - Dùng RunPod Async --
 // 1. Upload file lên Firebase (Thay thế Vercel Blob)

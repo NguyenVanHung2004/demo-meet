@@ -36,6 +36,11 @@ export async function POST(req: Request) {
   }
 
   try {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+      console.error("Firebase Admin chưa được cấu hình: thiếu FIREBASE_SERVICE_ACCOUNT_KEY");
+      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+    }
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

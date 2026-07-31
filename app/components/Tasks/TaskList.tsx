@@ -44,7 +44,9 @@ export default function TaskList({ meetings, loading, isProcessing, selectedMeet
       {meetings.map((meeting) => {
         const hasData = meeting.actionItems && meeting.actionItems.length > 0;
         const statusKey = meeting.actionStatus === ("send" as any) ? "send" : "draft";
-        const config = STATUS_CONFIG[statusKey];
+        const config = hasData
+          ? { label: statusKey === "send" ? "Đã gửi mail" : "Đã xử lý", className: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: statusKey === "send" ? Mail : CheckCircle }
+          : STATUS_CONFIG[statusKey];
         const StatusIcon = config.icon;
         const isProcessingThis = isProcessing && selectedMeetingId === meeting.id;
 
@@ -60,7 +62,7 @@ export default function TaskList({ meetings, loading, isProcessing, selectedMeet
                   <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 mt-2">
                     <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{new Date(meeting.createdAt).toLocaleString("vi-VN")}</span>
                     <span className={cn("flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold border", config.className)}>
-                      <StatusIcon className="w-3 h-3" />{hasData ? "Đã xử lý" : config.label}
+                      <StatusIcon className="w-3 h-3" />{config.label}
                     </span>
                   </div>
                 </div>
