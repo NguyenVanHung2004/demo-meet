@@ -209,15 +209,14 @@ export default function TeamPage() {
         {isLoadingData ? (
           <div className="text-center py-12 text-slate-400">Đang tải danh sách...</div>
         ) : filteredMembers.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-            <Building2 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-            <p className="text-slate-500 mb-4">Chưa có nhân sự nào khớp với tìm kiếm.</p>
-            {!searchTerm && (
-              <button onClick={() => openModal()} className="text-indigo-600 font-medium hover:underline">
-                Tạo dữ liệu nhân sự đầu tiên ngay
-              </button>
-            )}
-          </div>
+          <EmptyState
+            icon={<Building2 className="w-8 h-8" />}
+            title={searchTerm ? "Không tìm thấy nhân sự" : "Chưa có nhân sự nào"}
+            description={searchTerm ? "Thử thay đổi từ khóa tìm kiếm." : "Tạo dữ liệu nhân sự đầu tiên để bắt đầu."}
+            action={!searchTerm ? (
+              <Button variant="primary" onClick={() => openModal()}>Tạo nhân sự đầu tiên</Button>
+            ) : undefined}
+          />
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             {Object.entries(groupedData).sort(([a], [b]) => a.localeCompare(b)).map(([deptName, teams]) => {

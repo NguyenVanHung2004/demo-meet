@@ -192,7 +192,7 @@ export default function ActionItemPage() {
   // 2. Hàm Lưu lại (Save Draft)
   const handleSave = async () => {
     await updateMeetingProcess(id as string, { actionItems: tasks });
-    alert("Đã lưu nháp thành công!");
+    toast.success("Đã lưu nháp thành công!");
   };
 
   // 3. Hàm Gửi Mail

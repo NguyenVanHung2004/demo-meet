@@ -2,13 +2,17 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Upload, CheckCircle, RefreshCcw, HardDrive, Video, FileVideo } from 'lucide-react';
+import { Upload, CheckCircle, RefreshCcw, HardDrive, FileVideo } from 'lucide-react';
 import { uploadAudioToFirebase, startTranscriptionJob } from '../lib/api';
 import { saveMeeting, Meeting } from '../lib/db';
 import { useAuth } from '../context/AuthContext';
 import { useGlobalUI } from '../context/GlobalUIProvider';
 import { convertToMp3 } from '../lib/converter';
 import { MEETING_STATUS } from '../lib/constants';
+import Modal from './ui/Modal';
+import Select from './ui/Select';
+import Button from './ui/Button';
+import Spinner from './ui/Spinner';
 
 interface DriveFile {
   id: string;
@@ -152,145 +156,117 @@ export default function DriveImportModal({ isOpen, onClose, onImportSuccess }: {
         return parseFloat((parseInt(bytes) / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
-    if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-                {/* Header */}
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                    <h2 className="text-xl font-semibold flex items-center gap-2">
-                        <HardDrive className="w-6 h-6 text-green-600" />
-                        Google Drive Import
-                    </h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">×</button>
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Google Drive Import"
+            description="Import recordings trực tiếp từ Google Drive"
+            icon={<HardDrive className="w-5 h-5" />}
+            size="lg"
+        >
+            {initializing ? (
+                <div className="text-center py-10 text-gray-500 flex flex-col items-center">
+                    <Spinner size="lg" intent="primary" />
+                    <p className="mt-2">Checking connection...</p>
                 </div>
-
-                {/* Content */}
-                <div className="p-6 flex-1 overflow-y-auto">
-                    {initializing ? (
-                        <div className="text-center py-10 text-gray-500 flex flex-col items-center">
-                            <div className="w-8 h-8 border-2 border-green-600 border-t-transparent rounded-full animate-spin mb-2"></div>
-                            Checking connection...
-                        </div>
-                    ) : !isConnected ? (
-                        <div className="text-center py-10">
-                            <div className="bg-green-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <HardDrive className="w-8 h-8 text-green-600" />
-                            </div>
-                            <h3 className="text-lg font-medium mb-2">Connect to Google Drive</h3>
-                            <p className="text-gray-500 mb-6 max-w-sm mx-auto">
-                                Connect your account to import recordings directly from the "Meet Recordings" folder.
-                            </p>
-                            <button
-                                onClick={handleConnect}
-                                className="bg-white border border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50 transition font-medium flex items-center gap-2 mx-auto shadow-sm"
-                            >
-                                <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-                                Sign in with Google
-                            </button>
-                        </div>
+            ) : !isConnected ? (
+                <div className="text-center py-10">
+                    <div className="bg-green-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <HardDrive className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-medium mb-2">Connect to Google Drive</h3>
+                    <p className="text-gray-500 mb-6 max-w-sm mx-auto">
+                        Connect your account to import recordings directly from the "Meet Recordings" folder.
+                    </p>
+                    <Button variant="outline" onClick={handleConnect} className="mx-auto">
+                        <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+                        Sign in with Google
+                    </Button>
+                </div>
+            ) : (
+                <div>
+                    {loading ? (
+                        <div className="text-center py-10 text-gray-500 animate-pulse">Loading recordings...</div>
                     ) : (
-                        <div>
-                            {loading ? (
-                                <div className="text-center py-10 text-gray-500 animate-pulse">Loading recordings...</div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-medium">Recent Recordings</h3>
+                        <div className="space-y-4">
+                            <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+                                <h3 className="font-medium">Recent Recordings</h3>
 
-                                        <div className="flex items-center gap-4">
-                                            {/* Language Selector */}
-                                            <select
-                                                value={language}
-                                                onChange={(e) => setLanguage(e.target.value as "vi" | "en")}
-                                                className="text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-                                            >
-                                                <option value="vi">🇻🇳 Tiếng Việt</option>
-                                                <option value="en">🇬🇧 English</option>
-                                            </select>
+                                <div className="flex flex-wrap items-center gap-4">
+                                    <Select
+                                        value={language}
+                                        onChange={(e) => setLanguage(e.target.value as "vi" | "en")}
+                                        options={[
+                                            { value: "vi", label: "🇻🇳 Tiếng Việt" },
+                                            { value: "en", label: "🇬🇧 English" },
+                                        ]}
+                                    />
 
-                                            {/* [NEW] Show All Toggle */}
-                                            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={showAll}
-                                                    onChange={(e) => setShowAll(e.target.checked)}
-                                                    className="w-4 h-4 rounded text-green-600 focus:ring-green-500 border-gray-300"
-                                                />
-                                                Show all videos
-                                            </label>
+                                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={showAll}
+                                            onChange={(e) => setShowAll(e.target.checked)}
+                                            className="w-4 h-4 rounded text-green-600 focus:ring-green-500 border-gray-300"
+                                        />
+                                        Show all videos
+                                    </label>
 
-                                            <button onClick={checkDriveStatus} className="text-sm text-green-600 hover:underline flex items-center gap-1">
-                                                <RefreshCcw className="w-3 h-3" /> Refresh
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {files.length === 0 ? (
-                                        <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                                            No recordings found in "Meet Recordings" folder.
-                                        </div>
-                                    ) : (
-                                        files.map((file) => (
-                                            <div key={file.id} className="flex items-center justify-between p-4 border rounded-lg hover:border-green-300 hover:bg-green-50 transition group">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-red-100 text-red-600 rounded flex items-center justify-center">
-                                                        <FileVideo className="w-6 h-6" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="font-medium text-gray-900 line-clamp-1 break-all">{file.name}</div>
-                                                        <div className="text-sm text-gray-500 flex items-center gap-3 mt-1">
-                                                            <span>{new Date(file.createdTime).toLocaleDateString()}</span>
-                                                            <span>•</span>
-                                                            <span>{formatSize(file.size)}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleImport(file)}
-                                                    disabled={importingId === file.id}
-                                                    className="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-green-600 hover:text-white hover:border-green-600 transition flex items-center gap-2 group-hover:bg-green-600 group-hover:text-white group-hover:border-green-600"
-                                                >
-                                                    {importingId === file.id ? (
-                                                        conversionProgress > 0 && conversionProgress < 100 ? (
-                                                            <span className="flex items-center gap-2">
-                                                                <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
-                                                                Đang chuyển đổi {conversionProgress}%
-                                                            </span>
-                                                        ) : uploadProgress > 0 && uploadProgress < 100 ? (
-                                                            <span className="flex items-center gap-2">
-                                                                <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
-                                                                Đang tải lên {uploadProgress}%
-                                                            </span>
-                                                        ) : (
-                                                            <span className="flex items-center gap-2">
-                                                                <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
-                                                                Đang xử lý...
-                                                            </span>
-                                                        )
-                                                    ) : (
-                                                        <>
-                                                            <Upload className="w-4 h-4" /> Import
-                                                        </>
-                                                    )}
-                                                </button>
-                                            </div>
-                                        ))
-                                    )}
+                                    <button onClick={checkDriveStatus} className="text-sm text-green-600 hover:underline flex items-center gap-1">
+                                        <RefreshCcw className="w-3 h-3" /> Refresh
+                                    </button>
                                 </div>
+                            </div>
+
+                            {files.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                                    No recordings found in "Meet Recordings" folder.
+                                </div>
+                            ) : (
+                                files.map((file) => (
+                                    <div key={file.id} className="flex items-center justify-between p-4 border rounded-lg hover:border-green-300 hover:bg-green-50 transition group">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-red-100 text-red-600 rounded flex items-center justify-center">
+                                                <FileVideo className="w-6 h-6" />
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-gray-900 line-clamp-1 break-all">{file.name}</div>
+                                                <div className="text-sm text-gray-500 flex items-center gap-3 mt-1">
+                                                    <span>{new Date(file.createdTime).toLocaleDateString()}</span>
+                                                    <span>•</span>
+                                                    <span>{formatSize(file.size)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleImport(file)}
+                                            disabled={importingId === file.id}
+                                            leftIcon={importingId === file.id ? undefined : <Upload className="w-4 h-4" />}
+                                        >
+                                            {importingId === file.id ? (
+                                                conversionProgress > 0 && conversionProgress < 100 ? (
+                                                    `Đang chuyển đổi ${conversionProgress}%`
+                                                ) : uploadProgress > 0 && uploadProgress < 100 ? (
+                                                    `Đang tải lên ${uploadProgress}%`
+                                                ) : (
+                                                    "Đang xử lý..."
+                                                )
+                                            ) : (
+                                                "Import"
+                                            )}
+                                        </Button>
+                                    </div>
+                                ))
                             )}
                         </div>
                     )}
                 </div>
-
-                {/* Footer */}
-                {isConnected && (
-                    <div className="p-4 bg-gray-50 border-t text-center text-xs text-gray-500">
-                        Connected to Google Drive • folder: Meet Recordings
-                    </div>
-                )}
-            </div>
-        </div>
+            )}
+        </Modal>
     );
 }
+
+

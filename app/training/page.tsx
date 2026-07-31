@@ -8,12 +8,14 @@ import {
   Activity
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useGlobalUI } from "../context/GlobalUIProvider";
 import { getAllTrainingSamples, TrainingDataSample } from "../lib/trainingData";
 import AppShell from "../components/AppShell";
 import Spinner from "../components/ui/Spinner";
 
 export default function TrainingDataPage() {
   const { user, loading } = useAuth();
+  const { toast } = useGlobalUI();
   const router = useRouter();
 
   const [samples, setSamples] = useState<TrainingDataSample[]>([]);
@@ -144,13 +146,13 @@ export default function TrainingDataPage() {
       const res = await fetch('/api/finetune', { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
-        alert("Đã gửi lệnh Finetune lên Runpod thành công!\nJob ID: " + data.jobId);
+        toast.success("Đã gửi lệnh Finetune lên Runpod thành công! Job ID: " + data.jobId);
       } else {
-        alert("Lỗi: " + data.error);
+        toast.error("Lỗi: " + data.error);
       }
     } catch (e) {
       console.error(e);
-      alert("Đã có lỗi xảy ra khi gọi Finetune API");
+      toast.error("Đã có lỗi xảy ra khi gọi Finetune API");
     } finally {
       setIsTraining(false);
     }

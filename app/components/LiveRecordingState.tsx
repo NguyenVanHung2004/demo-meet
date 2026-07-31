@@ -461,7 +461,7 @@ export default function LiveRecordingState({
         // Check if user actually shared audio
         const sysAudioTrack = sysStream.getAudioTracks()[0];
         if (!sysAudioTrack) {
-          alert("Bạn chưa tích vào 'Chia sẻ âm thanh' (Share system audio). Chỉ có hình ảnh được chia sẻ.");
+          toast.warning("Bạn chưa tích vào 'Chia sẻ âm thanh' (Share system audio). Chỉ có hình ảnh được chia sẻ.");
           sysStream.getTracks().forEach(t => t.stop());
           return;
         }
@@ -513,7 +513,7 @@ export default function LiveRecordingState({
       setupVisualizer(finalStream); // Gọi hàm visualizer đã tách
       startListening(finalStream, timer, language);
       requestWakeLock();
-    } catch (err) { alert("Lỗi Micro/Permission: " + err); }
+    } catch (err) { toast.error("Lỗi Micro/Permission: " + err); }
   }, [captureSystemAudio, language, timer, user, meetingTitle, startListening, setupVisualizer, requestWakeLock, handeFullStop]);
 
   const stopRecordingSession = useCallback(() => {
@@ -651,7 +651,7 @@ export default function LiveRecordingState({
 
     } catch (e) {
       console.error(e);
-      alert("Lỗi khi lưu: " + (e as Error).message);
+      toast.error("Lỗi khi lưu: " + (e as Error).message);
     } finally {
       setIsUploading(false);
     }

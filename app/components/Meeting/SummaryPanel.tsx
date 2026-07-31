@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { useGlobalUI } from "@/app/context/GlobalUIProvider";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
+import { sanitizeHtml } from "@/app/lib/sanitizeHtml";
 import {
   Sparkles, FileText, AlignLeft, Edit3, Check
 } from "lucide-react";
@@ -124,7 +125,7 @@ export default function SummaryPanel({
               {meeting.summary.startsWith("<") ? (
                 <div
                   className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none"
-                  dangerouslySetInnerHTML={{ __html: formatHtmlSummary(meeting.summary) }}
+                  dangerouslySetInnerHTML={{ __html: formatHtmlSummary(sanitizeHtml(meeting.summary)) }}
                 />
               ) : (
                 <div className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none">

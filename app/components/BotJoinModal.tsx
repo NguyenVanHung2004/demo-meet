@@ -1,13 +1,18 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Bot, Link as LinkIcon, X, Loader2, CheckCircle, Video } from 'lucide-react';
+import { Bot, Link as LinkIcon, Loader2, CheckCircle, Video } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useGlobalUI } from '../context/GlobalUIProvider';
-import { db, auth, storage } from "@/app/lib/firebase";
+import { storage } from "@/app/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { saveMeeting, Meeting } from "@/app/lib/db";
 import { MEETING_STATUS } from "../lib/constants";
+import Modal from "./ui/Modal";
+import Input from "./ui/Input";
+import Select from "./ui/Select";
+import Button from "./ui/Button";
+import Spinner from "./ui/Spinner";
 
 export default function BotJoinModal({ isOpen, onClose, onUpdate }: { isOpen: boolean; onClose: () => void; onUpdate?: () => void }) {
     const { user } = useAuth();
@@ -235,130 +240,96 @@ export default function BotJoinModal({ isOpen, onClose, onUpdate }: { isOpen: bo
     }, [botId, status, user, onClose, toast]);
 
 
-    if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200 overflow-hidden">
-                {/* Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white relative">
-                    <button onClick={onClose} className="absolute top-4 right-4 text-white/70 hover:text-white p-1 rounded-full hover:bg-white/20 transition">
-                        <X className="w-5 h-5" />
-                    </button>
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-white/20 rounded-lg backdrop-blur-md">
-                            <Bot className="w-8 h-8 text-white" />
-                        </div>
-                        <h2 className="text-xl font-bold">Mời Bot Tham Gia</h2>
-                    </div>
-                </div>
-
-                <div className="p-6 space-y-6">
-                    {botId ? (
-                        <div className="text-center space-y-6 py-4">
-                            {status === 'completed' ? (
-                                <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
-                                    <CheckCircle className="w-10 h-10" />
-                                </div>
-                            ) : (
-                                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto relative">
-                                    <Loader2 className="w-10 h-10 animate-spin absolute" />
-                                    <Bot className="w-5 h-5" />
-                                </div>
-                            )}
-
-                            <div>
-                                <h3 className="text-xl font-bold text-slate-800">
-                                    {status === 'completed' ? "Hoàn tất!" : "Bot đang làm việc"}
-                                </h3>
-                                <p className="text-slate-500 font-medium mt-2 animate-pulse">
-                                    {statusDetails}
-                                </p>
-                                <p className="text-xs text-slate-400 mt-1 font-mono">ID: {botId.split('-')[0]}</p>
-                            </div>
-
-                            {status === 'recording' && (
-                                <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
-                                    <div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />
-                                    Đang Ghi Âm
-                                </div>
-                            )}
-
-                            {status !== 'completed' && (
-                                <button
-                                    onClick={onClose}
-                                    className="text-slate-400 hover:text-slate-600 text-sm hover:underline"
-                                >
-                                    Ẩn xuống nền (Bot vẫn chạy)
-                                </button>
-                            )}
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Mời Bot Tham Gia"
+            description="Bot sẽ tự động ghi âm và phiên âm cuộc họp trên Google Meet / Zoom."
+            icon={<Bot className="w-5 h-5" />}
+            size="md"
+        >
+            {botId ? (
+                <div className="text-center space-y-6 py-4">
+                    {status === 'completed' ? (
+                        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                            <CheckCircle className="w-10 h-10" />
                         </div>
                     ) : (
-                        <>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Link cuộc họp (Google Meet / Zoom)</label>
-                                    <div className="relative">
-                                        <div className="absolute left-3 top-3.5 text-slate-400">
-                                            <LinkIcon className="w-5 h-5" />
-                                        </div>
-                                        <input
-                                            value={meetingUrl}
-                                            onChange={(e) => setMeetingUrl(e.target.value)}
-                                            placeholder="https://meet.google.com/..."
-                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium"
-                                        />
-                                    </div>
-                                </div>
+                        <div className="flex items-center justify-center">
+                            <Spinner size="xl" intent="primary" />
+                        </div>
+                    )}
 
-                                {/* Language Selector */}
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Ngôn ngữ ghi âm</label>
-                                    <select
-                                        value={language}
-                                        onChange={(e) => setLanguage(e.target.value as "vi" | "en")}
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700"
-                                    >
-                                        <option value="vi">🇻🇳 Tiếng Việt</option>
-                                        <option value="en">🇬🇧 English</option>
-                                    </select>
-                                </div>
+                    <div>
+                        <h3 className="text-xl font-bold text-slate-800">
+                            {status === 'completed' ? "Hoàn tất!" : "Bot đang làm việc"}
+                        </h3>
+                        <p className="text-slate-500 font-medium mt-2 animate-pulse">
+                            {statusDetails}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1 font-mono">ID: {botId.split('-')[0]}</p>
+                    </div>
 
-                                {/* Objectives Textarea */}
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Mục tiêu cuộc họp (Objectives)</label>
-                                    <textarea
-                                        value={objectives}
-                                        onChange={(e) => setObjectives(e.target.value)}
-                                        placeholder="Ví dụ: Chốt ngân sách marketing Q3, phân công phát triển tính năng mới..."
-                                        rows={3}
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700 text-sm resize-none"
-                                    />
-                                </div>
+                    {status === 'recording' && (
+                        <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+                            <div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />
+                            Đang Ghi Âm
+                        </div>
+                    )}
 
-                                <p className="text-xs text-slate-500 italic">
-                                    * Bot sẽ tự động rời phòng khi kết thúc.
-                                </p>
-                                <div className="text-[11px] sm:text-xs text-slate-600 bg-blue-50 p-3 rounded-xl border border-blue-100 leading-relaxed mt-2">
-                                    <span className="font-semibold text-blue-700">Lưu ý cho Google Workspace/Edu:</span> Nếu bot không thể tham gia, quản trị viên có thể cần cấp quyền. <a href="https://guide.fireflies.ai/articles/7581948912-how-to-invite-fireflies-to-google-meet-meetings" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">Xem hướng dẫn</a>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleJoin}
-                                disabled={loading}
-                                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transition flex items-center justify-center gap-2"
-                            >
-                                {loading ? (
-                                    <><Loader2 className="w-5 h-5 animate-spin" /> Đang kết nối...</>
-                                ) : (
-                                    <><Video className="w-5 h-5" /> Mời Bot vào ngay</>
-                                )}
-                            </button>
-                        </>
+                    {status !== 'completed' && (
+                        <button
+                            onClick={onClose}
+                            className="text-slate-400 hover:text-slate-600 text-sm hover:underline"
+                        >
+                            Ẩn xuống nền (Bot vẫn chạy)
+                        </button>
                     )}
                 </div>
-            </div>
-        </div>
+            ) : (
+                <div className="space-y-4">
+                    <Input
+                        label="Link cuộc họp (Google Meet / Zoom)"
+                        placeholder="https://meet.google.com/..."
+                        value={meetingUrl}
+                        onChange={(e) => setMeetingUrl(e.target.value)}
+                        leftIcon={<LinkIcon className="w-4 h-4" />}
+                    />
+
+                    <Select
+                        label="Ngôn ngữ ghi âm"
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value as "vi" | "en")}
+                        options={[
+                            { value: "vi", label: "🇻🇳 Tiếng Việt" },
+                            { value: "en", label: "🇬🇧 English" },
+                        ]}
+                    />
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Mục tiêu cuộc họp (Objectives)</label>
+                        <textarea
+                            value={objectives}
+                            onChange={(e) => setObjectives(e.target.value)}
+                            placeholder="Ví dụ: Chốt ngân sách marketing Q3, phân công phát triển tính năng mới..."
+                            rows={3}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none font-medium text-slate-700 text-sm resize-none"
+                        />
+                    </div>
+
+                    <p className="text-xs text-slate-500 italic">
+                        * Bot sẽ tự động rời phòng khi kết thúc.
+                    </p>
+                    <div className="text-[11px] sm:text-xs text-slate-600 bg-blue-50 p-3 rounded-xl border border-blue-100 leading-relaxed mt-2">
+                        <span className="font-semibold text-blue-700">Lưu ý cho Google Workspace/Edu:</span> Nếu bot không thể tham gia, quản trị viên có thể cần cấp quyền. <a href="https://guide.fireflies.ai/articles/7581948912-how-to-invite-fireflies-to-google-meet-meetings" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">Xem hướng dẫn</a>
+                    </div>
+
+                    <Button variant="primary" onClick={handleJoin} loading={loading} className="w-full" leftIcon={loading ? undefined : <Video className="w-4 h-4" />}>
+                        {loading ? "Đang kết nối..." : "Mời Bot vào ngay"}
+                    </Button>
+                </div>
+            )}
+        </Modal>
     );
 }
