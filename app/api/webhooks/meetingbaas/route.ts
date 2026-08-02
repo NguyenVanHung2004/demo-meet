@@ -7,21 +7,27 @@ export const dynamic = 'force-dynamic';
 
 const WEBHOOK_SECRET = process.env.MEETINGBAAS_WEBHOOK_SECRET;
 
-async function verifySignature(req: Request): Promise<boolean> {
+async function verifySignature(rawBody: string, signature: string | null): Promise<boolean> {
   if (!WEBHOOK_SECRET) return true;
-  const signature = req.headers.get('X-MeetingBaas-Signature');
   if (!signature) return false;
-  const text = await req.text();
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', encoder.encode(WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
-  const expected = await crypto.subtle.sign('HMAC', key, encoder.encode(text));
+  const key = await crypto.subtle.importKey('raw', encoder.encode(WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const expected = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody));
   const expectedHex = Array.from(new Uint8Array(expected)).map(b => b.toString(16).padStart(2, '0')).join('');
-  return signature === expectedHex;
+  if (signature.length !== expectedHex.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < signature.length; i++) {
+    mismatch |= signature.charCodeAt(i) ^ expectedHex.charCodeAt(i);
+  }
+  return mismatch === 0;
 }
 
 export async function POST(req: Request) {
     try {
-        const verified = await verifySignature(req);
+        const signature = req.headers.get('X-MeetingBaas-Signature');
+        const rawBody = await req.text();
+
+        const verified = await verifySignature(rawBody, signature);
         if (!verified) {
             return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
         }
@@ -34,7 +40,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Missing userId" }, { status: 400 });
         }
 
-        const body = await req.json();
+        const body = JSON.parse(rawBody);
         const { event, data } = body;
 
         if (event === 'failed') {
