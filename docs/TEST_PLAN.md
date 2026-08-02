@@ -108,34 +108,65 @@ Selenium bị loại vì: tốc độ chậm (WebDriver protocol), setup phức 
 
 ---
 
-## 🐛 Bug thật được phát hiện nhờ test (4 cái)
+## 🐛 Bug thật được phát hiện nhờ test (9 cái)
 
-Khi viết test cho Phase T2, tôi đã phát hiện **4 bug thật** trong code hiện tại. Tất cả đã được fix:
+### Phase T2 (4 bug — commit đầu tiên)
 
-### Bug #1: `sanitizeHtml` không strip self-closing tag
+#### Bug #1: `sanitizeHtml` không strip self-closing tag
 - **File:** `app/lib/sanitizeHtml.ts`
 - **Triệu chứng:** `<embed src="evil.swf" />` không bị strip → XSS bypass
 - **Fix:** Thêm regex cho self-closing `<embed>`, `<meta>`, `<form>`, `<base>`; thêm filter cho `data:text/html`
 - **Test phát hiện:** `tests/lib/sanitizeHtml.test.ts` > "loại bỏ thẻ <embed>"
 
-### Bug #2: Webhook `req.json()` fail vì body đã consumed
+#### Bug #2: Webhook `req.json()` fail vì body đã consumed
 - **File:** `app/api/webhooks/meetingbaas/route.ts`
 - **Triệu chứng:** `verifySignature` đọc `req.text()` trước → sau đó `req.json()` throw `Body has already been used` → production webhook **không bao giờ nhận được COMPLETED event**
 - **Ảnh hưởng:** Nghiêm trọng — toàn bộ MeetingBaas bot integration bị chết
 - **Fix:** Đổi sang đọc `req.text()` 1 lần, parse JSON từ rawBody
 
-### Bug #3: HMAC key import sai usage
+#### Bug #3: HMAC key import sai usage
 - **File:** `app/api/webhooks/meetingbaas/route.ts`
 - **Triệu chứng:** Import key với `['verify']` rồi dùng `crypto.subtle.sign()` → `InvalidAccessError: Unable to use this key to sign`
-- **Ảnh hưởng:** Webhook signature verification throw exception → 500 (bị ăn vào catch chung) hoặc fail tùy env
 - **Fix:** Đổi thành `['sign']` vì code này tự compute signature
 
-### Bug #4: Signature comparison vulnerable timing attack
+#### Bug #4: Signature comparison vulnerable timing attack
 - **File:** `app/api/webhooks/meetingbaas/route.ts`
 - **Triệu chứng:** So sánh `signature === expectedHex` dùng string equality → attacker đo thời gian response để đoán từng ký tự
 - **Fix:** Constant-time compare với XOR loop
 
-> Nếu không có test, cả 4 bug này sẽ chỉ phát hiện khi user report hoặc khi security audit.
+### Phase T3 review (5 bug — fix sau khi user audit lại)
+
+#### Bug #5 (A): `formatTranscriptText(0)` trả `""` thay vì `"0"`
+- **File:** `app/lib/utils.ts`
+- **Triệu chứng:** Check `!text` bắt cả `0`/`false` → stringify mất dữ liệu. Nếu ASR trả về số 0 (vd nhận dạng sai "không"), text gốc bị mất.
+- **Fix:** Chỉ check `text === null || text === undefined`
+- **Test phát hiện:** `tests/lib/utils.test.ts`
+
+#### Bug #6 (B): Email rate limit trước auth → DoS attack
+- **File:** `app/api/email/route.ts`
+- **Triệu chứng:** Rate limit check TRƯỚC auth → attacker spam 10 request từ 1 IP với bad token → legitimate user cùng IP bị 429
+- **Fix:** Auth trước, rate limit per-uid (không per-IP)
+- **Test phát hiện:** `tests/api/email.test.ts`
+
+#### Bug #7 (C): convertToMp3 memory leak khi exec fail
+- **File:** `app/lib/converter.ts`
+- **Triệu chứng:** Input file đã `writeFile` vào FFmpeg FS, nhưng nếu `exec()` throw thì `catch` chỉ log + re-throw, không cleanup. Sau nhiều lần convert fail → FFmpeg FS đầy → browser crash
+- **Fix:** `try/finally` với `deleteFile` input + output (dùng nested try/catch cho file không tồn tại)
+- **Test phát hiện:** `tests/lib/converter.test.ts`
+
+#### Bug #8 (D): getMeetingByShareId fallback expose private meeting
+- **File:** `app/lib/db/meetingDb.ts`
+- **Triệu chứng:** Nếu không tìm thấy shareToken, fallback sang `getMeetingById(shareId)` → attacker biết meeting ID có thể truy cập meeting private (không cần shareToken)
+- **Fix:** Bỏ fallback, return undefined nếu không match shareToken
+- **Test phát hiện:** `tests/lib/db/meetingDb.test.ts`
+
+#### Bug #9 (E): Webhook bypass khi thiếu MEETINGBAAS_WEBHOOK_SECRET
+- **File:** `app/api/webhooks/meetingbaas/route.ts`
+- **Triệu chứng:** `if (!WEBHOOK_SECRET) return true` → nếu env var bị miss trong production (do typo deploy, secret rotation, etc.), mọi webhook request pass auth, attacker có thể inject fake meeting data
+- **Fix:** Fail-closed: `return false` nếu secret missing (kèm log cảnh báo)
+- **Test phát hiện:** `tests/api/webhooks/meetingbaas-fail-closed.test.ts`
+
+> Nếu không có test, 9 bug này chỉ phát hiện khi user report, security audit, hoặc production incident.
 
 ---
 
@@ -309,13 +340,13 @@ describe("POST /api/foo — mô tả luồng + bug được cover", () => {
 |---|---|---|---|
 | T1 | 0.5d | — | ✅ Done |
 | T2 | 2–3d | 9 critical bug + 4 bug mới phát hiện | ✅ Done |
-| T3 | 2d | Bug logic nhỏ, regression | ✅ Done (105 tests) |
+| T3 | 2d | Bug logic nhỏ, regression + 5 bug audit | ✅ Done (105 tests) |
 | T4 | 1–2d | Routing, UI | ✅ Done (32 tests) |
 
 **Hiện tại:**
-- **167 Vitest tests** (15 file) chạy trong ~10s — cover 9 bug Critical đã fix + logic thuần (parser, constants, utils, db, hook)
-- **30 Playwright E2E tests** (3 file) chạy trong ~10s — cover Phase 6 routing + API health
-- Tổng: **197 tests** chạy trong ~20s, coverage tăng từ 0% → 10.03%
+- **172 Vitest tests** (16 file) chạy trong ~9s — cover 9 bug Critical đã fix + 5 bug mới phát hiện + logic thuần
+- **32 Playwright E2E tests** (3 file) chạy trong ~10s — cover Phase 6 routing + API health
+- Tổng: **204 tests** chạy trong ~20s, coverage tăng từ 0% → 10.03%
 
 ---
 
