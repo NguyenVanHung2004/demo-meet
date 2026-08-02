@@ -162,8 +162,7 @@ export default function DashboardState({
   }, [user, lastDoc, hasMore, loadingMore]);
 
   // --- ACTIONS ---
-  const handleMoveToTrash = useCallback(async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const handleMoveToTrash = useCallback(async (id: string) => {
     const isConfirmed = await confirm({
       title: "Xóa cuộc họp?",
       message: "Cuộc họp sẽ được chuyển vào thùng rác.",
@@ -188,15 +187,13 @@ export default function DashboardState({
     }
   }, [meetings, confirm, toast, loadMeetings]);
 
-  const handleRestore = useCallback(async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const handleRestore = useCallback(async (id: string) => {
     await toggleTrashMeeting(id, false);
     toast.success("Đã khôi phục cuộc họp");
     loadMeetings();
   }, [loadMeetings, toast]);
 
-  const handleDeleteForever = useCallback(async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const handleDeleteForever = useCallback(async (id: string) => {
     const isConfirmed = await confirm({
       title: "Xóa vĩnh viễn?",
       message: "Hành động này không thể hoàn tác. Bạn chắc chứ?",
@@ -216,8 +213,7 @@ export default function DashboardState({
     }
   }, [meetings, confirm, toast, loadMeetings]);
 
-  const handleFinalizeDraft = useCallback(async (e: React.MouseEvent, m: Meeting) => {
-    e.stopPropagation();
+  const handleFinalizeDraft = useCallback(async (m: Meeting) => {
     try {
       setIsFinalizing(m.id);
       toast.info("Đang đồng bộ bản nháp lên cloud...");
@@ -347,6 +343,10 @@ export default function DashboardState({
     );
   }, []);
 
+  const clearSelection = useCallback(() => {
+    setSelectedIds([]);
+  }, []);
+
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
       <Header
@@ -397,6 +397,7 @@ export default function DashboardState({
             onMoveSelectedToTrash={handleMoveSelectedToTrash}
             onDeleteSelected={handleDeleteSelected}
             onEmptyTrash={handleEmptyTrash}
+            onClearSelection={clearSelection}
             onNavigateToUpload={() => {
               const fileInput = document.createElement('input');
               fileInput.type = 'file';

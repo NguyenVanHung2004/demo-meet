@@ -1,8 +1,7 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type { Meeting } from "@/app/lib/db";
-import { MEETING_STATUS } from "@/app/lib/constants";
-import { Calendar, Trash2 } from "lucide-react";
+import { Calendar, Search, Trash2 } from "lucide-react";
 import MeetingCard from "./MeetingCard";
 import MeetingListFilter, { type SortBy, type StatusFilter } from "./MeetingListFilter";
 import BulkActionBar from "@/app/components/ui/BulkActionBar";
@@ -24,48 +23,67 @@ interface MeetingListViewProps {
   onToggleSelectAll: () => void;
   onOpenMeeting: (m: Meeting) => void;
   onReprocess: (m: Meeting) => void;
-  onFinalizeDraft: (e: React.MouseEvent, m: Meeting) => void;
-  onMoveToTrash: (e: React.MouseEvent, id: string) => void;
-  onRestore: (e: React.MouseEvent, id: string) => void;
-  onDeleteForever: (e: React.MouseEvent, id: string) => void;
+  onFinalizeDraft: (m: Meeting) => void;
+  onMoveToTrash: (id: string) => void;
+  onRestore: (id: string) => void;
+  onDeleteForever: (id: string) => void;
   onMoveSelectedToTrash: () => void;
   onDeleteSelected: () => void;
   onEmptyTrash: () => void;
+  onClearSelection: () => void;
   onNavigateToUpload?: () => void;
   onNavigateToLive?: () => void;
 }
 
 export default function MeetingListView({
   meetings, currentTab, selectedIds, loading, loadingMore, isFinalizing, hasMore, onLoadMore,
-  onToggleSelect, onToggleSelectAll, onOpenMeeting, onReprocess, onFinalizeDraft,
+  onToggleSelect, onOpenMeeting, onReprocess, onFinalizeDraft,
   onMoveToTrash, onRestore, onDeleteForever,
-  onMoveSelectedToTrash, onDeleteSelected, onEmptyTrash,
+  onMoveSelectedToTrash, onDeleteSelected, onEmptyTrash, onClearSelection,
   onNavigateToUpload, onNavigateToLive
 }: MeetingListViewProps) {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("newest");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [prevTab, setPrevTab] = useState(currentTab);
+
+  if (prevTab !== currentTab) {
+    setPrevTab(currentTab);
+    setSearch("");
+    setStatusFilter("all");
+    setSortBy("newest");
+  }
 
   const filteredMeetings = useMemo(() => {
     let result = meetings;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(m => m.title.toLowerCase().includes(q));
-    }
-    if (statusFilter !== "all") {
-      result = result.filter(m => m.status === statusFilter);
+    if (currentTab === "all") {
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        result = result.filter(m => m.title.toLowerCase().includes(q));
+      }
+      if (statusFilter !== "all") {
+        result = result.filter(m => m.status === statusFilter);
+      }
     }
     result = [...result].sort((a, b) => {
+      let primary = 0;
       switch (sortBy) {
-        case "newest": return b.createdAt - a.createdAt;
-        case "oldest": return a.createdAt - b.createdAt;
-        case "title": return a.title.localeCompare(b.title);
-        case "duration": return (b.duration || 0) - (a.duration || 0);
-        default: return 0;
+        case "newest": primary = b.createdAt - a.createdAt; break;
+        case "oldest": primary = a.createdAt - b.createdAt; break;
+        case "title": primary = a.title.localeCompare(b.title); break;
+        case "duration": primary = (b.duration || 0) - (a.duration || 0); break;
+        default: primary = 0;
       }
+      return primary !== 0 ? primary : a.id.localeCompare(b.id);
     });
     return result;
-  }, [meetings, search, sortBy, statusFilter]);
+  }, [meetings, currentTab, search, sortBy, statusFilter]);
+
+  const resetFilters = useCallback(() => {
+    setSearch("");
+    setStatusFilter("all");
+    setSortBy("newest");
+  }, []);
 
   if (loading) {
     return (
@@ -86,38 +104,11 @@ export default function MeetingListView({
     );
   }
 
-  if (filteredMeetings.length === 0) {
-    if (currentTab === "trash") {
-      return (
-        <EmptyState
-          icon={<Trash2 className="w-8 h-8" />}
-          title="Thùng rác trống"
-          description="Các cuộc họp đã xóa sẽ xuất hiện ở đây."
-        />
-      );
-    }
-    return (
-      <EmptyState
-        icon={<Calendar className="w-8 h-8" />}
-        title="Chưa có cuộc họp nào"
-        description="Tải lên file audio hoặc ghi âm trực tiếp để bắt đầu."
-        action={
-          <div className="flex gap-3">
-            {onNavigateToUpload && (
-              <Button variant="primary" onClick={onNavigateToUpload}>Tải file lên</Button>
-            )}
-            {onNavigateToLive && (
-              <Button variant="outline" onClick={onNavigateToLive}>Ghi âm trực tiếp</Button>
-            )}
-          </div>
-        }
-      />
-    );
-  }
+  const showFilter = currentTab === "all" && meetings.length > 0;
 
   return (
     <div>
-      {currentTab === "all" && meetings.length > 0 && (
+      {showFilter && (
         <MeetingListFilter
           search={search}
           sortBy={sortBy}
@@ -128,31 +119,76 @@ export default function MeetingListView({
         />
       )}
 
-      <div id="tour-list" className="space-y-2 md:space-y-3">
-        {currentTab === "trash" && (
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-slate-500">{meetings.length} mục trong thùng rác</p>
-            <Button variant="danger" size="sm" onClick={onEmptyTrash}>Dọn sạch thùng rác</Button>
-          </div>
-        )}
-
-        {filteredMeetings.map((m) => (
-          <MeetingCard
-            key={m.id}
-            meeting={m}
-            currentTab={currentTab}
-            isSelected={selectedIds.includes(m.id)}
-            isFinalizing={isFinalizing === m.id}
-            onToggleSelect={() => onToggleSelect(m.id)}
-            onOpen={() => onOpenMeeting(m)}
-            onReprocess={() => onReprocess(m)}
-            onFinalizeDraft={() => onFinalizeDraft({ stopPropagation: () => {} } as any, m)}
-            onMoveToTrash={() => onMoveToTrash({ stopPropagation: () => {} } as any, m.id)}
-            onRestore={() => onRestore({ stopPropagation: () => {} } as any, m.id)}
-            onDeleteForever={() => onDeleteForever({ stopPropagation: () => {} } as any, m.id)}
+      {filteredMeetings.length === 0 ? (
+        currentTab === "trash" ? (
+          <EmptyState
+            icon={<Trash2 className="w-8 h-8" />}
+            title="Thùng rác trống"
+            description="Các cuộc họp đã xóa sẽ xuất hiện ở đây."
           />
-        ))}
-      </div>
+        ) : meetings.length === 0 ? (
+          <EmptyState
+            icon={<Calendar className="w-8 h-8" />}
+            title="Chưa có cuộc họp nào"
+            description="Tải lên file audio hoặc ghi âm trực tiếp để bắt đầu."
+            action={
+              <div className="flex gap-3">
+                {onNavigateToUpload && (
+                  <Button variant="primary" onClick={onNavigateToUpload}>Tải file lên</Button>
+                )}
+                {onNavigateToLive && (
+                  <Button variant="outline" onClick={onNavigateToLive}>Ghi âm trực tiếp</Button>
+                )}
+              </div>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={<Search className="w-8 h-8" />}
+            title="Không có kết quả phù hợp"
+            description="Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm."
+            action={<Button variant="primary" onClick={resetFilters}>Xóa bộ lọc</Button>}
+          />
+        )
+      ) : (
+        <div id="tour-list" className="space-y-2 md:space-y-3">
+          {currentTab === "trash" && (
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-slate-500">{meetings.length} mục trong thùng rác</p>
+              <Button variant="danger" size="sm" onClick={onEmptyTrash}>Dọn sạch thùng rác</Button>
+            </div>
+          )}
+
+          {filteredMeetings.map((m) => (
+            <MeetingCard
+              key={m.id}
+              meeting={m}
+              currentTab={currentTab}
+              isSelected={selectedIds.includes(m.id)}
+              isFinalizing={isFinalizing === m.id}
+              onToggleSelect={() => onToggleSelect(m.id)}
+              onOpen={() => onOpenMeeting(m)}
+              onReprocess={() => onReprocess(m)}
+              onFinalizeDraft={() => onFinalizeDraft(m)}
+              onMoveToTrash={() => onMoveToTrash(m.id)}
+              onRestore={() => onRestore(m.id)}
+              onDeleteForever={() => onDeleteForever(m.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {selectedIds.length > 0 && (
+        <BulkActionBar
+          selectedCount={selectedIds.length}
+          actions={
+            currentTab === "all"
+              ? [{ label: "Xóa đã chọn", icon: <Trash2 className="w-4 h-4" />, onClick: onMoveSelectedToTrash, intent: "danger" }]
+              : [{ label: "Xóa vĩnh viễn", icon: <Trash2 className="w-4 h-4" />, onClick: onDeleteSelected, intent: "danger" }]
+          }
+          onClear={onClearSelection}
+        />
+      )}
 
       {hasMore && currentTab === "all" && (
         <div className="text-center py-4">
@@ -161,16 +197,6 @@ export default function MeetingListView({
           </Button>
         </div>
       )}
-
-      <BulkActionBar
-        selectedCount={selectedIds.length}
-        actions={
-          currentTab === "all"
-            ? [{ label: "Xóa đã chọn", icon: <Trash2 className="w-4 h-4" />, onClick: onMoveSelectedToTrash, intent: "danger" }]
-            : [{ label: "Xóa vĩnh viễn", icon: <Trash2 className="w-4 h-4" />, onClick: onDeleteSelected, intent: "danger" }]
-        }
-        onClear={() => onToggleSelectAll()}
-      />
     </div>
   );
 }
