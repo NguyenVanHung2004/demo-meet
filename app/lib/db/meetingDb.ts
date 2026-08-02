@@ -142,7 +142,9 @@ export const getMeetingByShareId = async (shareId: string): Promise<Meeting | un
     if (!snapshot.empty) {
       return snapshot.docs[0].data() as Meeting;
     }
-    return await getMeetingById(shareId);
+    // KHÔNG fallback sang getMeetingById: nếu shareToken không match → không truy cập được.
+    // Trước đây fallback này cho phép ai biết meeting ID cũng xem được meeting private.
+    return undefined;
   } catch (error) {
     console.error("Lỗi lấy từ share link:", error);
     return undefined;

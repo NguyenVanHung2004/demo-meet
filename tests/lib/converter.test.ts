@@ -146,7 +146,20 @@ describe("convertToMp3 — convert audio sang MP3", () => {
     const file = new File(["x"], "audio.wav", { type: "audio/wav" });
 
     await expect(convertToMp3(file)).rejects.toThrow();
-    expect(deleteFileMock).not.toHaveBeenCalled();
+    expect(deleteFileMock).toHaveBeenCalledWith("input.wav");
+    expect(deleteFileMock).toHaveBeenCalledWith("output.mp3");
+    expect(deleteFileMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("cleanup vẫn chạy khi readFile throw (sau exec success)", async () => {
+    const { convertToMp3 } = await import("@/app/lib/converter");
+
+    readFileMock.mockRejectedValueOnce(new Error("Read fail"));
+
+    const file = new File(["x"], "audio.wav", { type: "audio/wav" });
+
+    await expect(convertToMp3(file)).rejects.toThrow("Read fail");
+    expect(deleteFileMock).toHaveBeenCalledTimes(2);
   });
 
   it("trả File với tên gốc + .mp3, type audio/mp3", async () => {

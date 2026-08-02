@@ -28,30 +28,37 @@ export const convertToMp3 = async (file: File, onProgress?: (progress: number) =
         });
     }
 
-    const inputName = 'input.' + file.name.split('.').pop();
+    const inputName = 'input.' + (file.name.split('.').pop() || 'tmp');
     const outputName = 'output.mp3';
 
     // Write file to FFmpeg FS
     await ffmpeg.writeFile(inputName, await fetchFile(file));
 
-    // Run conversion: -i input -vn (no video) -acodec libmp3lame -q:a 2 (high quality variable bitrate) output.mp3
-    // Note: Standard ffmpeg.wasm build might not support libmp3lame depending on license, 
-    // but usually supports basic mp3 encoding. If fails, we can try .wav
     try {
+        // Run conversion: -i input -vn (no video) -acodec libmp3lame -q:a 2 (high quality variable bitrate) output.mp3
+        // Note: Standard ffmpeg.wasm build might not support libmp3lame depending on license,
+        // but usually supports basic mp3 encoding. If fails, we can try .wav
         await ffmpeg.exec(['-i', inputName, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outputName]);
+
+        // Read result
+        const data = await ffmpeg.readFile(outputName);
+        const blob = new Blob([data as any], { type: 'audio/mp3' });
+
+        return new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".mp3", { type: 'audio/mp3' });
     } catch (e) {
         console.warn("MP3 Encoding failed, trying AAC/M4A", e);
-        // Fallback or retry logic could go here
         throw e;
+    } finally {
+        // Cleanup input + output bất kể success/fail (fix memory leak trong ffmpeg FS)
+        try {
+            await ffmpeg.deleteFile(inputName);
+        } catch {
+            // file có thể không tồn tại nếu writeFile lỗi trước đó
+        }
+        try {
+            await ffmpeg.deleteFile(outputName);
+        } catch {
+            // output có thể không tồn tại nếu exec fail trước khi ghi output
+        }
     }
-
-    // Read result
-    const data = await ffmpeg.readFile(outputName);
-    const blob = new Blob([data as any], { type: 'audio/mp3' });
-
-    // Cleanup
-    await ffmpeg.deleteFile(inputName);
-    await ffmpeg.deleteFile(outputName);
-
-    return new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".mp3", { type: 'audio/mp3' });
 };

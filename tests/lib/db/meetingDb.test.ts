@@ -183,15 +183,16 @@ describe("getMeetingById / getMeetingByShareId — error handling", () => {
     expect(result?.id).toBe("from_share");
   });
 
-  it("getMeetingByShareId fallback sang getMeetingById khi không có shareToken", async () => {
+  it("getMeetingByShareId KHÔNG fallback sang getMeetingById (security fix)", async () => {
     getDocsMock.mockResolvedValue({ empty: true, docs: [] });
     getDocMock.mockResolvedValue({
       exists: () => true,
-      data: () => mockMeeting({ id: "fallback_id" }),
+      data: () => mockMeeting({ id: "private_meeting_id" }),
     });
 
-    const result = await getMeetingByShareId("not_a_share_token");
-    expect(result?.id).toBe("fallback_id");
+    const result = await getMeetingByShareId("private_meeting_id");
+    expect(result).toBeUndefined();
+    expect(getDocMock).not.toHaveBeenCalled();
   });
 });
 

@@ -1,5 +1,5 @@
 export const formatTranscriptText = (text: unknown): string => {
-    if (!text) return "";
+    if (text === null || text === undefined) return "";
     // FORCE STRING: Đảm bảo input luôn là string
     const str = String(text);
     // 1. Chuyển sang thường
@@ -12,7 +12,7 @@ export const formatTranscriptText = (text: unknown): string => {
 };
 
 export const formatWords = (words: any[]): any[] => {
-    if (!words || !Array.isArray(words) || words.length === 0) return [];
+    if (!Array.isArray(words) || words.length === 0) return [];
 
     return words.map((w, index) => {
         const rawWord = w.word ? String(w.word) : "";

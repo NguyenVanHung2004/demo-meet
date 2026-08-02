@@ -5,7 +5,8 @@ vi.mock("@/app/lib/firebase-admin", () => ({
   getAdminAuth: vi.fn(() => ({
     verifyIdToken: vi.fn(async (token: string) => {
       if (token.startsWith("valid-")) {
-        return { uid: "user_test", email: "test@example.com" };
+        const uid = token.replace("valid-", "") || "user_default";
+        return { uid: `user_${uid}`, email: `${uid}@example.com` };
       }
       throw new Error("Invalid token");
     }),
@@ -28,6 +29,9 @@ vi.mock("@/app/lib/rate-limit", async () => {
   );
   return { ...actual };
 });
+
+let tokenCounter = 0;
+const validToken = () => `Bearer valid-u${++tokenCounter}-${Date.now()}`;
 
 beforeEach(() => {
   sendMailMock.mockClear();
@@ -66,11 +70,12 @@ describe("POST /api/email — auth + rate limit + bounce (bug 6.1, 6.2, 6.3)", (
     expect(res.status).toBe(401);
   });
 
-  it("trả 429 khi vượt rate limit (10 email / 60s)", async () => {
+  it("trả 429 khi vượt rate limit (10 email / 60s cho cùng user)", async () => {
+    const sharedToken = validToken();
     const body = { tasks: [], meetingTitle: "Test" };
     const makeReq = () =>
       makeRequest(body, {
-        headers: { Authorization: "Bearer valid-token" },
+        headers: { Authorization: sharedToken },
         ip: "55.55.55.55",
       });
 
@@ -94,7 +99,7 @@ describe("POST /api/email — auth + rate limit + bounce (bug 6.1, 6.2, 6.3)", (
       meetingTitle: "Họp tuần",
     };
     const req = makeRequest(body, {
-      headers: { Authorization: "Bearer valid-token" },
+      headers: { Authorization: validToken() },
     });
     const res = await POST(req);
 
@@ -111,11 +116,42 @@ describe("POST /api/email — auth + rate limit + bounce (bug 6.1, 6.2, 6.3)", (
       meetingTitle: "Test",
     };
     const req = makeRequest(body, {
-      headers: { Authorization: "Bearer valid-token" },
+      headers: { Authorization: validToken() },
     });
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it("auth check TRƯỚC rate limit — request không token không được count vào rate limit window (bug DoS fix)", async () => {
+    const makeReq = () =>
+      makeRequest(
+        { tasks: [], meetingTitle: "Test" },
+        { ip: "33.33.33.33" }
+      );
+
+    for (let i = 0; i < 20; i++) {
+      const res = await POST(makeReq());
+      expect(res.status).toBe(401);
+    }
+
+    sendMailMock.mockClear();
+    sendMailMock.mockResolvedValue({ messageId: "ok" });
+    const validReq = makeRequest(
+      {
+        tasks: [
+          { task: "Test", deadline: "x", email: ["a@example.com"] },
+        ],
+        meetingTitle: "Test",
+      },
+      {
+        headers: { Authorization: validToken() },
+        ip: "33.33.33.33",
+      }
+    );
+    const validRes = await POST(validReq);
+    expect(validRes.status).toBe(200);
+    expect(sendMailMock).toHaveBeenCalled();
   });
 
   it("vẫn trả 200 và đếm failures khi một số email fail (bug 6.3 Promise.allSettled)", async () => {
@@ -134,7 +170,7 @@ describe("POST /api/email — auth + rate limit + bounce (bug 6.1, 6.2, 6.3)", (
       meetingTitle: "Test",
     };
     const req = makeRequest(body, {
-      headers: { Authorization: "Bearer valid-token" },
+      headers: { Authorization: validToken() },
     });
     const res = await POST(req);
 
@@ -151,7 +187,7 @@ describe("POST /api/email — auth + rate limit + bounce (bug 6.1, 6.2, 6.3)", (
       meetingTitle: "Test",
     };
     const req = makeRequest(body, {
-      headers: { Authorization: "Bearer valid-token" },
+      headers: { Authorization: validToken() },
     });
     await POST(req);
 
@@ -168,7 +204,7 @@ describe("POST /api/email — auth + rate limit + bounce (bug 6.1, 6.2, 6.3)", (
       meetingTitle: "Test",
     };
     const req = makeRequest(body, {
-      headers: { Authorization: "Bearer valid-token" },
+      headers: { Authorization: validToken() },
     });
     const res = await POST(req);
     expect(res.status).toBe(200);
@@ -182,7 +218,7 @@ describe("POST /api/email — auth + rate limit + bounce (bug 6.1, 6.2, 6.3)", (
       meetingTitle: "Test",
     };
     const req = makeRequest(body, {
-      headers: { Authorization: "Bearer valid-token" },
+      headers: { Authorization: validToken() },
     });
     await POST(req);
 

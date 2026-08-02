@@ -29,12 +29,6 @@ const formatDeadline = (isoString: string) => {
 };
 
 export async function POST(req: Request) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  const { allowed } = checkRateLimit(`email:${ip}`, 10, 60 * 1000);
-  if (!allowed) {
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-  }
-
   try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
       console.error("Firebase Admin chưa được cấu hình: thiếu FIREBASE_SERVICE_ACCOUNT_KEY");
@@ -46,10 +40,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const idToken = authHeader.slice(7);
+    let authUser;
     try {
-      await getAdminAuth().verifyIdToken(idToken);
+      authUser = await getAdminAuth().verifyIdToken(idToken);
     } catch {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    // Rate limit SAU auth để tránh DoS qua token giả (per-user, không per-IP)
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const { allowed } = checkRateLimit(`email:${authUser.uid}`, 10, 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
     const { tasks, meetingTitle } = await req.json();

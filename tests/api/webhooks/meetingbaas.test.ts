@@ -30,6 +30,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   process.env.MEETINGBAAS_WEBHOOK_SECRET = "test-webhook-secret";
+  vi.resetModules();
 });
 
 const signPayload = (body: string, secret: string) => {

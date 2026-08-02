@@ -8,7 +8,12 @@ export const dynamic = 'force-dynamic';
 const WEBHOOK_SECRET = process.env.MEETINGBAAS_WEBHOOK_SECRET;
 
 async function verifySignature(rawBody: string, signature: string | null): Promise<boolean> {
-  if (!WEBHOOK_SECRET) return true;
+  // Trước đây: `if (!WEBHOOK_SECRET) return true` → bypass auth nếu thiếu env trong production
+  // Giờ: nếu thiếu secret thì REJECT request thay vì bypass (fail-closed)
+  if (!WEBHOOK_SECRET) {
+    console.error("[Webhook] MEETINGBAAS_WEBHOOK_SECRET chưa được cấu hình — rejecting request for safety");
+    return false;
+  }
   if (!signature) return false;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey('raw', encoder.encode(WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);

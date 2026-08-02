@@ -2,12 +2,15 @@ import { describe, it, expect } from "vitest";
 import { formatTranscriptText, formatWords } from "@/app/lib/utils";
 
 describe("formatTranscriptText — chuẩn hoá text transcript", () => {
-  it("trả chuỗi rỗng cho input falsy", () => {
+  it("trả chuỗi rỗng cho input null/undefined", () => {
     expect(formatTranscriptText(null)).toBe("");
     expect(formatTranscriptText(undefined)).toBe("");
     expect(formatTranscriptText("")).toBe("");
-    expect(formatTranscriptText(0)).toBe("");
-    expect(formatTranscriptText(false)).toBe("");
+  });
+
+  it("số 0 và false → stringify (không phải empty) — bug fix", () => {
+    expect(formatTranscriptText(0)).toBe("0");
+    expect(formatTranscriptText(false)).toBe("False");
   });
 
   it("chuyển về lowercase", () => {

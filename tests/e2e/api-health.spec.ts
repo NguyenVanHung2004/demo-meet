@@ -1,7 +1,5 @@
 import { test, expect } from "@playwright/test";
 
-const HAS_WEBHOOK_SECRET = !!process.env.MEETINGBAAS_WEBHOOK_SECRET;
-
 test.describe("API routes — health check (không cần auth)", () => {
   test("GET /api/proxy-file không có url → 400", async ({ request }) => {
     const res = await request.get("/api/proxy-file");
@@ -70,11 +68,6 @@ test.describe("API routes — health check (không cần auth)", () => {
   test("POST /api/webhooks/meetingbaas thiếu signature → 401", async ({
     request,
   }) => {
-    test.skip(
-      !HAS_WEBHOOK_SECRET,
-      "MEETINGBAAS_WEBHOOK_SECRET không được set trong env — production code bypass verify (return true)"
-    );
-
     const res = await request.post(
       "/api/webhooks/meetingbaas?userId=u1",
       {
@@ -87,11 +80,6 @@ test.describe("API routes — health check (không cần auth)", () => {
   test("POST /api/webhooks/meetingbaas sai signature → 401", async ({
     request,
   }) => {
-    test.skip(
-      !HAS_WEBHOOK_SECRET,
-      "MEETINGBAAS_WEBHOOK_SECRET không được set trong env"
-    );
-
     const res = await request.post(
       "/api/webhooks/meetingbaas?userId=u1",
       {
@@ -103,8 +91,8 @@ test.describe("API routes — health check (không cần auth)", () => {
   });
 });
 
-test.describe("API routes — rate limit", () => {
-  test("email: gửi 11 request trong 60s, request 11 phải 429", async ({
+test.describe("API routes — auth trước rate limit (DoS protection)", () => {
+  test("email: 11 request KHÔNG có Authorization → 401 (auth fail đầu tiên, không count rate limit)", async ({
     request,
   }) => {
     const statuses: number[] = [];
@@ -116,9 +104,6 @@ test.describe("API routes — rate limit", () => {
       statuses.push(res.status());
     }
 
-    const hasRateLimited = statuses.includes(429);
-    const hasUnauthorized = statuses.every((s) => s === 401 || s === 429);
-    expect(hasUnauthorized).toBe(true);
-    expect(hasRateLimited).toBe(true);
+    expect(statuses.every((s) => s === 401)).toBe(true);
   });
 });
