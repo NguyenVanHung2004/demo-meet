@@ -95,15 +95,16 @@ Selenium bị loại vì: tốc độ chậm (WebDriver protocol), setup phức 
 | `tests/hooks/useMeetingDetail.test.ts` | 11 | handleShare, handleSummarizeRequest | Trung bình | ✅ |
 | **Tổng** | **105** | | | ✅ |
 
-### ⏳ Phase T4: Playwright E2E (optional, ~1–2 ngày)
+### ✅ Phase T4: Playwright E2E (1–2 ngày) — DONE
 
-| Test file | Mô tả |
-|---|---|
-| `tests/e2e/routes.spec.ts` | Mở trực tiếp `/meeting/[id]`, `/edit/[id]`, `/live` không crash |
-| `tests/e2e/auth-redirect.spec.ts` | Chưa login → redirect `/login` |
-| `tests/e2e/polling-ui.spec.ts` | Upload → refresh giữa chừng → draft còn nguyên (Phase 1A.1) |
+| Test file | Tests | Mô tả |
+|---|---|---|
+| `tests/e2e/auth-redirect.spec.ts` | 8 | Auth flow, login page accessible, không crash trên protected routes |
+| `tests/e2e/routes.spec.ts` | 12 | Phase 6 routes (9 routes) load được, deep link `/meeting/xyz`, 404 handling |
+| `tests/e2e/api-health.spec.ts` | 12 | API health check — proxy-file SSRF, email auth, webhook signature, rate limit |
+| **Tổng** | **32** | 30 pass, 2 skip (cần env `MEETINGBAAS_WEBHOOK_SECRET` để test webhook) |
 
-> Cần Firebase Emulator hoặc Firestore test project. Có thể skip nếu chỉ muốn CI đơn giản.
+**Lưu ý:** Playwright khởi động `npm run dev` tự động qua `webServer` config trong `playwright.config.ts`. Cần Firebase Emulator / Firestore thật cho test đầy đủ auth flow (hiện chỉ test "không crash").
 
 ---
 
@@ -166,10 +167,13 @@ Overall: 10.03% (vẫn còn thấp vì toàn bộ `app/components/` (Dashboard, 
 ### Local
 
 ```bash
-npm test                # CI mode (1 lần)
-npm run test:watch      # watch mode cho dev
-npm run test:coverage   # báo cáo coverage
+npm test                # Vitest CI mode (1 lần)
+npm run test:watch      # Vitest watch mode cho dev
+npm run test:coverage   # Vitest báo cáo coverage
 npm run test:ui         # Vitest UI (mở browser xem chi tiết)
+
+npm run test:e2e        # Playwright E2E (tự khởi động dev server)
+npm run test:e2e:ui     # Playwright UI mode
 ```
 
 ### CI (GitHub Actions)
@@ -178,13 +182,23 @@ File `.github/workflows/test.yml` chạy trên:
 - Push lên branch `main`, `refactor`, `ui-redesign`
 - Pull request vào 3 branch trên
 
-```yaml
-- npm ci
-- npm test
-- npm run lint || true  # lint không fail build
-```
+Có 2 jobs chạy song song:
 
-Coverage report lưu ở `coverage/` (gitignore) khi chạy local.
+1. **unit-tests** (Vitest):
+   ```yaml
+   - npm ci
+   - npm test
+   - npm run lint || true  # lint không fail build
+   ```
+
+2. **e2e-tests** (Playwright) — sau khi unit pass:
+   ```yaml
+   - npx playwright install --with-deps chromium
+   - npm run test:e2e
+   - upload playwright-report (giữ 7 ngày nếu fail)
+   ```
+
+Coverage Vitest lưu ở `coverage/` (gitignored) khi chạy local.
 
 ---
 
@@ -192,8 +206,9 @@ Coverage report lưu ở `coverage/` (gitignore) khi chạy local.
 
 ```
 demo-meet/
-├── vitest.config.mts                      ← Config
-├── .github/workflows/test.yml             ← CI
+├── vitest.config.mts                      ← Vitest config
+├── playwright.config.ts                   ← Playwright config
+├── .github/workflows/test.yml             ← CI (unit + E2E)
 ├── tests/
 │   ├── setup.ts                           ← MSW + fake-indexeddb
 │   ├── helpers/
@@ -205,18 +220,33 @@ demo-meet/
 │   │       └── server.ts                  ← MSW server
 │   ├── lib/
 │   │   ├── sanitizeHtml.test.ts           ← T2.1
-│   │   └── rate-limit.test.ts             ← T2.7
+│   │   ├── rate-limit.test.ts             ← T2.7
+│   │   ├── parser.test.ts                 ← T3.1
+│   │   ├── utils.test.ts                  ← T3.2
+│   │   ├── constants.test.ts              ← T3.3
+│   │   ├── converter.test.ts              ← T3.5
+│   │   └── db/
+│   │       └── meetingDb.test.ts          ← T3.4
 │   ├── api/
 │   │   ├── proxy-file.test.ts             ← T2.2
 │   │   ├── email.test.ts                  ← T2.3
+│   │   ├── gemini.test.ts                 ← T2.5
 │   │   ├── webhooks/
 │   │   │   └── meetingbaas.test.ts        ← T2.4
-│   │   ├── gemini.test.ts                 ← T2.5
-│   │   └── bots/
-│   │       └── join.test.ts               ← T2.6
-│   └── components/
-│       └── PollingManager.test.tsx        ← T2.8
-└── coverage/                              ← gitignored
+│   │   ├── bots/
+│   │   │   └── join.test.ts               ← T2.6
+│   │   └── drive/
+│   │       └── auth.test.ts               ← T3.6
+│   ├── components/
+│   │   └── PollingManager.test.tsx        ← T2.8
+│   ├── hooks/
+│   │   └── useMeetingDetail.test.ts       ← T3.7
+│   └── e2e/                               ← Phase T4 (Playwright)
+│       ├── auth-redirect.spec.ts          ← Login + redirect
+│       ├── routes.spec.ts                 ← Phase 6 routing
+│       └── api-health.spec.ts             ← API health check
+├── coverage/                              ← gitignored (Vitest)
+└── playwright-report/                     ← gitignored (Playwright)
 ```
 
 ---
@@ -280,9 +310,12 @@ describe("POST /api/foo — mô tả luồng + bug được cover", () => {
 | T1 | 0.5d | — | ✅ Done |
 | T2 | 2–3d | 9 critical bug + 4 bug mới phát hiện | ✅ Done |
 | T3 | 2d | Bug logic nhỏ, regression | ✅ Done (105 tests) |
-| T4 | 1–2d | Routing, UI | ⏳ Optional |
+| T4 | 1–2d | Routing, UI | ✅ Done (32 tests) |
 
-**Hiện tại:** 167 tests đang chạy trong ~10s, cover 9 bug Critical đã fix trong refactor + logic thuần (parser, constants, utils, db, hook).
+**Hiện tại:**
+- **167 Vitest tests** (15 file) chạy trong ~10s — cover 9 bug Critical đã fix + logic thuần (parser, constants, utils, db, hook)
+- **30 Playwright E2E tests** (3 file) chạy trong ~10s — cover Phase 6 routing + API health
+- Tổng: **197 tests** chạy trong ~20s, coverage tăng từ 0% → 10.03%
 
 ---
 

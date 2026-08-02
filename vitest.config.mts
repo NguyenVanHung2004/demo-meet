@@ -10,7 +10,12 @@ export default defineConfig({
     environment: "happy-dom",
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.{test,spec}.{ts,tsx}"],
-    exclude: ["node_modules", ".next", "tests/e2e/**"],
+    exclude: [
+      "node_modules",
+      ".next",
+      "tests/e2e/**",
+      "tests/e2e/**/*.spec.ts",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "html"],
