@@ -62,19 +62,6 @@ const FEATURES = [
   },
 ];
 
-const TESTIMONIALS = [
-  {
-    quote: "Tiết kiệm 2-3 giờ mỗi tuần so với việc tự ghi chép thủ công.",
-    author: "Nguyễn Văn A",
-    role: "Product Manager",
-  },
-  {
-    quote: "AI nhận diện giọng nói tiếng Việt rất chính xác, kể cả giọng miền Nam.",
-    author: "Trần Thị B",
-    role: "HR Manager",
-  },
-];
-
 export default function LoginState() {
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -205,21 +192,6 @@ const FEATURES = [
   { icon: "📤", title: "Xuất đa định dạng", desc: "PDF, DOCX, TXT dễ chia sẻ" },
 ];
 
-const TESTIMONIALS = [
-  {
-    avatar: "NA",
-    name: "Nguyễn Văn A",
-    role: "Product Manager",
-    quote: "Tiết kiệm 2-3 giờ mỗi tuần so với việc tự ghi chép thủ công.",
-  },
-  {
-    avatar: "TB",
-    name: "Trần Thị B",
-    role: "HR Manager",
-    quote: "AI nhận diện giọng tiếng Việt rất chính xác, kể cả giọng miền Nam.",
-  },
-];
-
 export default function LoginFeaturePanel() {
   return (
     <div className="space-y-8">
@@ -243,24 +215,6 @@ export default function LoginFeaturePanel() {
         ))}
       </div>
 
-      {/* Testimonials */}
-      <div className="space-y-3">
-        {TESTIMONIALS.map((t) => (
-          <div key={t.name} className="bg-white/60 backdrop-blur-md border border-white/60 rounded-2xl p-4">
-            <Quote className="w-5 h-5 text-primary-300 mb-2" />
-            <p className="text-sm text-slate-700 italic mb-3">"{t.quote}"</p>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold">
-                {t.avatar}
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-800">{t.name}</p>
-                <p className="text-[10px] text-slate-500">{t.role}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
