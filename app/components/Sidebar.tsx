@@ -94,7 +94,8 @@ export default function Sidebar({ onNavigate, forceOpen = false }: SidebarProps)
 
   return (
     <aside className={cn(
-      "bg-white border-r border-slate-200 flex flex-col shrink-0 overflow-hidden",
+      "bg-white flex flex-col shrink-0 overflow-hidden",
+      forceOpen ? "" : "border-r border-slate-200",
       "transition-all duration-200",
       forceOpen || !collapsed ? "w-64" : "w-16",
       forceOpen ? "flex" : "hidden md:flex"

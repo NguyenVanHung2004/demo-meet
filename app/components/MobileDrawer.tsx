@@ -64,7 +64,7 @@ export default function MobileDrawer({
         }}
       >
         {title && (
-          <div className="h-14 flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
+          <div className="h-14 flex items-center justify-between px-4 shrink-0">
             <span className="font-bold text-slate-800">{title}</span>
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg">
               <X className="w-5 h-5" />
