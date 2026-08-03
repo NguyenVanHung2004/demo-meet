@@ -29,7 +29,7 @@ export default function EditorAudioPlayer({
   const audioRef = useRef<HTMLAudioElement>(null);
 
   return (
-    <div className="h-20 bg-white border-t border-slate-200 px-4 md:px-8 flex items-center gap-4 shadow-sm z-20 shrink-0">
+    <div className="h-16 md:h-20 bg-white border-t border-slate-200 px-3 md:px-8 flex items-center gap-2 md:gap-4 shadow-sm z-20 shrink-0 pb-[env(safe-area-inset-bottom)]">
       <button
         onClick={onTogglePlay}
         disabled={isBuffering}

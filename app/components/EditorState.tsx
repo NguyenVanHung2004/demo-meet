@@ -405,7 +405,7 @@ export default function EditorState({
   }, [segments, speakers, formatTime]);
 
   return (
-    <div className="flex flex-col h-screen bg-white relative font-sans text-slate-900">
+    <div className="flex flex-col h-full bg-white relative font-sans text-slate-900">
 
       {/* ------------------- SPEAKER MODAL (MOBILE) ------------------- */}
       {showSpeakerModal && (
@@ -461,12 +461,14 @@ export default function EditorState({
         isEditingTitle={isEditingTitle}
         isSaving={isSaving}
         selectedTemplateName={selectedTemplate.name}
+        speakerCount={speakers.length}
         onBack={onBack}
         onStartEditingTitle={() => setIsEditingTitle(true)}
         onSaveTitle={handleSaveTitle}
         onTitleKeyDown={handleKeyDown}
         onTitleChange={setTitle}
         onOpenTemplateModal={() => setShowTemplateModal(true)}
+        onOpenSpeakerModal={() => setShowSpeakerModal(true)}
         onSummarize={handleSummarizeRequest}
         onSave={handleSave}
       />

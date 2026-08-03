@@ -21,10 +21,10 @@ export default function SpeakerSidebar({
 }: SpeakerSidebarProps) {
   return (
     <div className="hidden md:flex w-72 border-r border-slate-200 bg-slate-50 flex-col shrink-0">
-      <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white gap-2">
-        <h3 className="font-bold text-slate-700 flex items-center gap-2 min-w-0 whitespace-nowrap">
+      <div className="p-4 border-b border-slate-200 flex items-center bg-white gap-2">
+        <h3 className="font-bold text-slate-700 flex items-center gap-2 whitespace-nowrap">
           <Mic className="w-4 h-4 text-primary-600 shrink-0" />
-          <span className="truncate">Người tham gia</span>
+          Người tham gia
           <span className="text-xs text-slate-400 font-medium shrink-0">({speakers.length})</span>
         </h3>
         <Tooltip content="Thêm người nói">
@@ -53,7 +53,6 @@ export default function SpeakerSidebar({
                 <span className="text-[10px] font-mono text-slate-400 flex-1">
                   {spk.id.split("_")[1] || "?"}
                 </span>
-                <span className="text-[10px] font-bold text-slate-500">{percent.toFixed(0)}%</span>
                 <Tooltip content="Xóa">
                   <button
                     onClick={() => onDeleteSpeaker(spk.id)}
