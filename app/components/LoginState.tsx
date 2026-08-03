@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { BrainCircuit, NotebookPen, Zap, Sparkles } from "lucide-react";
+import { NotebookPen } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Spinner from "./ui/Spinner";
 import Button from "./ui/Button";
@@ -52,21 +52,9 @@ export default function LoginState() {
               )}
 
               <h1 className="text-3xl font-extrabold text-slate-800 mb-2 tracking-tight">Smart Meeting Assistant</h1>
-              <p className="text-slate-500 mb-8 text-sm md:text-base leading-relaxed">
+              <p className="text-slate-500 mb-10 text-sm md:text-base leading-relaxed">
                 Biến cuộc họp thành văn bản & tóm tắt thông minh chỉ trong vài giây.
               </p>
-
-              <div className="flex justify-center gap-2 mb-10">
-                <span className="flex items-center gap-1.5 px-3 py-1 bg-primary-50 text-primary-700 rounded-full text-xs font-bold uppercase tracking-wider">
-                  <BrainCircuit className="w-3 h-3" /> AI Powered
-                </span>
-                <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold uppercase tracking-wider">
-                  <Zap className="w-3 h-3" /> Fast
-                </span>
-                <span className="flex items-center gap-1.5 px-3 py-1 bg-violet-50 text-violet-700 rounded-full text-xs font-bold uppercase tracking-wider">
-                  <Sparkles className="w-3 h-3" /> Tiếng Việt
-                </span>
-              </div>
 
               <Button variant="outline" size="lg" onClick={handleLogin} loading={loading} className="w-full !justify-start !pl-6">
                 {!loading && (
