@@ -21,11 +21,11 @@ export default function SpeakerSidebar({
 }: SpeakerSidebarProps) {
   return (
     <div className="hidden md:flex w-72 border-r border-slate-200 bg-slate-50 flex-col shrink-0">
-      <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
-        <h3 className="font-bold text-slate-700 flex items-center gap-2">
-          <Mic className="w-4 h-4 text-primary-600" />
-          Người tham gia
-          <span className="text-xs text-slate-400 font-medium">({speakers.length})</span>
+      <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white gap-2">
+        <h3 className="font-bold text-slate-700 flex items-center gap-2 min-w-0 whitespace-nowrap">
+          <Mic className="w-4 h-4 text-primary-600 shrink-0" />
+          <span className="truncate">Người tham gia</span>
+          <span className="text-xs text-slate-400 font-medium shrink-0">({speakers.length})</span>
         </h3>
         <Tooltip content="Thêm người nói">
           <Button variant="primary" size="sm" onClick={onAddSpeaker} className="!p-1.5">
