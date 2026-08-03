@@ -1,7 +1,7 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -12,9 +12,30 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   measurementId: process.env.NEXT_PUBLIC_MEASUREMENT_ID,
 };
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+const hasFirebaseConfig = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+
+let _app: FirebaseApp | null = null;
+function initFirebaseApp(): FirebaseApp {
+  if (_app) return _app;
+  if (!hasFirebaseConfig) {
+    throw new Error(
+      "Firebase chưa được cấu hình. Vui lòng set NEXT_PUBLIC_FIREBASE_API_KEY trong .env.local"
+    );
+  }
+  _app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  return _app;
+}
+
+export const auth: Auth = hasFirebaseConfig
+  ? getAuth(initFirebaseApp())
+  : (null as unknown as Auth);
+export const googleProvider: GoogleAuthProvider = hasFirebaseConfig
+  ? new GoogleAuthProvider()
+  : (null as unknown as GoogleAuthProvider);
+export const db: Firestore = hasFirebaseConfig
+  ? getFirestore(initFirebaseApp())
+  : (null as unknown as Firestore);
+export const storage: FirebaseStorage = hasFirebaseConfig
+  ? getStorage(initFirebaseApp())
+  : (null as unknown as FirebaseStorage);
