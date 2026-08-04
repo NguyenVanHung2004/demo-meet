@@ -231,7 +231,7 @@ export default function LiveRecordingState({
         const { segments, summaries, timer } = latestStateRef.current;
 
         // Map segments sang format chuẩn DB
-        const finalSegments = segments.map((s, idx) => ({
+        let finalSegments = segments.map((s, idx) => ({
           id: `seg_${idx}`,
           start: s.words?.[0]?.start || 0,
           end: s.words?.[s.words.length - 1]?.end || 0,
@@ -251,16 +251,18 @@ export default function LiveRecordingState({
         let bytesPerMinute = 15000; // Tốc độ tiêu thụ mặc định (có mảng words)
         let isLightMode = false;
 
-        // Nếu dung lượng thật chạm ngưỡng 850KB, Firebase sẽ lưu bằng Fallback (bỏ words)
-        // Nên ở frontend ta cũng mô phỏng việc bỏ words để tính số phút cho chuẩn
+        // Nếu dung lượng thật chạm ngưỡng 850KB, tự động bỏ mảng words (light mode)
+        // - Vừa dùng để tính sizeForCalculation/remainingMinutes chuẩn
+        // - VỪA dùng để save thực tế (tránh Firestore vượt 1MB)
         if (payloadSize > 850000) {
           isLightMode = true;
-          const lightSegments = finalSegments.map(s => {
-            const { words, ...rest } = s;
+          const stripped = finalSegments.map(s => {
+            const { words: _words, ...rest } = s;
             return rest;
           });
-          sizeForCalculation = new Blob([JSON.stringify({ segments: lightSegments, summary: finalSummary })]).size;
-          bytesPerMinute = 3000; // Tốc độ tiêu thụ bộ nhớ siêu thấp khi chỉ lưu Text
+          finalSegments = stripped as typeof finalSegments;
+          sizeForCalculation = new Blob([JSON.stringify({ segments: finalSegments, summary: finalSummary })]).size;
+          bytesPerMinute = 3000; // Tốc độ tiêu thụ bộ nhớ siêu thấp khi chỉ chỉ lưu Text
         }
 
         const remainingBytes = 1048576 - sizeForCalculation; // Giới hạn 1MB
