@@ -46,7 +46,7 @@ export default function MeetingDetailState({
     audioRef, isPlaying, currentTime, duration, playbackRate,
     setCurrentTime, setDuration,
     togglePlay, seekTo, skipTime, togglePlaybackRate, formatTime,
-  } = useAudioPlayer();
+  } = useAudioPlayer(meeting.duration || 0);
 
   const { exportTxt, exportDocx, exportPdf, downloadAudio } = useExport(meeting, toast);
 

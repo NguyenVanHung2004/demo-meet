@@ -1,11 +1,11 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 
-export function useAudioPlayer() {
+export function useAudioPlayer(initialDuration: number = 0) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(initialDuration);
   const [playbackRate, setPlaybackRate] = useState(1.0);
 
   useEffect(() => {
