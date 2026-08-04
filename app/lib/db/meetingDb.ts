@@ -130,7 +130,10 @@ export const getMeetingById = async (id: string): Promise<Meeting | undefined> =
     }
     return undefined;
   } catch (error) {
-    console.error("Lỗi lấy chi tiết:", error);
+    // Firestore trả "Missing or insufficient permissions" khi doc không tồn tại
+    // (vì rule không cho phép đọc doc không tồn tại). Đây là flow bình thường
+    // (vd draft chỉ có ở IndexedDB), không phải lỗi thật → chỉ log debug.
+    console.debug("getMeetingById: no doc or no permission:", error);
     return undefined;
   }
 };
