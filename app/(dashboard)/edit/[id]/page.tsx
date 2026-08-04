@@ -24,7 +24,19 @@ export default function EditPage() {
     const load = async () => {
       try {
         setLoading(true);
-        const data = await getMeetingById(meetingId);
+        let data = await getMeetingById(meetingId);
+
+        // Fallback: Nếu không thấy trên Firestore, thử tìm trong IndexedDB (draft local)
+        if (!data) {
+          try {
+            const { getDraftFull } = await import("@/app/lib/indexedDB");
+            const draft = await getDraftFull(meetingId);
+            if (draft) data = draft.meta;
+          } catch (e) {
+            console.error("IndexedDB fallback failed:", e);
+          }
+        }
+
         if (!data) {
           setError("Cuộc họp không tồn tại");
           return;
