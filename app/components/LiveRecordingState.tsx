@@ -94,9 +94,11 @@ export default function LiveRecordingState({
   }, []);
 
   const toggleCaptureSystemAudio = useCallback(() => {
-    const newValue = !captureSystemAudio;
-    setCaptureSystemAudio(newValue);
-    localStorage.setItem("captureSystemAudio", String(newValue));
+    setCaptureSystemAudio(prev => {
+      const newValue = !prev;
+      localStorage.setItem("captureSystemAudio", String(newValue));
+      return newValue;
+    });
   }, []);
 
   const summariesEndRef = useRef<HTMLDivElement>(null);
@@ -405,23 +407,30 @@ export default function LiveRecordingState({
   const startRecordingSession = useCallback(async () => {
     try {
       // [CASE 1] NẾU ĐANG PAUSE -> RESUME LẠI
-      // Check if recorder exists and is paused
-      if (streamRef.current && mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
-        mediaRecorderRef.current.resume(); // Tiếp tục ghi vào file cũ
+      const existingRecorder = mediaRecorderRef.current;
+      const existingStream = streamRef.current;
+      const isPaused = !!(existingStream && existingRecorder && existingRecorder.state === "paused");
+      const wasHybrid = !!sysStreamRef.current;
+      const modeChanged = isPaused && wasHybrid !== captureSystemAudio;
 
-        // Ensure tracks are active
-        const tracks = streamRef.current.getTracks();
+      if (isPaused && !modeChanged && existingRecorder && existingStream) {
+        // Same mode, resume paused recorder với stream cũ
+        existingRecorder.resume();
+        const tracks = existingStream.getTracks();
         if (tracks.some(t => t.readyState === 'ended')) {
           console.warn("Tracks ended unexpectedly, restarting stream...");
-          // If tracks ended, we must restart fully
-          // Fall through to Case 2...
-          // But first cleanup
           handeFullStop();
+          // Fall through to Case 2
         } else {
-          startListening(streamRef.current, timer, language);
-          setupVisualizer(streamRef.current); // Bật lại sóng nhạc
+          startListening(existingStream, timer, language);
+          setupVisualizer(existingStream);
           return;
         }
+      } else if (modeChanged) {
+        // User đã toggle captureSystemAudio trong lúc pause → cần cấp lại stream với mode mới
+        console.log(`Mode changed during pause (was ${wasHybrid ? 'hybrid' : 'mic-only'}, now ${captureSystemAudio ? 'hybrid' : 'mic-only'}). Re-acquiring stream.`);
+        handeFullStop();
+        // Fall through to Case 2
       }
 
       // [CASE 2] NẾU LÀ LẦN ĐẦU -> KHỞI TẠO MỚI
@@ -661,10 +670,6 @@ export default function LiveRecordingState({
     const m = Math.floor(s / 60);
     const sec = s % 60;
     return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-  }, []);
-
-  useEffect(() => {
-    startRecordingSession();
   }, []);
 
   return (
