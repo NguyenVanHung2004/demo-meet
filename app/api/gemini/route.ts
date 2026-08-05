@@ -4,7 +4,7 @@ import { checkRateLimit } from "@/app/lib/rate-limit";
 
 const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
 const BASE_URL = "https://opencode.ai/zen/go/v1";
-const MODEL = "deepseek-v4-flash";
+const MODEL = "mimo-v2.5";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
