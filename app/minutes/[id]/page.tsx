@@ -23,41 +23,8 @@ import RichTextEditor from "@/app/components/RichTextEditor";
 import ErrorBoundary from "@/app/components/ErrorBoundary";
 import DocsFillModal from "@/app/components/DocsFillModal";
 import { sanitizeHtml } from "@/app/lib/sanitizeHtml";
+import { parseMarkdown } from "@/app/lib/minuteMarkdown";
 import { FileType } from "lucide-react";
-
-// Simple Markdown parser for common patterns
-function parseMarkdown(text: string): string {
-    if (!text) return "";
-
-    let html = text;
-
-    // Headers (### -> h3, ## -> h2, # -> h1)
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-
-    // Bold (**text** or __text__)
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
-
-    // Italic (*text* or _text_)
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-
-    // Unordered lists (- item or * item)
-    html = html.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-
-    // Line breaks (double newline = paragraph)
-    html = html.replace(/\n\n/g, '</p><p>');
-    html = '<p>' + html + '</p>';
-
-    // Clean up empty paragraphs
-    html = html.replace(/<p><\/p>/g, '');
-    html = html.replace(/<p>\s*<\/p>/g, '');
-
-    return html;
-}
 
 
 function MinuteDetailPage() {
@@ -506,6 +473,26 @@ function MinuteDetailPage() {
                                     .summary-content :global(em) {
                                         font-style: italic;
                                         color: #475569;
+                                    }
+                                    /* Style for tables */
+                                    .summary-content :global(table) {
+                                        border-collapse: collapse;
+                                        width: 100%;
+                                        margin: 1em 0;
+                                        font-size: 14px;
+                                    }
+                                    .summary-content :global(th),
+                                    .summary-content :global(td) {
+                                        border: 1px solid #cbd5e1;
+                                        padding: 6px 10px;
+                                        text-align: left;
+                                    }
+                                    .summary-content :global(thead) {
+                                        background: #f1f5f9;
+                                    }
+                                    .summary-content :global(th) {
+                                        font-weight: 600;
+                                        color: #1e293b;
                                     }
                                 `}</style>
                                 {/* 🟢 SỬ DỤNG DANGEROUSLYSETINNERHTML VỚI CONTENT ĐÃ ĐƯỢC HIGHLIGHT */}
