@@ -68,46 +68,40 @@ export default function SummaryPanel({
     });
   };
 
-  const processChildren = (children: React.ReactNode): React.ReactNode => {
-    return React.Children.map(children, child => {
-      if (typeof child === "string") {
-        return renderTextWithTimestamps(child);
-      }
-      if (React.isValidElement<{ children?: React.ReactNode }>(child)) {
-        const nested = child.props.children;
-        if (nested !== undefined) {
-          return React.cloneElement(child, {
-            ...child.props,
-            children: processChildren(nested),
-          } as Partial<typeof child.props>);
+  const handleChildren = (children: React.ReactNode): React.ReactNode => {
+    if (typeof children === "string") {
+      return renderTextWithTimestamps(children);
+    }
+    if (Array.isArray(children)) {
+      return children.map((child, i) => {
+        if (typeof child === "string") {
+          return <React.Fragment key={i}>{renderTextWithTimestamps(child)}</React.Fragment>;
         }
-      }
-      if (Array.isArray(child)) {
-        return processChildren(child);
-      }
-      return child;
-    });
+        return child;
+      });
+    }
+    return children;
   };
 
   const MarkdownComponents: Components = {
-    p: ({ children }) => <p className="mb-3 leading-relaxed">{processChildren(children)}</p>,
-    li: ({ children }) => <li className="mb-1 leading-relaxed">{processChildren(children)}</li>,
-    ul: ({ children }) => <ul className="list-disc pl-6 mb-3 space-y-1">{processChildren(children)}</ul>,
-    ol: ({ children }) => <ol className="list-decimal pl-6 mb-3 space-y-1">{processChildren(children)}</ol>,
-    h1: ({ children }) => <h1 className="text-xl font-bold text-slate-900 mt-6 mb-3 border-b border-slate-200 pb-1">{processChildren(children)}</h1>,
-    h2: ({ children }) => <h2 className="text-lg font-bold text-indigo-700 mt-5 mb-2">{processChildren(children)}</h2>,
-    h3: ({ children }) => <h3 className="text-base font-bold text-slate-800 mt-4 mb-2">{processChildren(children)}</h3>,
-    strong: ({ children }) => <strong className="font-bold text-slate-900">{processChildren(children)}</strong>,
-    em: ({ children }) => <em className="italic">{processChildren(children)}</em>,
+    p: ({ children }) => <p className="mb-3 leading-relaxed">{handleChildren(children)}</p>,
+    li: ({ children }) => <li className="mb-1 leading-relaxed">{handleChildren(children)}</li>,
+    ul: ({ children }) => <ul className="list-disc pl-6 mb-3 space-y-1">{handleChildren(children)}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-6 mb-3 space-y-1">{handleChildren(children)}</ol>,
+    h1: ({ children }) => <h1 className="text-xl font-bold text-slate-900 mt-6 mb-3 border-b border-slate-200 pb-1">{handleChildren(children)}</h1>,
+    h2: ({ children }) => <h2 className="text-lg font-bold text-indigo-700 mt-5 mb-2">{handleChildren(children)}</h2>,
+    h3: ({ children }) => <h3 className="text-base font-bold text-slate-800 mt-4 mb-2">{handleChildren(children)}</h3>,
+    strong: ({ children }) => <strong className="font-bold text-slate-900">{handleChildren(children)}</strong>,
+    em: ({ children }) => <em className="italic">{handleChildren(children)}</em>,
     code: ({ children }) => {
       const text = typeof children === "string" ? children : "";
       if (/^\[\d{1,2}:\d{2}\]$/.test(text.trim())) {
-        return <>{processChildren(text)}</>;
+        return <>{renderTextWithTimestamps(text)}</>;
       }
       return <code className="font-mono text-[12px] text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{children}</code>;
     },
     kbd: ({ children }) => <kbd className="font-mono text-[12px] text-slate-700">{children}</kbd>,
-    blockquote: ({ children }) => <blockquote className="border-l-4 border-slate-300 pl-4 my-3 italic text-slate-600">{processChildren(children)}</blockquote>,
+    blockquote: ({ children }) => <blockquote className="border-l-4 border-slate-300 pl-4 my-3 italic text-slate-600">{handleChildren(children)}</blockquote>,
   };
 
   const formatTimeCode = (s: number) => {
