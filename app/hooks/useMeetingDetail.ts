@@ -3,6 +3,7 @@ import { useState, useCallback } from "react";
 import { Meeting, generateMeetingShareToken } from "../lib/db";
 import type { MeetingTemplate } from "../lib/templates";
 import type { Segment, Speaker } from "../lib/db";
+import { formatTime } from "../lib/format";
 
 export function useMeetingDetail(
   initialMeeting: Meeting,
@@ -35,7 +36,7 @@ export function useMeetingDetail(
     if (!onSummarize) return;
     const fullText = meeting.segments.map((s: Segment) => {
       const name = meeting.speakers.find((sp: Speaker) => sp.id === s.speakerId)?.name || `Speaker ${s.speakerId.split("_")[1] || "00"}`;
-      return `[${name}]: ${s.text}`;
+      return `[${formatTime(s.start)}] [${name}]: ${s.text}`;
     }).join("\n");
     onSummarize(meeting, fullText, template.structure);
     toast?.info(`Đang tóm tắt theo mẫu: ${template.name}...`);

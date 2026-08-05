@@ -139,11 +139,11 @@ describe("useMeetingDetail — share + summarize hook", () => {
       expect(result.current.showTemplateModal).toBe(false);
     });
 
-    it("build fullText đúng format [name]: text, phân cách bằng \\n", () => {
+    it("build fullText đúng format [mm:ss] [name]: text, phân cách bằng \\n", () => {
       const meeting = mockMeeting({
         segments: [
-          mockSegment({ speakerId: "SPEAKER_00", text: "Xin chào" }),
-          mockSegment({ speakerId: "SPEAKER_01", text: "Tôi khỏe" }),
+          mockSegment({ speakerId: "SPEAKER_00", start: 0, text: "Xin chào" }),
+          mockSegment({ speakerId: "SPEAKER_01", start: 75, text: "Tôi khỏe" }),
         ],
         speakers: [
           mockSpeaker({ id: "SPEAKER_00", name: "An" }),
@@ -160,12 +160,34 @@ describe("useMeetingDetail — share + summarize hook", () => {
 
       const [calledMeeting, fullText] = onSummarize.mock.calls[0];
       expect(calledMeeting.id).toBe(meeting.id);
-      expect(fullText).toBe("[An]: Xin chào\n[Bình]: Tôi khỏe");
+      expect(fullText).toBe("[00:00] [An]: Xin chào\n[01:15] [Bình]: Tôi khỏe");
+    });
+
+    it("fullText phải chứa [mm:ss] ở đầu mỗi dòng — AI phụ thuộc vào đây để chèn timestamp", () => {
+      const meeting = mockMeeting({
+        segments: [
+          mockSegment({ start: 0, text: "A" }),
+          mockSegment({ start: 30, text: "B" }),
+          mockSegment({ start: 125, text: "C" }),
+        ],
+      });
+
+      const onSummarize = vi.fn();
+      const { result } = renderHook(() => useMeetingDetail(meeting, onSummarize));
+
+      act(() => {
+        result.current.handleSummarizeRequest(template);
+      });
+
+      const [, fullText] = onSummarize.mock.calls[0];
+      expect(fullText).toMatch(/^\[00:00\] /);
+      expect(fullText).toMatch(/\n\[00:30\] /);
+      expect(fullText).toMatch(/\n\[02:05\] /);
     });
 
     it("fallback 'Speaker XX' khi speaker không tìm thấy trong speakers", () => {
       const meeting = mockMeeting({
-        segments: [mockSegment({ speakerId: "SPEAKER_05", text: "Hello" })],
+        segments: [mockSegment({ speakerId: "SPEAKER_05", start: 42, text: "Hello" })],
         speakers: [],
       });
 
@@ -177,12 +199,12 @@ describe("useMeetingDetail — share + summarize hook", () => {
       });
 
       const [, fullText] = onSummarize.mock.calls[0];
-      expect(fullText).toContain("Speaker 05");
+      expect(fullText).toBe("[00:42] [Speaker 05]: Hello");
     });
 
     it("fallback 'Speaker {split_part}' khi speakerId không có format SPEAKER_XX", () => {
       const meeting = mockMeeting({
-        segments: [mockSegment({ speakerId: "unknown_id", text: "Hi" })],
+        segments: [mockSegment({ speakerId: "unknown_id", start: 0, text: "Hi" })],
         speakers: [],
       });
 
@@ -194,7 +216,7 @@ describe("useMeetingDetail — share + summarize hook", () => {
       });
 
       const [, fullText] = onSummarize.mock.calls[0];
-      expect(fullText).toContain("Speaker id");
+      expect(fullText).toBe("[00:00] [Speaker id]: Hi");
     });
 
     it("truyền template.structure cho onSummarize", () => {

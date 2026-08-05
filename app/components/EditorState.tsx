@@ -10,6 +10,7 @@ import {
 import { Meeting, saveMeeting, updateMeetingTitle } from "../lib/db";
 import { MEETING_STATUS } from "../lib/constants";
 import type { Word } from "../lib/mockData";
+import { formatTime as formatTimestamp } from "../lib/format";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { useAuth } from "../context/AuthContext";
 import { MeetingTemplate, DEFAULT_TEMPLATES } from "../lib/templates";
@@ -410,12 +411,12 @@ export default function EditorState({
   }, [initialData, segments, speakers, title, audioSrc, user, toast, onBack]);
 
   const handleSummarizeRequest = useCallback(() => {
-    const fullText = segments.map(s => `[${speakers.find(sp => sp.id === s.speakerId)?.name}]: ${s.text}`).join("\n");
+    const fullText = segments.map(s => `[${formatTimestamp(s.start)}] [${speakers.find(sp => sp.id === s.speakerId)?.name}]: ${s.text}`).join("\n");
     // [UPDATE] Truyền structure của template đang chọn
     onSummarize(initialData, fullText, selectedTemplate.structure);
     toast.info(`Đang tóm tắt theo mẫu: ${selectedTemplate.name}...`);
     onBack();
-  }, [segments, speakers, selectedTemplate, initialData, onSummarize, toast, onBack]);
+  }, [segments, speakers, selectedTemplate, formatTimestamp, initialData, onSummarize, toast, onBack]);
 
   const handleViewTranscript = useCallback(() => {
     const txt = segments.map(s => {

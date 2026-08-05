@@ -4,20 +4,13 @@ import { saveAs } from "file-saver";
 import { Meeting } from "../lib/db";
 import { escapeHtml, summaryToHtml } from "../lib/docx/pdfRenderer";
 import { buildSummaryDocx, parseSummaryToDocx } from "../lib/docx/parser";
-
-const fmtTime = (s: number) => {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
-};
-
-const fmtDate = (ts: number) => new Date(ts).toLocaleString("vi-VN");
+import { formatTime, formatDate } from "../lib/format";
 
 export function useExport(meeting: Meeting, toast: { success: (m: string) => void; error: (m: string) => void }) {
   const exportTxt = useCallback(() => {
     try {
       const txt = meeting.segments
-        .map((s) => `[${fmtTime(s.start)}] ${s.text}`)
+        .map((s) => `[${formatTime(s.start)}] ${s.text}`)
         .join("\n");
       const blob = new Blob([txt], { type: "text/plain;charset=utf-8" });
       saveAs(blob, `${meeting.title}.txt`);
@@ -32,7 +25,7 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
       const nodes = parseSummaryToDocx(meeting.summary || "");
       const blob = await buildSummaryDocx(
         meeting.title,
-        `Ngày: ${fmtDate(meeting.createdAt)} | Thời lượng: ${fmtTime(meeting.duration)}`,
+        `Ngày: ${formatDate(meeting.createdAt)} | Thời lượng: ${formatTime(meeting.duration)}`,
         nodes
       );
       saveAs(blob, `${meeting.title}.docx`);
@@ -58,7 +51,7 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
       overlay.innerHTML = `
         <div id="meeting-summary-pdf-content" style="width:794px;background:#ffffff;padding:40px 48px;box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,sans-serif;line-height:1.7;color:#1e293b;font-size:13px;">
           <h1 style="font-size:22px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin:0 0 6px;">${escapeHtml(meeting.title)}</h1>
-          <p style="text-align:center;color:#64748b;font-size:12px;margin:4px 0 24px;">Ngày: ${fmtDate(meeting.createdAt)} | Thời lượng: ${fmtTime(meeting.duration)}</p>
+          <p style="text-align:center;color:#64748b;font-size:12px;margin:4px 0 24px;">Ngày: ${formatDate(meeting.createdAt)} | Thời lượng: ${formatTime(meeting.duration)}</p>
           <div>${summaryToHtml(meeting.summary)}</div>
         </div>
       `;
