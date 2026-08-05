@@ -48,9 +48,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives } = await req.json();
+    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives, placeholders, context } = await req.json();
 
-    if (!text) {
+    if (mode !== "fill_placeholders" && !text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
     }
 
@@ -126,6 +126,41 @@ export async function POST(req: Request) {
       VĂN BẢN MỚI (Cần xử lý):
       "${text}"
       -----
+      `;
+    } else if (mode === "fill_placeholders") {
+      const placeholderList = Array.isArray(placeholders) ? placeholders : [];
+      if (placeholderList.length === 0) {
+        return NextResponse.json({ summary: "{}" });
+      }
+
+      const contextSummary = context?.summary?.trim() || "";
+      const contextSpeakers = Array.isArray(context?.speakers) ? context.speakers.join(", ") : "";
+      const contextObjectives = context?.objectives?.trim() || "";
+
+      const contextBlock = [
+        contextSummary ? `- Tóm tắt cuộc họp:\n${contextSummary}` : "",
+        contextSpeakers ? `- Người tham gia: ${contextSpeakers}` : "",
+        contextObjectives ? `- Mục tiêu cuộc họp: ${contextObjectives}` : "",
+      ].filter(Boolean).join("\n") || "- Không có ngữ cảnh bổ sung.";
+
+      prompt = `
+      Bạn là trợ lý AI chuyên điền giá trị cho các biểu mẫu hợp đồng, văn bản, tài liệu Word có chứa placeholder.
+
+      DANH SÁCH PLACEHOLDER CẦN ĐIỀN:
+      ${placeholderList.map((p: string) => `- {{${p}}}`).join("\n")}
+
+      NGỮ CẢNH CUỘC HỌP (nếu có, hãy dựa vào đó để điền chính xác):
+      ${contextBlock}
+
+      NHIỆM VỤ:
+      Với mỗi placeholder, hãy đưa ra giá trị hợp lý nhất dựa trên tên placeholder và ngữ cảnh được cung cấp. Sử dụng tiếng Việt nếu placeholder không chỉ định ngôn ngữ khác.
+
+      QUY TẮC:
+      1. Trả về MỘT JSON object duy nhất, key = chính xác tên placeholder (giữ nguyên cách viết), value = giá trị điền.
+      2. Không thêm bất kỳ placeholder nào không có trong danh sách.
+      3. Giá trị phải ngắn gọn, phù hợp với tên field. Ví dụ: TEN_KHACH_HANG -> tên người; NGAY_KY -> ngày/tháng/năm; SO_TIEN -> con số có đơn vị.
+      4. Nếu không chắc chắn, đưa ra giá trị hợp lý theo mặc định (ví dụ NGAY -> hôm nay, SO -> số 0, TEN -> [Chưa có]).
+      5. CHỈ trả về JSON thuần túy, không dùng Markdown code block.
       `;
     } else if (mode === "qa") {
       const historyStr = history?.map((m: any) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join("\n") || "";

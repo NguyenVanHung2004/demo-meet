@@ -21,7 +21,9 @@ import { useGlobalUI } from "@/app/context/GlobalUIProvider";
 import Link from "next/link";
 import RichTextEditor from "@/app/components/RichTextEditor";
 import ErrorBoundary from "@/app/components/ErrorBoundary";
+import DocsFillModal from "@/app/components/DocsFillModal";
 import { sanitizeHtml } from "@/app/lib/sanitizeHtml";
+import { FileType } from "lucide-react";
 
 // Simple Markdown parser for common patterns
 function parseMarkdown(text: string): string {
@@ -73,6 +75,7 @@ function MinuteDetailPage() {
     const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState("");
     const [saving, setSaving] = useState(false);
+    const [showDocsFill, setShowDocsFill] = useState(false);
 
     // 🟢 SEARCH NAVIGATION STATE
     const [matchCount, setMatchCount] = useState(0);
@@ -350,6 +353,13 @@ function MinuteDetailPage() {
                             ) : (
                                 <>
                                     <button
+                                        onClick={() => setShowDocsFill(true)}
+                                        className="hidden sm:flex items-center gap-2 px-4 py-2 text-indigo-700 hover:bg-indigo-50 border border-indigo-200 bg-indigo-50 rounded-lg font-medium transition-all"
+                                    >
+                                        <FileType className="w-4 h-4" />
+                                        <span className="hidden md:inline">Tạo từ template</span>
+                                    </button>
+                                    <button
                                         onClick={() => {
                                             setShowSearch(!showSearch);
                                             setTimeout(() => searchInputRef.current?.focus(), 50);
@@ -584,6 +594,16 @@ function MinuteDetailPage() {
                     </div>
                 )}
             </div>
+
+            <DocsFillModal
+                isOpen={showDocsFill}
+                onClose={() => setShowDocsFill(false)}
+                context={{
+                    summary: meeting?.summary || undefined,
+                    speakers: (meeting?.speakers || []).map((s: { name: string }) => s.name),
+                    objectives: meeting?.objectives || undefined,
+                }}
+            />
         </div>
     );
 }

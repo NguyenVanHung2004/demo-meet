@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Share2, Download, Music, FileText, FileType, Sparkles, Edit3 } from "lucide-react";
+import { Share2, Download, Music, FileText, FileType, Sparkles, Edit3, FileText as FileIcon } from "lucide-react";
 import type { Meeting } from "@/app/lib/db";
 import PageHeader from "../ui/PageHeader";
 import Button from "../ui/Button";
@@ -12,6 +12,7 @@ interface MeetingHeaderProps {
   onBack: () => void;
   onEdit: () => void;
   onOpenTemplateModal: () => void;
+  onOpenDocsFill: () => void;
   onShare: () => Promise<void>;
   onDownloadAudio: () => void;
   onExportTxt: () => void;
@@ -23,7 +24,7 @@ interface MeetingHeaderProps {
 
 export default function MeetingHeader({
   meeting, isReadOnly, showTemplateBtn,
-  onBack, onEdit, onOpenTemplateModal,
+  onBack, onEdit, onOpenTemplateModal, onOpenDocsFill,
   onShare, onDownloadAudio, onExportTxt, onExportDocx, onExportPdf,
   formatDate, formatDuration
 }: MeetingHeaderProps) {
@@ -82,6 +83,13 @@ export default function MeetingHeader({
             <Button variant="outline" size="sm" onClick={onOpenTemplateModal} leftIcon={<Sparkles className="w-4 h-4" />}
               className="hidden md:flex text-orange-700 border-orange-200 bg-orange-50 hover:bg-orange-100">
               Tóm tắt lại
+            </Button>
+          )}
+
+          {!isReadOnly && (
+            <Button variant="outline" size="sm" onClick={onOpenDocsFill} leftIcon={<FileIcon className="w-4 h-4" />}
+              className="hidden lg:flex text-indigo-700 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 whitespace-nowrap">
+              Tạo từ template
             </Button>
           )}
 

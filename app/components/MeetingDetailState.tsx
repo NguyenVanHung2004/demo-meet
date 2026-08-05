@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { Meeting } from "../lib/db";
 import type { Segment, Speaker } from "../lib/db";
 import { useGlobalUI } from "../context/GlobalUIProvider";
@@ -8,6 +8,7 @@ import { useMeetingDetail } from "../hooks/useMeetingDetail";
 import { useAudioPlayer } from "../hooks/useAudioPlayer";
 import { useExport } from "../hooks/useExport";
 import TemplateManagerModal from "./TemplateManagerModal";
+import DocsFillModal from "./DocsFillModal";
 import TranscriptRow from "./TranscriptRow";
 import SummaryPanel from "./Meeting/SummaryPanel";
 import TabSwitcher from "./Meeting/TabSwitcher";
@@ -32,6 +33,7 @@ export default function MeetingDetailState({
   isReadOnly?: boolean;
 }) {
   const { toast } = useGlobalUI();
+  const [showDocsFill, setShowDocsFill] = useState(false);
 
   const {
     meeting, setMeeting,
@@ -83,6 +85,7 @@ export default function MeetingDetailState({
         onBack={onBack}
         onEdit={onEdit}
         onOpenTemplateModal={() => setShowTemplateModal(true)}
+        onOpenDocsFill={() => setShowDocsFill(true)}
         onShare={handleShare}
         onDownloadAudio={downloadAudio}
         onExportTxt={exportTxt}
@@ -180,6 +183,16 @@ export default function MeetingDetailState({
         }}
         actionText="Sử dụng mẫu này"
         actionIcon="sparkles"
+      />
+
+      <DocsFillModal
+        isOpen={showDocsFill}
+        onClose={() => setShowDocsFill(false)}
+        context={{
+          summary: meeting.summary || undefined,
+          speakers: (meeting.speakers || []).map((s) => s.name),
+          objectives: meeting.objectives || undefined,
+        }}
       />
     </div>
   );

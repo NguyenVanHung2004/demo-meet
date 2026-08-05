@@ -154,6 +154,41 @@ export const requestSummary = async (text: string, templateStructure?: string, o
   }
 };
 
+export interface FillContext {
+  summary?: string;
+  speakers?: string[];
+  objectives?: string;
+}
+
+export const requestFillPlaceholders = async (
+  placeholders: string[],
+  context?: FillContext
+): Promise<Record<string, string>> => {
+  const response = await fetch("/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: "fill_placeholders",
+      placeholders,
+      context: context || {},
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error || "Lỗi khi AI điền placeholder");
+  }
+  if (!data.summary) {
+    throw new Error("AI không trả về kết quả.");
+  }
+  try {
+    const parsed = JSON.parse(data.summary);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    throw new Error("AI trả về JSON không hợp lệ.");
+  }
+};
+
 export interface RunPodJobStatus {
   id?: string;
   status: string;
