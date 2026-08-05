@@ -97,6 +97,13 @@ export default function SummaryPanel({
     h3: ({ children }) => <h3 className="text-base font-bold text-slate-800 mt-4 mb-2">{processChildren(children)}</h3>,
     strong: ({ children }) => <strong className="font-bold text-slate-900">{processChildren(children)}</strong>,
     em: ({ children }) => <em className="italic">{processChildren(children)}</em>,
+    code: ({ children }) => {
+      const text = typeof children === "string" ? children : "";
+      if (/^\[\d{1,2}:\d{2}\]$/.test(text.trim())) {
+        return <>{processChildren(text)}</>;
+      }
+      return <code className="not-prose font-mono text-[12px] text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{children}</code>;
+    },
   };
 
   const formatTimeCode = (s: number) => {
