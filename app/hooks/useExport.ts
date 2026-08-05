@@ -187,6 +187,82 @@ const parseSummaryToDocx = (summary: string): Paragraph[] => {
   return parseMarkdownToDocx(summary);
 };
 
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const inlineMarkdownToHtml = (text: string): string =>
+  escapeHtml(text)
+    .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+
+const summaryToHtml = (summary: string): string => {
+  if (!summary.trim()) return "";
+  if (summary.trimStart().startsWith("<")) {
+    return sanitizeHtml(summary);
+  }
+  const lines = summary.split(/\r?\n/);
+  const out: string[] = [];
+  let listType: "ul" | "ol" | null = null;
+
+  const closeList = () => {
+    if (listType) {
+      out.push(`</${listType}>`);
+      listType = null;
+    }
+  };
+
+  const openList = (type: "ul" | "ol") => {
+    if (listType !== type) {
+      closeList();
+      out.push(`<${type} style="margin:8px 0;padding-left:24px;">`);
+      listType = type;
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+$/, "");
+    if (!line.trim()) {
+      closeList();
+      continue;
+    }
+
+    const h1 = line.match(/^#\s+(.*)/);
+    const h2 = line.match(/^##\s+(.*)/);
+    const h3 = line.match(/^###\s+(.*)/);
+    const bullet = line.match(/^\s*([-*+])\s+(.*)/);
+    const numbered = line.match(/^\s*(\d+)[.)]\s+(.*)/);
+    const quote = line.match(/^\s*>\s+(.*)/);
+
+    if (h1) {
+      closeList();
+      out.push(`<h1 style="font-size:20px;font-weight:700;color:#0f172a;margin:20px 0 10px;border-bottom:2px solid #e2e8f0;padding-bottom:6px;">${inlineMarkdownToHtml(h1[1])}</h1>`);
+    } else if (h2) {
+      closeList();
+      out.push(`<h2 style="font-size:16px;font-weight:700;color:#4338ca;margin:16px 0 8px;">${inlineMarkdownToHtml(h2[1])}</h2>`);
+    } else if (h3) {
+      closeList();
+      out.push(`<h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:14px 0 6px;">${inlineMarkdownToHtml(h3[1])}</h3>`);
+    } else if (bullet) {
+      openList("ul");
+      out.push(`<li style="margin:3px 0;">${inlineMarkdownToHtml(bullet[2])}</li>`);
+    } else if (numbered) {
+      openList("ol");
+      out.push(`<li style="margin:3px 0;">${inlineMarkdownToHtml(numbered[2])}</li>`);
+    } else if (quote) {
+      closeList();
+      out.push(`<blockquote style="border-left:4px solid #cbd5e1;padding:4px 12px;margin:8px 0;color:#475569;font-style:italic;">${inlineMarkdownToHtml(quote[1])}</blockquote>`);
+    } else {
+      closeList();
+      out.push(`<p style="margin:6px 0;">${inlineMarkdownToHtml(line)}</p>`);
+    }
+  }
+  closeList();
+  return out.join("\n");
+};
+
 export function useExport(meeting: Meeting, toast: { success: (m: string) => void; error: (m: string) => void }) {
   const exportTxt = useCallback(() => {
     try {
@@ -245,7 +321,7 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
   }, [meeting, toast]);
 
   const exportPdf = useCallback(async () => {
-    let container: HTMLDivElement | null = null;
+    let overlay: HTMLDivElement | null = null;
     try {
       if (!meeting.summary?.trim()) {
         toast.error("Chưa có biên bản để xuất PDF");
@@ -253,40 +329,37 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
       }
       const html2pdf = (await import("html2pdf.js")).default;
 
-      container = document.createElement("div");
-      container.id = "meeting-summary-pdf-export";
-      container.style.cssText =
-        "position:fixed;top:0;left:0;width:794px;padding:32px;box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,sans-serif;line-height:1.7;color:#1e293b;font-size:13px;background:#ffffff;z-index:-1;pointer-events:none;";
-      container.innerHTML = `
-        <h1 style="font-size:22px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin:0 0 6px;">${meeting.title.replace(/</g, "&lt;")}</h1>
-        <p style="text-align:center;color:#64748b;font-size:12px;margin:4px 0 24px;">Ngày: ${fmtDate(meeting.createdAt)} | Thời lượng: ${fmtTime(meeting.duration)}</p>
-        <div>${sanitizeHtml(meeting.summary)}</div>
+      overlay = document.createElement("div");
+      overlay.id = "meeting-summary-pdf-export";
+      overlay.style.cssText =
+        "position:fixed;inset:0;background:#e2e8f0;z-index:99999;overflow:auto;display:flex;justify-content:center;padding:24px;";
+      overlay.innerHTML = `
+        <div id="meeting-summary-pdf-content" style="width:794px;background:#ffffff;padding:40px 48px;box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,sans-serif;line-height:1.7;color:#1e293b;font-size:13px;">
+          <h1 style="font-size:22px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin:0 0 6px;">${escapeHtml(meeting.title)}</h1>
+          <p style="text-align:center;color:#64748b;font-size:12px;margin:4px 0 24px;">Ngày: ${fmtDate(meeting.createdAt)} | Thời lượng: ${fmtTime(meeting.duration)}</p>
+          <div>${summaryToHtml(meeting.summary)}</div>
+        </div>
       `;
-      document.body.appendChild(container);
+      document.body.appendChild(overlay);
 
-      const scrollY = window.scrollY || 0;
+      const content = document.getElementById("meeting-summary-pdf-content") as HTMLDivElement;
+
       await html2pdf()
         .set({
           margin: [12, 10, 12, 10],
           filename: `${meeting.title}.pdf`,
           image: { type: "jpeg", quality: 0.95 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            scrollX: 0,
-            scrollY: -scrollY,
-            windowWidth: 794,
-          },
+          html2canvas: { scale: 2, useCORS: true },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         })
-        .from(container)
+        .from(content)
         .save();
       toast.success("Đã xuất file .pdf");
     } catch {
       toast.error("Lỗi khi xuất file .pdf");
     } finally {
-      if (container && container.parentNode) {
-        container.parentNode.removeChild(container);
+      if (overlay && overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
       }
     }
   }, [meeting, toast]);
