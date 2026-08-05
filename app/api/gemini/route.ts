@@ -20,7 +20,7 @@ async function generateWithRetry(prompt: string, retries = 3) {
         body: JSON.stringify({
           model: MODEL,
           messages: [{ role: "user", content: prompt }],
-          max_tokens: 8192,
+          max_tokens: 16384,
         }),
       });
       if (!response.ok) {
@@ -28,7 +28,14 @@ async function generateWithRetry(prompt: string, retries = 3) {
         throw new Error(`API error: ${response.status} ${response.statusText} — ${errorBody}`);
       }
       const data = await response.json();
-      return data.choices?.[0]?.message?.content || "";
+      const message = data.choices?.[0]?.message;
+      const content = (message?.content || message?.reasoning_content || "").trim();
+      if (content) return content;
+      if (attempt < retries) {
+        await delay(1000 * attempt);
+        continue;
+      }
+      throw new Error("Model trả về nội dung rỗng");
     } catch (error: any) {
       if (attempt < retries) {
         await delay(1000 * attempt);
