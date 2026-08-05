@@ -276,8 +276,8 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
                         />
                       </div>
                     ))
-                  : markers.map((m) => (
-                      <div key={m.marker}>
+                  : markers.map((m, idx) => (
+                      <div key={`${m.marker}-${idx}`}>
                         <Input
                           label={m.marker.length > 40 ? `${m.marker.slice(0, 40)}...` : m.marker}
                           value={markerValues[m.marker] || ""}
