@@ -12,6 +12,11 @@ export interface DocxParseResult {
   documentXml: string;
 }
 
+export interface DocxMarker {
+  marker: string;
+  value: string;
+}
+
 const PLACEHOLDER_REGEX = /\{\{([^{}]+)\}\}/g;
 
 const escapeXml = (s: string): string =>
@@ -42,31 +47,163 @@ const readDocumentXml = async (file: File): Promise<string> => {
   return doc.async("string");
 };
 
+const writeDocumentXml = async (file: File, xml: string): Promise<Blob> => {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  zip.file("word/document.xml", xml);
+  return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+};
+
+const parseXml = (xml: string): Document => {
+  const doc = new DOMParser().parseFromString(xml, "text/xml");
+  if (doc.getElementsByTagName("parsererror").length > 0) {
+    throw new Error("File .docx không hợp lệ (lỗi XML)");
+  }
+  return doc;
+};
+
+const getParagraphs = (doc: Document): Element[] =>
+  Array.from(doc.getElementsByTagName("w:p"));
+
+const getTextElements = (p: Element): Element[] =>
+  Array.from(p.getElementsByTagName("w:t"));
+
+const paragraphText = (textEls: Element[]): string =>
+  textEls.map((el) => el.textContent || "").join("");
+
+const escapeRegExp = (s: string): string =>
+  s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Gộp text của các w:t trong một đoạn w:p, tìm các chỗ khớp "from",
+ * thay thế bằng "to" TRÊN NHIỀU RUN (xử lý placeholder bị Word tách run).
+ * Quét toàn bộ text một lần, áp dụng các match từ phải -> trái để offset không bị dịch.
+ */
+const applyReplacements = (
+  textEls: Element[],
+  replacements: { from: string; to: string }[]
+): void => {
+  if (textEls.length === 0 || replacements.length === 0) return;
+
+  const full = paragraphText(textEls);
+  if (!full) return;
+
+  const clean = replacements
+    .filter((r) => r.from && r.from.trim())
+    .sort((a, b) => b.from.length - a.from.length);
+
+  if (clean.length === 0) return;
+
+  const pattern = clean.map((r) => `(${escapeRegExp(r.from)})`).join("|");
+  const regex = new RegExp(pattern, "g");
+
+  const matches: { start: number; end: number; to: string }[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(full)) !== null) {
+    let to = "";
+    for (let i = 0; i < clean.length; i++) {
+      if (match[i + 1] !== undefined) {
+        to = clean[i].to;
+        break;
+      }
+    }
+    matches.push({ start: match.index, end: match.index + match[0].length, to });
+  }
+  if (matches.length === 0) return;
+
+  // Thay từ phải -> trái để không làm lệch offset
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const { start, end, to } = matches[i];
+    replaceRange(textEls, start, end, to);
+  }
+};
+
+const replaceRange = (
+  textEls: Element[],
+  startOffset: number,
+  endOffset: number,
+  value: string
+): void => {
+  const lens = textEls.map((el) => (el.textContent || "").length);
+  const start = findRunByOffset(lens, startOffset);
+  const end = findRunByOffset(lens, endOffset);
+
+  const startEl = textEls[start.run];
+  const startText = startEl.textContent || "";
+  const prefix = startText.slice(0, start.local);
+
+  let suffix = "";
+  if (end.run === start.run) {
+    suffix = startText.slice(end.local);
+  } else {
+    suffix = (textEls[end.run].textContent || "").slice(end.local);
+  }
+
+  startEl.textContent = prefix + value + suffix;
+  for (let i = start.run + 1; i <= end.run; i++) {
+    textEls[i].textContent = "";
+  }
+};
+
+const findRunByOffset = (lens: number[], offset: number): { run: number; local: number } => {
+  let acc = 0;
+  for (let i = 0; i < lens.length; i++) {
+    if (offset <= acc + lens[i] || i === lens.length - 1) {
+      return { run: i, local: Math.max(0, offset - acc) };
+    }
+    acc += lens[i];
+  }
+  return { run: lens.length - 1, local: lens[lens.length - 1] };
+};
+
 export async function extractPlaceholders(file: File): Promise<PlaceholderInfo[]> {
   validateFile(file);
   const documentXml = await readDocumentXml(file);
+  const doc = parseXml(documentXml);
   const counts = new Map<string, number>();
-  for (const match of documentXml.matchAll(PLACEHOLDER_REGEX)) {
-    const name = match[1].trim();
-    if (!name) continue;
-    counts.set(name, (counts.get(name) || 0) + 1);
+
+  for (const p of getParagraphs(doc)) {
+    const text = paragraphText(getTextElements(p));
+    for (const match of text.matchAll(PLACEHOLDER_REGEX)) {
+      const name = match[1].trim();
+      if (!name) continue;
+      counts.set(name, (counts.get(name) || 0) + 1);
+    }
   }
   return Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
 }
 
 export async function fillDocx(file: File, values: Record<string, string>): Promise<Blob> {
   validateFile(file);
-  const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const documentXml = await readDocumentXml(file);
+  const doc = parseXml(documentXml);
 
-  const newXml = documentXml.replace(PLACEHOLDER_REGEX, (match, rawName: string) => {
-    const name = rawName.trim();
-    const value = values[name];
-    return value === undefined || value === null ? match : escapeXml(value);
-  });
+  const replacements = Object.entries(values)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([name, value]) => ({ from: `{{${name.trim()}}}`, to: escapeXml(String(value)) }));
 
-  zip.file("word/document.xml", newXml);
-  return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  for (const p of getParagraphs(doc)) {
+    applyReplacements(getTextElements(p), replacements);
+  }
+
+  const newXml = new XMLSerializer().serializeToString(doc);
+  return writeDocumentXml(file, newXml);
+}
+
+export async function fillDocxMarkers(file: File, markers: DocxMarker[]): Promise<Blob> {
+  validateFile(file);
+  const documentXml = await readDocumentXml(file);
+  const doc = parseXml(documentXml);
+
+  const replacements = markers
+    .filter((m) => m.marker && m.marker.trim())
+    .map((m) => ({ from: m.marker, to: escapeXml(m.value ?? "") }));
+
+  for (const p of getParagraphs(doc)) {
+    applyReplacements(getTextElements(p), replacements);
+  }
+
+  const newXml = new XMLSerializer().serializeToString(doc);
+  return writeDocumentXml(file, newXml);
 }
 
 export async function parseDocx(file: File): Promise<DocxParseResult> {
@@ -80,28 +217,4 @@ export async function extractPlainText(file: File): Promise<string> {
   const mammoth = (await import("mammoth")).default;
   const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
   return result.value;
-}
-
-export interface DocxMarker {
-  marker: string;
-  value: string;
-}
-
-export async function fillDocxMarkers(file: File, markers: DocxMarker[]): Promise<Blob> {
-  validateFile(file);
-  const zip = await JSZip.loadAsync(await file.arrayBuffer());
-  let documentXml = await readDocumentXml(file);
-
-  for (const { marker, value } of markers) {
-    if (!marker || !marker.trim()) continue;
-    const escapedMarker = escapeXml(marker);
-    const escapedValue = escapeXml(value ?? "");
-    const idx = documentXml.indexOf(escapedMarker);
-    if (idx !== -1) {
-      documentXml = documentXml.slice(0, idx) + escapedValue + documentXml.slice(idx + escapedMarker.length);
-    }
-  }
-
-  zip.file("word/document.xml", documentXml);
-  return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
 }
