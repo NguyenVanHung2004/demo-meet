@@ -264,12 +264,19 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
       `;
       document.body.appendChild(container);
 
+      const scrollY = window.scrollY || 0;
       await html2pdf()
         .set({
           margin: [12, 10, 12, 10],
           filename: `${meeting.title}.pdf`,
           image: { type: "jpeg", quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            scrollX: 0,
+            scrollY: -scrollY,
+            windowWidth: 794,
+          },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         })
         .from(container)
