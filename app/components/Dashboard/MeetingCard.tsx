@@ -154,7 +154,7 @@ export default function MeetingCard({
               />
             </div>
           ) : (
-            <div className="group/title flex items-center gap-1.5 min-w-0">
+            <div className="group flex items-center gap-1.5 min-w-0">
               <h3 className="font-bold text-slate-800 truncate flex-1 min-w-0" title={meeting.title}>
                 {meeting.title}
               </h3>
@@ -167,7 +167,7 @@ export default function MeetingCard({
                       startEditingTitle();
                     }}
                     aria-label="Đổi tên cuộc họp"
-                    className="shrink-0 p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors opacity-0 group-hover/title:opacity-100 focus:opacity-100"
+                    className="shrink-0 p-1 text-slate-300 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors group-hover:text-slate-500"
                   >
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
