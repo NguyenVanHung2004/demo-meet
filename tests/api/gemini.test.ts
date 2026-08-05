@@ -80,7 +80,7 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
     const [, opts] = fetchMock.mock.calls[0];
     const body = JSON.parse(opts.body);
     expect(body.model).toBe("mimo-v2.5");
-    expect(body.max_tokens).toBe(8192);
+    expect(body.max_tokens).toBe(16384);
     const headers = opts.headers;
     expect(headers.Authorization).toBe("Bearer test-gemini-key");
   });
