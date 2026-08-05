@@ -32,6 +32,8 @@ const buildDocxWithSplitRuns = async (): Promise<File> => {
         }),
         new Paragraph({ children: [new TextRun("Ghi chu: ______ ket thuc")] }),
         new Paragraph({ children: [new TextRun("1. Muc dich: ...... noi dung")] }),
+        new Paragraph({ children: [new TextRun("ABC")] }),
+        new Paragraph({ children: [new TextRun("DEFGHIJ")] }),
       ],
     }],
   });
@@ -104,6 +106,19 @@ describe("docx filler with split runs", () => {
     const text = xmlToVisibleText(xml);
     expect(text).toContain("1. Muc dich: noi dung");
     expect(text).not.toContain("......");
+  });
+
+  it("fillDocxMarkers xử lý marker xuyên 2 paragraph (label ở para1, chỗ trống ở para2)", async () => {
+    const blob = await fillDocxMarkers(file, [
+      { marker: "BC\n\nDEFGHIJ", value: "VALUE" },
+    ]);
+    const xml = await readXmlFromBlob(blob);
+    const text = xmlToVisibleText(xml);
+    expect(text).toContain("VALUE");
+    expect(text).not.toContain("BC");
+    expect(text).not.toContain("DEFGHIJ");
+    // Debug: xác nhận p4 và p5 đã được fill
+    expect(text).toMatch(/A\s*VALUE/);
   });
 });
 

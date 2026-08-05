@@ -88,6 +88,7 @@ const writeXmlFiles = async (file: File, updated: { name: string; xml: string }[
 /**
  * Fill replacements vào TẤT CẢ XML chứa văn bản trong docx
  * (document + header + footer + footnotes + endnotes + comments).
+ * Trả về tập các marker đã match (dùng cho cross-paragraph).
  */
 const fillAllTextXmls = async (
   file: File,
@@ -100,12 +101,80 @@ const fillAllTextXmls = async (
   const updated: { name: string; xml: string }[] = [];
   for (const { name, xml } of files) {
     const doc = parseXml(xml);
-    for (const p of getParagraphs(doc)) {
-      applyReplacements(getTextElements(p), replacements);
+    const paragraphs = getParagraphs(doc);
+    const paraTextEls = paragraphs.map((p) => getTextElements(p));
+
+    // Bước 1: Fill từng paragraph riêng
+    const matched = new Set<string>();
+    for (const textEls of paraTextEls) {
+      const m = applyReplacements(textEls, replacements);
+      m.forEach((x) => matched.add(x));
     }
+
+    // Bước 2: Với marker chưa match, thử xuyên 2 paragraph liền kề
+    const unmatched = replacements.filter((r) => !matched.has(r.from));
+    if (unmatched.length > 0) {
+      for (let i = 0; i < paraTextEls.length - 1; i++) {
+        applyCrossParagraphFill(paraTextEls[i], paraTextEls[i + 1], unmatched);
+      }
+    }
+
     updated.push({ name, xml: new XMLSerializer().serializeToString(doc) });
   }
   return writeXmlFiles(file, updated);
+};
+
+/**
+ * Thử fill marker xuyên 2 paragraph liền kề (label ở para i, chỗ trống ở para i+1).
+ * Nối text 2 para (cách bằng \n\n), tìm marker (đã normalize). Nếu match xuyên 2 para,
+ * xóa label ở para i và thay chỗ trống ở para i+1 bằng value.
+ */
+const applyCrossParagraphFill = (
+  textElsA: Element[],
+  textElsB: Element[],
+  replacements: { from: string; to: string }[]
+): void => {
+  if (textElsA.length === 0 || textElsB.length === 0) return;
+
+  const textA = normalizeForXml(paragraphText(textElsA));
+  const textB = normalizeForXml(paragraphText(textElsB));
+  if (!textA || !textB) return;
+
+  // joined = textA + " \n\n " + textB (sau normalize: textA + " " + textB)
+  const joinedDisplay = normalizeForXml(`${textA} \n\n ${textB}`);
+
+  for (const r of replacements) {
+    if (!r.from) continue;
+    const fromNorm = normalizeForXml(r.from);
+    const idx = joinedDisplay.indexOf(fromNorm);
+    if (idx === -1) continue;
+
+    const matchEnd = idx + r.from.length;
+    // joinedDisplay = textA + " \n\n " + textB
+    const separator = " \n\n ";
+    const aLenActual = textA.length + separator.length;
+
+    // Marker nằm hoàn toàn trong para A
+    if (matchEnd <= aLenActual) continue;
+    // Marker nằm hoàn toàn trong para B
+    if (idx >= aLenActual) continue;
+
+    // Xuyên 2 para
+    const endInBActual = matchEnd - aLenActual;
+    if (endInBActual <= 0) continue;
+
+    // Phần đầu ở para A: từ idx đến cuối textA
+    // Phần sau ở para B: từ 0 đến endInBActual
+
+    // Xóa label ở para A: replaceRange từ idx đến textA.length -> ""
+    if (idx < textA.length) {
+      replaceRange(textElsA, idx, textA.length, "");
+    }
+    // Thay chỗ trống ở para B: replaceRange từ 0 đến endInBActual -> value
+    if (endInBActual > 0) {
+      replaceRange(textElsB, 0, endInBActual, r.to);
+    }
+  }
 };
 
 const parseXml = (xml: string): Document => {
@@ -140,45 +209,51 @@ const normalizeForXml = (s: string): string =>
  * Gộp text của các w:t trong một đoạn w:p, tìm các chỗ khớp "from",
  * thay thế bằng "to" TRÊN NHIỀU RUN (xử lý placeholder bị Word tách run).
  * Quét toàn bộ text một lần, áp dụng các match từ phải -> trái để offset không bị dịch.
+ * Trả về tập các `from` đã match (dùng cho cross-paragraph fallback).
  */
 const applyReplacements = (
   textEls: Element[],
   replacements: { from: string; to: string }[]
-): void => {
-  if (textEls.length === 0 || replacements.length === 0) return;
+): Set<string> => {
+  const matched = new Set<string>();
+  if (textEls.length === 0 || replacements.length === 0) return matched;
 
   const full = normalizeForXml(paragraphText(textEls));
-  if (!full) return;
+  if (!full) return matched;
 
   const clean = replacements
-    .map((r) => ({ from: normalizeForXml(r.from), to: r.to }))
+    .map((r) => ({ from: normalizeForXml(r.from), to: r.to, originalFrom: r.from }))
     .filter((r) => r.from)
     .sort((a, b) => b.from.length - a.from.length);
 
-  if (clean.length === 0) return;
+  if (clean.length === 0) return matched;
 
   const pattern = clean.map((r) => `(${escapeRegExp(r.from)})`).join("|");
   const regex = new RegExp(pattern, "g");
 
-  const matches: { start: number; end: number; to: string }[] = [];
+  const matches: { start: number; end: number; to: string; originalFrom: string }[] = [];
   let match: RegExpExecArray | null;
   while ((match = regex.exec(full)) !== null) {
     let to = "";
+    let originalFrom = "";
     for (let i = 0; i < clean.length; i++) {
       if (match[i + 1] !== undefined) {
         to = clean[i].to;
+        originalFrom = clean[i].originalFrom;
         break;
       }
     }
-    matches.push({ start: match.index, end: match.index + match[0].length, to });
+    matches.push({ start: match.index, end: match.index + match[0].length, to, originalFrom });
   }
-  if (matches.length === 0) return;
+  if (matches.length === 0) return matched;
 
   // Thay từ phải -> trái để không làm lệch offset
   for (let i = matches.length - 1; i >= 0; i--) {
-    const { start, end, to } = matches[i];
+    const { start, end, to, originalFrom } = matches[i];
     replaceRange(textEls, start, end, to);
+    matched.add(originalFrom);
   }
+  return matched;
 };
 
 const replaceRange = (
