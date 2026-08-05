@@ -74,3 +74,34 @@ export async function parseDocx(file: File): Promise<DocxParseResult> {
   const placeholders = await extractPlaceholders(file);
   return { placeholders, documentXml };
 }
+
+export async function extractPlainText(file: File): Promise<string> {
+  validateFile(file);
+  const mammoth = (await import("mammoth")).default;
+  const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+  return result.value;
+}
+
+export interface DocxMarker {
+  marker: string;
+  value: string;
+}
+
+export async function fillDocxMarkers(file: File, markers: DocxMarker[]): Promise<Blob> {
+  validateFile(file);
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  let documentXml = await readDocumentXml(file);
+
+  for (const { marker, value } of markers) {
+    if (!marker || !marker.trim()) continue;
+    const escapedMarker = escapeXml(marker);
+    const escapedValue = escapeXml(value ?? "");
+    const idx = documentXml.indexOf(escapedMarker);
+    if (idx !== -1) {
+      documentXml = documentXml.slice(0, idx) + escapedValue + documentXml.slice(idx + escapedMarker.length);
+    }
+  }
+
+  zip.file("word/document.xml", documentXml);
+  return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+}

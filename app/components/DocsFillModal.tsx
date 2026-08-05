@@ -7,8 +7,10 @@ import Modal from "@/app/components/ui/Modal";
 import Button from "@/app/components/ui/Button";
 import Input from "@/app/components/ui/Input";
 import { useGlobalUI } from "@/app/context/GlobalUIProvider";
-import { extractPlaceholders, fillDocx, type PlaceholderInfo } from "@/app/lib/docx/filler";
-import { requestFillPlaceholders, type FillContext } from "@/app/lib/api";
+import {
+  extractPlaceholders, fillDocx, fillDocxMarkers, extractPlainText, type PlaceholderInfo, type DocxMarker
+} from "@/app/lib/docx/filler";
+import { requestFillPlaceholders, requestDetectFill, type FillContext, type DetectFillItem } from "@/app/lib/api";
 import { cn } from "@/app/lib/cn";
 
 type Step = "upload" | "ai-filling" | "review" | "generating";
@@ -27,6 +29,8 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
   const [file, setFile] = useState<File | null>(null);
   const [placeholders, setPlaceholders] = useState<PlaceholderInfo[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [markers, setMarkers] = useState<DetectFillItem[]>([]);
+  const [markerValues, setMarkerValues] = useState<Record<string, string>>({});
   const [fileError, setFileError] = useState<string | null>(null);
   const [aiError, setAiError] = useState(false);
 
@@ -35,6 +39,8 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
     setFile(null);
     setPlaceholders([]);
     setValues({});
+    setMarkers([]);
+    setMarkerValues({});
     setFileError(null);
     setAiError(false);
   };
@@ -58,6 +64,8 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
       const found = await extractPlaceholders(selected);
       setFile(selected);
       setPlaceholders(found);
+      setMarkers([]);
+      setMarkerValues({});
       const initial: Record<string, string> = {};
       found.forEach((p) => { initial[p.name] = ""; });
       setValues(initial);
@@ -72,18 +80,30 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
     setStep("ai-filling");
     setAiError(false);
     try {
-      const names = placeholders.map((p) => p.name);
-      const result = await requestFillPlaceholders(names, context);
-      setValues((prev) => {
-        const next = { ...prev };
-        names.forEach((n) => {
-          const v = result[n];
-          if (v !== undefined && v !== null && String(v).trim() !== "") {
-            next[n] = String(v);
-          }
+      if (placeholders.length > 0) {
+        const names = placeholders.map((p) => p.name);
+        const result = await requestFillPlaceholders(names, context);
+        setValues((prev) => {
+          const next = { ...prev };
+          names.forEach((n) => {
+            const v = result[n];
+            if (v !== undefined && v !== null && String(v).trim() !== "") {
+              next[n] = String(v);
+            }
+          });
+          return next;
         });
-        return next;
-      });
+      } else {
+        const plainText = await extractPlainText(file);
+        if (!plainText.trim()) {
+          throw new Error("Không thể đọc nội dung file.");
+        }
+        const detected = await requestDetectFill(plainText, context);
+        setMarkers(detected);
+        const init: Record<string, string> = {};
+        detected.forEach((d) => { init[d.marker] = d.value || ""; });
+        setMarkerValues(init);
+      }
       setStep("review");
     } catch (err) {
       console.error("AI fill error:", err);
@@ -96,7 +116,13 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
     if (!file) return;
     setStep("generating");
     try {
-      const blob = await fillDocx(file, values);
+      let blob: Blob;
+      if (markers.length > 0) {
+        const docxMarkers: DocxMarker[] = markers.map((m) => ({ marker: m.marker, value: markerValues[m.marker] || "" }));
+        blob = await fillDocxMarkers(file, docxMarkers);
+      } else {
+        blob = await fillDocx(file, values);
+      }
       const cleanName = file.name.replace(/\.docx$/i, "");
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -113,7 +139,9 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
     }
   };
 
-  const allFilled = placeholders.length > 0 && placeholders.every((p) => (values[p.name] || "").trim() !== "");
+  const allFilled = placeholders.length > 0
+    ? placeholders.every((p) => (values[p.name] || "").trim() !== "")
+    : markers.every((m) => (markerValues[m.marker] || "").trim() !== "");
 
   return (
     <Modal
@@ -147,7 +175,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
               </div>
               <p className="text-sm font-bold text-slate-700">Chọn file .docx template</p>
               <p className="text-xs text-slate-400">
-                Có chứa placeholder dạng {`{{TEN_KHACH_HANG}}`}, {`{{NGAY_KY}}`}... (tối đa 5MB)
+                AI sẽ tự tìm chỗ trống (gạch chân, dấu chấm...) hoặc placeholder {`{{TEN_FIELD}}`} để điền (tối đa 5MB)
               </p>
             </div>
           </button>
@@ -191,7 +219,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
             <Button variant="outline" onClick={handleClose}>Hủy</Button>
             <Button
               variant="primary"
-              disabled={!file || placeholders.length === 0}
+              disabled={!file}
               onClick={handleContinue}
               leftIcon={<Sparkles className="w-4 h-4" />}
             >
@@ -204,7 +232,11 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
       {step === "ai-filling" && (
         <div className="flex flex-col items-center justify-center py-14 text-center">
           <Loader2 className="w-10 h-10 text-primary-600 animate-spin mb-4" />
-          <p className="text-sm font-bold text-slate-700">AI đang phân tích {placeholders.length} placeholder...</p>
+          <p className="text-sm font-bold text-slate-700">
+            {placeholders.length > 0
+              ? `AI đang phân tích ${placeholders.length} placeholder...`
+              : "AI đang tìm các chỗ trống cần điền..."}
+          </p>
           <p className="text-xs text-slate-400 mt-1">Dựa trên ngữ cảnh cuộc họp</p>
         </div>
       )}
@@ -218,12 +250,12 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
             </div>
           )}
 
-          {placeholders.length === 0 ? (
+          {placeholders.length === 0 && markers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center text-slate-400">
               <FileText className="w-12 h-12 mb-2 opacity-30" />
-              <p className="text-sm">Không tìm thấy placeholder {`{{...}}`} nào trong file.</p>
-              <p className="text-xs mt-1">Hãy chọn file có chứa placeholder để điền.</p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={() => { setStep("upload"); setFile(null); setPlaceholders([]); }}>
+              <p className="text-sm">Không tìm thấy placeholder {`{{...}}`} hoặc chỗ trống nào trong file.</p>
+              <p className="text-xs mt-1">Hãy thử file khác, hoặc thêm placeholder {`{{TEN_FIELD}}`} vào file.</p>
+              <Button variant="outline" size="sm" className="mt-4" onClick={() => { setStep("upload"); setFile(null); setPlaceholders([]); setMarkers([]); setMarkerValues({}); }}>
                 Chọn file khác
               </Button>
             </div>
@@ -233,16 +265,27 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
                 Review giá trị trước khi tạo file:
               </p>
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {placeholders.map((p) => (
-                  <div key={p.name}>
-                    <Input
-                      label={p.name}
-                      value={values[p.name] || ""}
-                      onChange={(e) => setValues((prev) => ({ ...prev, [p.name]: e.target.value }))}
-                      placeholder={`Giá trị cho {{${p.name}}}`}
-                    />
-                  </div>
-                ))}
+                {placeholders.length > 0
+                  ? placeholders.map((p) => (
+                      <div key={p.name}>
+                        <Input
+                          label={p.name}
+                          value={values[p.name] || ""}
+                          onChange={(e) => setValues((prev) => ({ ...prev, [p.name]: e.target.value }))}
+                          placeholder={`Giá trị cho {{${p.name}}}`}
+                        />
+                      </div>
+                    ))
+                  : markers.map((m) => (
+                      <div key={m.marker}>
+                        <Input
+                          label={m.marker.length > 40 ? `${m.marker.slice(0, 40)}...` : m.marker}
+                          value={markerValues[m.marker] || ""}
+                          onChange={(e) => setMarkerValues((prev) => ({ ...prev, [m.marker]: e.target.value }))}
+                          placeholder="Giá trị điền vào chỗ trống này"
+                        />
+                      </div>
+                    ))}
               </div>
             </div>
           )}
@@ -251,7 +294,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
             <Button
               variant="ghost"
               size="sm"
-              disabled={placeholders.length === 0}
+              disabled={!file}
               onClick={handleContinue}
               leftIcon={<Wand2 className="w-4 h-4" />}
             >
@@ -281,7 +324,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
       )}
 
       <div className={cn("mt-2 text-xs text-slate-400", step !== "upload" && "hidden")}>
-        Tip: Để placeholder trong template dạng {`{{TÊN_FIELD}}`}, mỗi field viết gọn trong 1 từ khóa không dấu.
+        Tip: Nếu file không có placeholder {`{{TÊN_FIELD}}`}, AI sẽ tự tìm các chỗ trống (gạch chân, dấu chấm...) để điền.
       </div>
     </Modal>
   );

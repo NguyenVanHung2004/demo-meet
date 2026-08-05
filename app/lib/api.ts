@@ -189,6 +189,43 @@ export const requestFillPlaceholders = async (
   }
 };
 
+export interface DetectFillItem {
+  marker: string;
+  value: string;
+}
+
+export const requestDetectFill = async (
+  text: string,
+  context?: FillContext
+): Promise<DetectFillItem[]> => {
+  const response = await fetch("/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: "detect_fill",
+      text,
+      context: context || {},
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error || "Lỗi khi AI phân tích file");
+  }
+  if (!data.summary) {
+    throw new Error("AI không trả về kết quả.");
+  }
+  try {
+    const parsed = JSON.parse(data.summary);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((i) => i && typeof i.marker === "string" && i.marker.trim());
+    }
+    return [];
+  } catch {
+    throw new Error("AI trả về JSON không hợp lệ.");
+  }
+};
+
 export interface RunPodJobStatus {
   id?: string;
   status: string;

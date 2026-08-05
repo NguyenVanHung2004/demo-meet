@@ -50,7 +50,7 @@ export async function POST(req: Request) {
   try {
     const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives, placeholders, context } = await req.json();
 
-    if (mode !== "fill_placeholders" && !text) {
+    if (mode !== "fill_placeholders" && mode !== "detect_fill" && !text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
     }
 
@@ -162,6 +162,47 @@ export async function POST(req: Request) {
       4. Nếu không chắc chắn, đưa ra giá trị hợp lý theo mặc định (ví dụ NGAY -> hôm nay, SO -> số 0, TEN -> [Chưa có]).
       5. CHỈ trả về JSON thuần túy, không dùng Markdown code block.
       `;
+    } else if (mode === "detect_fill") {
+      const contextSummary = context?.summary?.trim() || "";
+      const contextSpeakers = Array.isArray(context?.speakers) ? context.speakers.join(", ") : "";
+      const contextObjectives = context?.objectives?.trim() || "";
+
+      const contextBlock = [
+        contextSummary ? `- Tóm tắt cuộc họp:\n${contextSummary}` : "",
+        contextSpeakers ? `- Người tham gia: ${contextSpeakers}` : "",
+        contextObjectives ? `- Mục tiêu cuộc họp: ${contextObjectives}` : "",
+      ].filter(Boolean).join("\n") || "- Không có ngữ cảnh bổ sung.";
+
+      prompt = `
+      Bạn là trợ lý AI chuyên điền giá trị cho các biểu mẫu, hợp đồng, văn bản Word.
+
+      NỘI DUNG FILE WORD (text đã trích xuất):
+      """
+      ${text}
+      """
+
+      NHIỆM VỤ:
+      Đọc nội dung file và xác định TẤT CẢ các vị trí cần điền thông tin, gồm:
+      1. Các chuỗi trống thể hiện chỗ cần điền: gạch dưới (____, ___), dấu chấm lửng (......, .........), khoảng trống dài (   ), dấu gạch ngang đơn sau nhãn field.
+      2. Các field có nhãn nhưng chưa có giá trị, ví dụ "Tên khách hàng:", "Ngày ký:", "Số tiền:" (nếu phía sau trống).
+      3. Các ô/trường rõ ràng cần điền theo văn cảnh.
+
+      Với mỗi vị trí cần điền, trả về:
+      - "marker": chuỗi ký tự GỐC chính xác trong văn bản cần thay thế (VD: "______", "............", hoặc "Tên khách hàng:" nếu là field). Đây là chuỗi sẽ được tìm và thay thế.
+      - "value": giá trị hợp lý điền vào (dựa trên tên field / nhãn / ngữ cảnh). Nếu có NGỮ CẢNH CUỘC HỌP thì dựa vào đó để chính xác.
+
+      QUY TẮC:
+      1. CHỈ thêm các vị trí thực sự cần điền. Không thêm thông tin đã có sẵn giá trị.
+      2. Mỗi marker phải là chuỗi gốc duy nhất tìm thấy được trong văn bản (đủ dài để không nhầm lẫn).
+      3. Nếu không tìm thấy chỗ trống nào, trả mảng rỗng [].
+      4. Trả về JSON Array thuần túy dạng [{"marker": "...", "value": "..."}], không dùng Markdown code block.
+
+      NGỮ CẢNH CUỘC HỌP (nếu có):
+      ${contextBlock}
+      `;
+      const rawText = await generateWithRetry(prompt);
+      const cleanText = rawText.replace(/```json|```/g, "").trim();
+      return NextResponse.json({ summary: cleanText });
     } else if (mode === "qa") {
       const historyStr = history?.map((m: any) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join("\n") || "";
 
