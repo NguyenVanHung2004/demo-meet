@@ -11,6 +11,7 @@ import {
   Meeting,
   toggleTrashMeeting,
   deleteMeetingPermanent,
+  updateMeetingTitle,
 } from "../lib/db";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { useAuth } from "../context/AuthContext";
@@ -251,6 +252,27 @@ export default function DashboardState({
     }
   }, [user, meetings, toast, loadMeetings]);
 
+  const handleRename = useCallback(async (m: Meeting, newTitle: string) => {
+    const trimmed = newTitle.trim();
+    if (!trimmed || trimmed === m.title) return;
+    const previousTitle = m.title;
+    setMeetings(prev => prev.map(x => x.id === m.id ? { ...x, title: trimmed } : x));
+    try {
+      if (m.status === MEETING_STATUS.DRAFT) {
+        const { getDraftFull, saveDraftMeta } = await import("../lib/indexedDB");
+        const draft = await getDraftFull(m.id);
+        if (!draft) throw new Error("Không tìm thấy bản nháp");
+        await saveDraftMeta({ ...draft.meta, title: trimmed });
+      } else {
+        await updateMeetingTitle(m.id, trimmed);
+      }
+      toast.success("Đã đổi tên cuộc họp");
+    } catch (err) {
+      setMeetings(prev => prev.map(x => x.id === m.id ? { ...x, title: previousTitle } : x));
+      toast.error("Lỗi đổi tên: " + (err as Error).message);
+    }
+  }, [toast]);
+
   const handleEmptyTrash = useCallback(async () => {
     const isConfirmed = await confirm({
       title: "Dọn dẹp thùng rác?",
@@ -394,6 +416,7 @@ export default function DashboardState({
             onMoveToTrash={handleMoveToTrash}
             onRestore={handleRestore}
             onDeleteForever={handleDeleteForever}
+            onRename={handleRename}
             onMoveSelectedToTrash={handleMoveSelectedToTrash}
             onDeleteSelected={handleDeleteSelected}
             onEmptyTrash={handleEmptyTrash}

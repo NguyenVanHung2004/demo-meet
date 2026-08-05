@@ -14,15 +14,16 @@ interface PageHeaderProps {
   variant?: "default" | "compact";
   sticky?: boolean;
   className?: string;
+  id?: string;
   children?: ReactNode;
 }
 
 export default function PageHeader({
   title, subtitle, icon, backHref, onBack, actions,
-  variant = "default", sticky = false, className, children
+  variant = "default", sticky = false, className, id, children
 }: PageHeaderProps) {
   return (
-    <header className={cn(
+    <header id={id} className={cn(
       "bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between gap-3 shrink-0",
       variant === "compact" ? "h-14 md:h-16" : "py-3 md:py-4",
       sticky && "sticky top-0 z-30",

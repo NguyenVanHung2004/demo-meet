@@ -27,6 +27,7 @@ interface MeetingListViewProps {
   onMoveToTrash: (id: string) => void;
   onRestore: (id: string) => void;
   onDeleteForever: (id: string) => void;
+  onRename?: (m: Meeting, newTitle: string) => void;
   onMoveSelectedToTrash: () => void;
   onDeleteSelected: () => void;
   onEmptyTrash: () => void;
@@ -38,7 +39,7 @@ interface MeetingListViewProps {
 export default function MeetingListView({
   meetings, currentTab, selectedIds, loading, loadingMore, isFinalizing, hasMore, onLoadMore,
   onToggleSelect, onOpenMeeting, onReprocess, onFinalizeDraft,
-  onMoveToTrash, onRestore, onDeleteForever,
+  onMoveToTrash, onRestore, onDeleteForever, onRename,
   onMoveSelectedToTrash, onDeleteSelected, onEmptyTrash, onClearSelection,
   onNavigateToUpload, onNavigateToLive
 }: MeetingListViewProps) {
@@ -173,6 +174,7 @@ export default function MeetingListView({
               onMoveToTrash={() => onMoveToTrash(m.id)}
               onRestore={() => onRestore(m.id)}
               onDeleteForever={() => onDeleteForever(m.id)}
+              onRename={onRename ? (newTitle) => onRename(m, newTitle) : undefined}
             />
           ))}
         </div>

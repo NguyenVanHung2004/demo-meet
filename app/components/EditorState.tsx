@@ -122,21 +122,43 @@ export default function EditorState({
 
   // Logic Title
   const handleSaveTitle = useCallback(async () => {
-    if (!title.trim()) {
+    const trimmed = title.trim();
+    if (!trimmed) {
       setTitle(initialData.title);
       setIsEditingTitle(false);
       return;
     }
-    const updatedMeeting = { ...initialData, title: title };
-    await saveMeeting(updatedMeeting);
+    if (trimmed === initialData.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+    const previousTitle = initialData.title;
     setIsEditingTitle(false);
-    toast.success("Đã đổi tên cuộc họp");
+    try {
+      if (initialData.status === MEETING_STATUS.DRAFT) {
+        const { getDraftFull, saveDraftMeta } = await import("../lib/indexedDB");
+        const draft = await getDraftFull(initialData.id);
+        if (!draft) throw new Error("Không tìm thấy bản nháp");
+        await saveDraftMeta({ ...draft.meta, title: trimmed });
+      } else {
+        await updateMeetingTitle(initialData.id, trimmed);
+      }
+      toast.success("Đã đổi tên cuộc họp");
+    } catch (err) {
+      setTitle(previousTitle);
+      toast.error("Lỗi đổi tên: " + (err as Error).message);
+    }
   }, [title, initialData, toast]);
 
+  const handleCancelTitle = useCallback(() => {
+    setTitle(initialData.title);
+    setIsEditingTitle(false);
+  }, [initialData.title]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSaveTitle();
-    if (e.key === 'Escape') { setTitle(initialData.title); setIsEditingTitle(false); }
-  }, [handleSaveTitle, initialData.title]);
+    if (e.key === 'Enter') { e.preventDefault(); handleSaveTitle(); }
+    if (e.key === 'Escape') { e.preventDefault(); handleCancelTitle(); }
+  }, [handleSaveTitle, handleCancelTitle]);
 
   // Logic Speakers
   const handleAddSpeaker = useCallback(() => {
@@ -465,6 +487,7 @@ export default function EditorState({
         onBack={onBack}
         onStartEditingTitle={() => setIsEditingTitle(true)}
         onSaveTitle={handleSaveTitle}
+        onCancelTitle={handleCancelTitle}
         onTitleKeyDown={handleKeyDown}
         onTitleChange={setTitle}
         onOpenTemplateModal={() => setShowTemplateModal(true)}
