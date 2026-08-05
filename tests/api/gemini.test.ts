@@ -202,6 +202,50 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
     expect(prompt).toContain("KHÔNG giữ nguyên giá trị ví dụ/placeholder");
   });
 
+  it("full mode: response bị strip CJK contamination trước khi trả client", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: "Đẩy mạnh video tự拍摄 (nhằm tăng CTR 10-15%)",
+            },
+          },
+        ],
+      }),
+    });
+
+    const req = makeRequest({ text: "T", mode: "full" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summary).toBe("Đẩy mạnh video tự (nhằm tăng CTR 10-15%)");
+    expect(body.summary).not.toMatch(/[一-鿿]/);
+  });
+
+  it("extract_json mode: response cũng bị strip CJK (kể cả trong JSON values)", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: '[{"task":"拍摄 video quảng cáo","assignee":"An"}]',
+            },
+          },
+        ],
+      }),
+    });
+
+    const req = makeRequest({ text: "T", mode: "extract_json" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summary).not.toMatch(/[一-鿿]/);
+    expect(body.summary).toContain("video quảng cáo");
+  });
+
   it("mode extract_json: trả về cleaned JSON (strip markdown code fences)", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,

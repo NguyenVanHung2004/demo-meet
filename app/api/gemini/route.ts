@@ -1,6 +1,7 @@
 // app/api/gemini/route.ts
 import { NextResponse } from "next/server";
 import { checkRateLimit } from "@/app/lib/rate-limit";
+import { stripCjk } from "@/app/lib/text";
 
 const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
 const BASE_URL = "https://opencode.ai/zen/go/v1";
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
       QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
       const rawText = await generateWithRetry(prompt);
-      const cleanText = rawText.replace(/```json|```/g, "").trim();
+      const cleanText = stripCjk(rawText.replace(/```json|```/g, "").trim());
       return NextResponse.json({ summary: cleanText });
     } else if (mode === "segment") {
       prompt = `
@@ -208,7 +209,7 @@ export async function POST(req: Request) {
       ${contextBlock}
       `;
       const rawText = await generateWithRetry(prompt);
-      const cleanText = rawText.replace(/```json|```/g, "").trim();
+      const cleanText = stripCjk(rawText.replace(/```json|```/g, "").trim());
       return NextResponse.json({ summary: cleanText });
     } else if (mode === "qa") {
       const historyStr = history?.map((m: any) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join("\n") || "";
@@ -330,7 +331,7 @@ export async function POST(req: Request) {
       `;
     }
 
-    const summary = await generateWithRetry(prompt);
+    const summary = stripCjk(await generateWithRetry(prompt));
     return NextResponse.json({ summary });
 
   } catch (error: any) {

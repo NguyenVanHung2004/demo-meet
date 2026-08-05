@@ -1,0 +1,24 @@
+/**
+ * CJK (Chinese/Japanese/Korean) — bao gồm Hiragana, Katakana,
+ * CJK Unified Ideographs (BMP), CJK Extension A, CJK Compatibility,
+ * và Hangul Syllables. Áp dụng để strip contamination
+ * khi model AI (đặc biệt mimo-v2.5) lỡ trộn từ ngữ nước ngoài
+ * vào output tiếng Việt.
+ *
+ * Không bao gồm:
+ * - Emoji (U+1F300+)
+ * - CJK Extension B-F (U+20000+) — surrogate pair, hiếm gặp
+ * - Ký tự Latin có dấu (tiếng Việt: à, ế, ọ, …)
+ * - Ký tự đặc biệt: ✓, ✗, →, …
+ */
+const CJK_REGEX = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uAC00-\uD7AF]+/g;
+
+export const stripCjk = (text: string): string => {
+  if (!text) return "";
+  return text
+    .replace(CJK_REGEX, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+(?=\n)/g, "")
+    .replace(/^[ \t]+/gm, "")
+    .trim();
+};

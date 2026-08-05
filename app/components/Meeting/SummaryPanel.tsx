@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { useGlobalUI } from "@/app/context/GlobalUIProvider";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { sanitizeHtml } from "@/app/lib/sanitizeHtml";
 import {
   Sparkles, FileText, AlignLeft, Edit3, Check
@@ -102,6 +103,24 @@ export default function SummaryPanel({
     },
     kbd: ({ children }) => <kbd className="font-mono text-[12px] text-slate-700">{children}</kbd>,
     blockquote: ({ children }) => <blockquote className="border-l-4 border-slate-300 pl-4 my-3 italic text-slate-600">{handleChildren(children)}</blockquote>,
+    table: ({ children }) => (
+      <div className="overflow-x-auto my-3">
+        <table className="border-collapse border border-slate-300 w-full text-sm">{children}</table>
+      </div>
+    ),
+    thead: ({ children }) => <thead className="bg-slate-100">{children}</thead>,
+    tbody: ({ children }) => <tbody>{children}</tbody>,
+    tr: ({ children }) => <tr className="border-b border-slate-200 last:border-b-0">{children}</tr>,
+    th: ({ children }) => (
+      <th className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-700">
+        {handleChildren(children)}
+      </th>
+    ),
+    td: ({ children }) => (
+      <td className="border border-slate-300 px-3 py-2 text-slate-700">
+        {handleChildren(children)}
+      </td>
+    ),
   };
 
   const formatTimeCode = (s: number) => {
@@ -146,7 +165,7 @@ export default function SummaryPanel({
                 />
               ) : (
                 <div className="text-sm text-slate-700 leading-relaxed text-justify">
-                  <ReactMarkdown components={MarkdownComponents}>{meeting.summary}</ReactMarkdown>
+                  <ReactMarkdown components={MarkdownComponents} remarkPlugins={[remarkGfm]}>{meeting.summary}</ReactMarkdown>
                 </div>
               )}
             </div>
