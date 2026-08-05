@@ -90,9 +90,11 @@ export default function SummaryPanel({
   };
 
   const MarkdownComponents: Components = {
-    p: ({ children }) => <p className="mb-4 leading-relaxed">{processChildren(children)}</p>,
-    li: ({ children }) => <li className="mb-2">{processChildren(children)}</li>,
-    h1: ({ children }) => <h1 className="text-xl font-bold text-slate-900 mt-6 mb-3 border-b pb-1">{processChildren(children)}</h1>,
+    p: ({ children }) => <p className="mb-3 leading-relaxed">{processChildren(children)}</p>,
+    li: ({ children }) => <li className="mb-1 leading-relaxed">{processChildren(children)}</li>,
+    ul: ({ children }) => <ul className="list-disc pl-6 mb-3 space-y-1">{processChildren(children)}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-6 mb-3 space-y-1">{processChildren(children)}</ol>,
+    h1: ({ children }) => <h1 className="text-xl font-bold text-slate-900 mt-6 mb-3 border-b border-slate-200 pb-1">{processChildren(children)}</h1>,
     h2: ({ children }) => <h2 className="text-lg font-bold text-indigo-700 mt-5 mb-2">{processChildren(children)}</h2>,
     h3: ({ children }) => <h3 className="text-base font-bold text-slate-800 mt-4 mb-2">{processChildren(children)}</h3>,
     strong: ({ children }) => <strong className="font-bold text-slate-900">{processChildren(children)}</strong>,
@@ -102,8 +104,10 @@ export default function SummaryPanel({
       if (/^\[\d{1,2}:\d{2}\]$/.test(text.trim())) {
         return <>{processChildren(text)}</>;
       }
-      return <code className="not-prose font-mono text-[12px] text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{children}</code>;
+      return <code className="font-mono text-[12px] text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{children}</code>;
     },
+    kbd: ({ children }) => <kbd className="font-mono text-[12px] text-slate-700">{children}</kbd>,
+    blockquote: ({ children }) => <blockquote className="border-l-4 border-slate-300 pl-4 my-3 italic text-slate-600">{processChildren(children)}</blockquote>,
   };
 
   const formatTimeCode = (s: number) => {
@@ -143,11 +147,11 @@ export default function SummaryPanel({
             >
               {meeting.summary.startsWith("<") ? (
                 <div
-                  className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none"
+                  className="text-sm text-slate-700 leading-relaxed text-justify"
                   dangerouslySetInnerHTML={{ __html: formatHtmlSummary(sanitizeHtml(meeting.summary)) }}
                 />
               ) : (
-                <div className="prose prose-sm text-slate-700 prose-headings:text-indigo-700 prose-strong:text-slate-900 leading-relaxed text-justify max-w-none">
+                <div className="text-sm text-slate-700 leading-relaxed text-justify">
                   <ReactMarkdown components={MarkdownComponents}>{meeting.summary}</ReactMarkdown>
                 </div>
               )}
