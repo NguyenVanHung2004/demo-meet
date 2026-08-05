@@ -287,6 +287,12 @@ export async function POST(req: Request) {
       
       ${structureInstruction}
 
+      ⚠️ QUY TẮC BẮT BUỘC KHI ÁP DỤNG TEMPLATE:
+      1. **Giữ nguyên 100% cấu trúc template**: heading, bullet, **bảng markdown** (nếu có).
+         Nếu template chứa bảng Markdown (có dòng phân cách dạng | --- | --- |), BẮT BUỘC xuất bảng ở đúng vị trí đó — KHÔNG được thay bằng bullet hay danh sách.
+      2. **Chỉ thay nội dung placeholder**: thay các chỗ có ngoặc vuông [...] hoặc chỗ trống (...) bằng nội dung thực tế từ transcript. Không tự ý thêm/bớt heading hay bullet ngoài template.
+      3. **CHỈ sử dụng tiếng Việt** trong toàn bộ output. TUYỆT ĐỐI KHÔNG trộn từ ngữ tiếng Trung, tiếng Anh hay bất kỳ ngôn ngữ nào khác (trừ tên riêng, thuật ngữ kỹ thuật phổ biến như "API", "CDN").
+
       LƯU Ý TRÌNH BÀY:
       - Văn phong khách quan, chuyên nghiệp.
       - Tuân thủ chặt chẽ cấu trúc đề bài (các mục H1, H2...).

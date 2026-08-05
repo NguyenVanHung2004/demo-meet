@@ -85,6 +85,43 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
     expect(headers.Authorization).toBe("Bearer test-gemini-key");
   });
 
+  it("prompt chứa rule bắt buộc giữ bảng markdown trong template", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+    });
+
+    const req = makeRequest({
+      text: "T",
+      mode: "default",
+      templateStructure: "| STT | Hạng mục |\n|---|---|\n| 1 | Fix bug |",
+    });
+    await POST(req);
+
+    const [, opts] = fetchMock.mock.calls[0];
+    const body = JSON.parse(opts.body);
+    const prompt: string = body.messages[0].content;
+    expect(prompt).toContain("BẮT BUỘC xuất bảng");
+    expect(prompt).toContain("KHÔNG được thay bằng bullet");
+    expect(prompt).toContain("| STT | Hạng mục |");
+  });
+
+  it("prompt chứa rule chống contamination ngôn ngữ (chỉ tiếng Việt)", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+    });
+
+    const req = makeRequest({ text: "T", mode: "default" });
+    await POST(req);
+
+    const [, opts] = fetchMock.mock.calls[0];
+    const body = JSON.parse(opts.body);
+    const prompt: string = body.messages[0].content;
+    expect(prompt).toContain("CHỈ sử dụng tiếng Việt");
+    expect(prompt).toContain("TUYỆT ĐỐI KHÔNG trộn từ ngữ tiếng Trung");
+  });
+
   it("mode extract_json: trả về cleaned JSON (strip markdown code fences)", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
