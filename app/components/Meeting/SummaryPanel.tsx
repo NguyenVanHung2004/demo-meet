@@ -73,6 +73,18 @@ export default function SummaryPanel({
       if (typeof child === "string") {
         return renderTextWithTimestamps(child);
       }
+      if (React.isValidElement<{ children?: React.ReactNode }>(child)) {
+        const nested = child.props.children;
+        if (nested !== undefined) {
+          return React.cloneElement(child, {
+            ...child.props,
+            children: processChildren(nested),
+          } as Partial<typeof child.props>);
+        }
+      }
+      if (Array.isArray(child)) {
+        return processChildren(child);
+      }
       return child;
     });
   };
@@ -80,11 +92,12 @@ export default function SummaryPanel({
   const MarkdownComponents: Components = {
     p: ({ children }) => <p className="mb-4 leading-relaxed">{processChildren(children)}</p>,
     li: ({ children }) => <li className="mb-2">{processChildren(children)}</li>,
-    h1: ({ children }) => <h1 className="text-xl font-bold text-slate-900 mt-6 mb-3 border-b pb-1">{children}</h1>,
-    h2: ({ children }) => <h2 className="text-lg font-bold text-indigo-700 mt-5 mb-2">{children}</h2>,
-    h3: ({ children }) => <h3 className="text-base font-bold text-slate-800 mt-4 mb-2">{children}</h3>,
-    strong: ({ children }) => <strong className="font-bold text-slate-900">{children}</strong>,
-    em: ({ children }) => <em className="italic">{children}</em>,
+    h1: ({ children }) => <h1 className="text-xl font-bold text-slate-900 mt-6 mb-3 border-b pb-1">{processChildren(children)}</h1>,
+    h2: ({ children }) => <h2 className="text-lg font-bold text-indigo-700 mt-5 mb-2">{processChildren(children)}</h2>,
+    h3: ({ children }) => <h3 className="text-base font-bold text-slate-800 mt-4 mb-2">{processChildren(children)}</h3>,
+    strong: ({ children }) => <strong className="font-bold text-slate-900">{processChildren(children)}</strong>,
+    em: ({ children }) => <em className="italic">{processChildren(children)}</em>,
+    code: ({ children }) => <code className="bg-slate-100 text-slate-800 px-1 py-0.5 rounded text-[12px] font-mono">{processChildren(children)}</code>,
   };
 
   const formatTimeCode = (s: number) => {
