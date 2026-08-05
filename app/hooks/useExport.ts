@@ -256,7 +256,7 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
       container = document.createElement("div");
       container.id = "meeting-summary-pdf-export";
       container.style.cssText =
-        "position:fixed;left:-10000px;top:0;width:800px;padding:40px;font-family:Inter,ui-sans-serif,system-ui,sans-serif;line-height:1.7;color:#1e293b;font-size:13px;background:#ffffff;";
+        "position:fixed;top:0;left:0;width:794px;padding:32px;box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,sans-serif;line-height:1.7;color:#1e293b;font-size:13px;background:#ffffff;z-index:-1;pointer-events:none;";
       container.innerHTML = `
         <h1 style="font-size:22px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin:0 0 6px;">${meeting.title.replace(/</g, "&lt;")}</h1>
         <p style="text-align:center;color:#64748b;font-size:12px;margin:4px 0 24px;">Ngày: ${fmtDate(meeting.createdAt)} | Thời lượng: ${fmtTime(meeting.duration)}</p>
