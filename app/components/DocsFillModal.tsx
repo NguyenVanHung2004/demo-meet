@@ -148,6 +148,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
       isOpen={isOpen}
       onClose={handleClose}
       title="Tạo tài liệu từ template"
+      titleExtra={<span className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-amber-100 text-amber-700 border border-amber-200">Beta</span>}
       description="Điền placeholder {{...}} vào file .docx, giữ nguyên định dạng gốc"
       icon={<FileType className="w-5 h-5" />}
       size="lg"

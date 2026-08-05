@@ -8,6 +8,7 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  titleExtra?: ReactNode;
   description?: string;
   icon?: ReactNode;
   size?: ModalSize;
@@ -28,7 +29,7 @@ const sizeMap: Record<ModalSize, string> = {
 };
 
 export default function Modal({
-  isOpen, onClose, title, description, icon,
+  isOpen, onClose, title, titleExtra, description, icon,
   size = "md", closeOnBackdrop = true, closeOnEsc = true,
   showCloseButton = true, footer, children, className
 }: ModalProps) {
@@ -82,9 +83,12 @@ export default function Modal({
               )}
               <div className="min-w-0">
                 {title && (
-                  <h2 id="modal-title" className="text-lg font-bold text-slate-800 truncate">
-                    {title}
-                  </h2>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h2 id="modal-title" className="text-lg font-bold text-slate-800 truncate">
+                      {title}
+                    </h2>
+                    {titleExtra}
+                  </div>
                 )}
                 {description && (
                   <p className="text-xs text-slate-500 mt-1">{description}</p>
