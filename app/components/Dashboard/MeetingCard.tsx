@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, type KeyboardEvent } from "react";
-import { Calendar, Clock, RotateCcw, Edit3, Trash2, FolderOpen, Loader2, Wand2 } from "lucide-react";
+import { Calendar, Clock, RotateCcw, Edit3, Trash2, FolderOpen, Loader2, Wand2, Pencil } from "lucide-react";
 import type { Meeting } from "@/app/lib/db";
 import { MEETING_STATUS, type MeetingStatus } from "@/app/lib/constants";
 import { cn } from "@/app/lib/cn";
@@ -139,39 +139,41 @@ export default function MeetingCard({
 
         <div className="flex-1 min-w-0">
           {isEditingTitle ? (
-            <input
-              ref={titleInputRef}
-              type="text"
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onKeyDown={handleTitleKeyDown}
-              onBlur={commitRename}
-              onClick={stopCardEvents}
-              onDoubleClick={stopCardEvents}
-              maxLength={200}
-              className="w-full px-2 py-1 -mx-2 -my-1 text-base font-bold text-slate-800 bg-white border border-primary-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all cursor-text"
-              placeholder="Nhập tên cuộc họp..."
-              aria-label="Đổi tên cuộc họp"
-            />
+            <div className="flex items-center gap-1.5" onClick={stopCardEvents}>
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={handleTitleKeyDown}
+                onBlur={commitRename}
+                maxLength={200}
+                className="flex-1 min-w-0 px-2 py-1 -mx-2 -my-1 text-base font-bold text-slate-800 bg-white border border-primary-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                placeholder="Nhập tên cuộc họp..."
+                aria-label="Đổi tên cuộc họp"
+              />
+            </div>
           ) : (
-            onRename ? (
-              <Tooltip content="Double-click để đổi tên">
-                <h3
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    startEditingTitle();
-                  }}
-                  className="font-bold text-slate-800 truncate select-none cursor-text"
-                  title={meeting.title}
-                >
-                  {meeting.title}
-                </h3>
-              </Tooltip>
-            ) : (
-              <h3 className="font-bold text-slate-800 truncate" title={meeting.title}>
+            <div className="group/title flex items-center gap-1.5 min-w-0">
+              <h3 className="font-bold text-slate-800 truncate flex-1 min-w-0" title={meeting.title}>
                 {meeting.title}
               </h3>
-            )
+              {onRename && (
+                <Tooltip content="Đổi tên cuộc họp">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEditingTitle();
+                    }}
+                    aria-label="Đổi tên cuộc họp"
+                    className="shrink-0 p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors opacity-0 group-hover/title:opacity-100 focus:opacity-100"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
           )}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-slate-500">
             <span className="flex items-center gap-1">

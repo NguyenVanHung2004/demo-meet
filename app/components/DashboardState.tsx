@@ -22,6 +22,31 @@ import MeetingListView from "./Dashboard/MeetingListView";
 import { MEETING_STATUS } from "../lib/constants";
 type DashboardTab = "all" | "trash";
 
+const generateUniqueLiveTitle = (
+  existingMeetings: Meeting[],
+  baseDate: Date = new Date()
+): string => {
+  const base = `Cuộc họp trực tiếp ${baseDate.toLocaleDateString("vi-VN")}`;
+  const suffixRegex = /^(.+) \((\d+)\)$/;
+  const exactMatches: string[] = [];
+  let maxSuffix = 0;
+
+  for (const m of existingMeetings) {
+    if (m.title === base) {
+      exactMatches.push(m.title);
+      continue;
+    }
+    const match = m.title.match(suffixRegex);
+    if (match && match[1] === base) {
+      const n = parseInt(match[2], 10);
+      if (Number.isFinite(n) && n > maxSuffix) maxSuffix = n;
+    }
+  }
+
+  if (exactMatches.length === 0 && maxSuffix === 0) return base;
+  return `${base} (${maxSuffix + 1})`;
+};
+
 export default function DashboardState({
   onImport,
   onLive,
@@ -391,7 +416,7 @@ export default function DashboardState({
                 setUploadLanguageState(uploadLanguage);
               }}
               onLiveClick={() => {
-                setLiveTitle(`Cuộc họp trực tiếp ${new Date().toLocaleDateString('vi-VN')}`);
+                setLiveTitle(generateUniqueLiveTitle(meetings));
                 setLiveObjectives("");
                 setLiveLanguageState(liveLanguage);
                 setShowLiveSetupModal(true);
@@ -437,7 +462,7 @@ export default function DashboardState({
               fileInput.click();
             }}
             onNavigateToLive={() => {
-              setLiveTitle(`Cuộc họp trực tiếp ${new Date().toLocaleDateString('vi-VN')}`);
+              setLiveTitle(generateUniqueLiveTitle(meetings));
               setLiveObjectives("");
               setLiveLanguageState(liveLanguage);
               setShowLiveSetupModal(true);
