@@ -122,7 +122,7 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
     expect(prompt).toContain("TUYỆT ĐỐI KHÔNG trộn từ ngữ tiếng Trung");
   });
 
-  it("prompt full mode chứa thời gian bắt đầu + duration khi client gửi dateContext", async () => {
+  it("prompt full mode chứa thời gian bắt đầu + duration khi client gửi createdAt", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ choices: [{ message: { content: "ok" } }] }),
@@ -131,7 +131,7 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
     const req = makeRequest({
       text: "T",
       mode: "full",
-      dateContext: "05/08/2026, 14:30:00",
+      createdAt: new Date(2026, 7, 5, 14, 30, 0).getTime(),
       duration: 900, // 15 phút
     });
     await POST(req);
@@ -139,11 +139,12 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
     const [, opts] = fetchMock.mock.calls[0];
     const body = JSON.parse(opts.body);
     const prompt: string = body.messages[0].content;
-    expect(prompt).toContain("Thời gian bắt đầu: 05/08/2026, 14:30:00");
     expect(prompt).toContain("15 phút 0 giây");
+    expect(prompt).toContain("Thời gian kết thúc:");
+    expect(prompt).toMatch(/Thời gian bắt đầu: \d/);
   });
 
-  it("prompt full mode fallback 'không rõ' khi thiếu dateContext và duration", async () => {
+  it("prompt full mode fallback 'không rõ' khi thiếu createdAt và duration", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ choices: [{ message: { content: "ok" } }] }),
@@ -157,6 +158,48 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
     const prompt: string = body.messages[0].content;
     expect(prompt).toContain("Thời gian bắt đầu: không rõ");
     expect(prompt).toContain("Thời lượng: không rõ");
+  });
+
+  it("prompt full mode chứa fullTimeStr format 'HH:mm - HH:mm, ngày dd/mm/yyyy' để fill template", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+    });
+
+    const ts = new Date(2026, 4, 20, 14, 13, 0).getTime();
+    const req = makeRequest({
+      text: "T",
+      mode: "full",
+      createdAt: ts,
+      duration: 900, // 15 phút
+    });
+    await POST(req);
+
+    const [, opts] = fetchMock.mock.calls[0];
+    const body = JSON.parse(opts.body);
+    const prompt: string = body.messages[0].content;
+    const expectedStart = new Date(ts);
+    const expectedEnd = new Date(ts + 900 * 1000);
+    const pad2 = (n: number) => n.toString().padStart(2, "0");
+    const expectedStr = `"${pad2(expectedStart.getHours())}:${pad2(expectedStart.getMinutes())} - ${pad2(expectedEnd.getHours())}:${pad2(expectedEnd.getMinutes())}, ngày ${pad2(expectedStart.getDate())}/${pad2(expectedStart.getMonth() + 1)}/${expectedStart.getFullYear()}"`;
+    expect(prompt).toContain(expectedStr);
+  });
+
+  it("prompt full mode có rule bắt buộc thay dòng Thời gian bằng chuỗi đã chuẩn bị", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+    });
+
+    const req = makeRequest({ text: "T", mode: "full" });
+    await POST(req);
+
+    const [, opts] = fetchMock.mock.calls[0];
+    const body = JSON.parse(opts.body);
+    const prompt: string = body.messages[0].content;
+    expect(prompt).toContain('Dòng "Thời gian:" trong template');
+    expect(prompt).toContain("BẮT BUỘC thay bằng đúng chuỗi thời gian đã chuẩn bị");
+    expect(prompt).toContain("KHÔNG giữ nguyên giá trị ví dụ/placeholder");
   });
 
   it("mode extract_json: trả về cleaned JSON (strip markdown code fences)", async () => {

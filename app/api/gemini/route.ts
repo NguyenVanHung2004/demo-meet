@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives, placeholders, context, duration } = await req.json();
+    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives, placeholders, context, duration, createdAt } = await req.json();
 
     if (mode !== "fill_placeholders" && mode !== "detect_fill" && !text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
@@ -266,12 +266,36 @@ export async function POST(req: Request) {
         ? `\n🎯 MỤC TIÊU CUỘC HỌP (TRỌNG TÂM CẦN BÁM SÁT):\nNgười dùng yêu cầu bạn đặc biệt tập trung tóm tắt và làm nổi bật các nội dung/thảo luận/quyết định có liên quan đến các mục tiêu dưới đây:\n"""\n${meetingObjectives}\n"""\n`
         : "";
 
+      const pad2 = (n: number) => n.toString().padStart(2, "0");
+      const startTs = typeof createdAt === "number" && !isNaN(createdAt) ? createdAt : null;
+      const startDate = startTs ? new Date(startTs) : (dateContext ? new Date(dateContext) : null);
+      const startTimeStr = startDate && !isNaN(startDate.getTime())
+        ? `${pad2(startDate.getHours())}:${pad2(startDate.getMinutes())}`
+        : "không rõ";
+      const dateStr = startDate && !isNaN(startDate.getTime())
+        ? `${pad2(startDate.getDate())}/${pad2(startDate.getMonth() + 1)}/${startDate.getFullYear()}`
+        : "";
+      const endDate = startDate && duration && !isNaN(startDate.getTime())
+        ? new Date(startDate.getTime() + duration * 1000)
+        : null;
+      const endTimeStr = endDate
+        ? `${pad2(endDate.getHours())}:${pad2(endDate.getMinutes())}`
+        : "không rõ";
+      const fullTimeStr = startDate && !isNaN(startDate.getTime())
+        ? `${startTimeStr} - ${endTimeStr}, ngày ${dateStr}`
+        : "không rõ";
+      const startDateContextStr = startDate && !isNaN(startDate.getTime())
+        ? startDate.toLocaleString("vi-VN")
+        : dateContext || "không rõ";
+
       prompt = `
       Bạn là Thư Ký Cấp Cao chuyên nghiệp. Nhiệm vụ của bạn là tổng hợp biên bản cuộc họp từ văn bản thô (transcript), đảm bảo tính chính xác tuyệt đối của thông tin.
       ${objectivesPrompt}
       THÔNG TIN CUỘC HỌP:
-      - Thời gian bắt đầu: ${dateContext || "không rõ"}.
+      - Thời gian bắt đầu: ${startDateContextStr}.
       - Thời lượng: ${duration ? `${Math.floor(duration / 60)} phút ${duration % 60} giây` : "không rõ"}.
+      - Thời gian kết thúc: ${endTimeStr}.
+      - Chuỗi thời gian chuẩn để fill vào template (nếu template có dòng "- **Thời gian:** HH:mm - HH:mm, ngày dd/mm/yyyy"): "${fullTimeStr}".
       (Dùng thời gian bắt đầu để quy đổi các cụm từ chỉ thời gian tương đối trong transcript như "ngày mai", "thứ 2 tới", "tuần sau" thành ngày cụ thể.)
       YÊU CẦU CỐT LÕI (XỬ LÝ DỮ LIỆU):
       1.  **Bảo toàn nguyên vẹn số liệu:** Mọi dữ kiện định lượng (con số, ngày tháng, thời gian, chi phí, số lượng...) phải được trích xuất chính xác như trong transcript. 
@@ -294,8 +318,9 @@ export async function POST(req: Request) {
       ⚠️ QUY TẮC BẮT BUỘC KHI ÁP DỤNG TEMPLATE:
       1. **Giữ nguyên 100% cấu trúc template**: heading, bullet, **bảng markdown** (nếu có).
          Nếu template chứa bảng Markdown (có dòng phân cách dạng | --- | --- |), BẮT BUỘC xuất bảng ở đúng vị trí đó — KHÔNG được thay bằng bullet hay danh sách.
-      2. **Chỉ thay nội dung placeholder**: thay các chỗ có ngoặc vuông [...] hoặc chỗ trống (...) bằng nội dung thực tế từ transcript. Không tự ý thêm/bớt heading hay bullet ngoài template.
-      3. **CHỈ sử dụng tiếng Việt** trong toàn bộ output. TUYỆT ĐỐI KHÔNG trộn từ ngữ tiếng Trung, tiếng Anh hay bất kỳ ngôn ngữ nào khác (trừ tên riêng, thuật ngữ kỹ thuật phổ biến như "API", "CDN").
+      2. **Dòng "Thời gian:" trong template**: Nếu template có dòng bắt đầu bằng "- **Thời gian:**", BẮT BUỘC thay bằng đúng chuỗi thời gian đã chuẩn bị ở THÔNG TIN CUỘC HỌP (đã có sẵn trong prompt). KHÔNG giữ nguyên giá trị ví dụ/placeholder trong template. KHÔNG tự ý bịa thời gian.
+      3. **Chỉ thay nội dung placeholder**: thay các chỗ có ngoặc vuông [...] hoặc chỗ trống (...) bằng nội dung thực tế từ transcript. Không tự ý thêm/bớt heading hay bullet ngoài template.
+      4. **CHỈ sử dụng tiếng Việt** trong toàn bộ output. TUYỆT ĐỐI KHÔNG trộn từ ngữ tiếng Trung, tiếng Anh hay bất kỳ ngôn ngữ nào khác (trừ tên riêng, thuật ngữ kỹ thuật phổ biến như "API", "CDN").
 
       LƯU Ý TRÌNH BÀY:
       - Văn phong khách quan, chuyên nghiệp.

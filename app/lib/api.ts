@@ -130,7 +130,7 @@ export const requestSummary = async (
   text: string,
   templateStructure?: string,
   objectives?: string,
-  dateContext?: string,
+  createdAt?: number,
   duration?: number
 ): Promise<string> => {
   try {
@@ -143,7 +143,7 @@ export const requestSummary = async (
         mode: "full", // Báo hiệu tóm tắt full
         templateStructure: templateStructure, // [NEW] Truyền cấu trúc template nếu có
         meetingObjectives: objectives, // Truyền mục tiêu cuộc họp
-        dateContext: dateContext, // Ngày giờ bắt đầu cuộc họp (để AI tính deadline, "ngày mai", "thứ 2 tới")
+        createdAt: createdAt, // Timestamp (ms) bắt đầu cuộc họp
         duration: duration // Thời lượng cuộc họp (giây)
       })
     });

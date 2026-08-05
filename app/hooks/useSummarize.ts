@@ -55,7 +55,7 @@ export function useSummarize(onRefresh?: () => void) {
         transcriptText,
         templateStructure,
         meeting.objectives,
-        new Date(meeting.createdAt).toLocaleString("vi-VN"),
+        meeting.createdAt,
         meeting.duration
       );
 
