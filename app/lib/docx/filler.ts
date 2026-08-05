@@ -129,6 +129,14 @@ const escapeRegExp = (s: string): string =>
   s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
+ * Chuẩn hóa text để match giữa mammoth text (có \n giữa các dòng) và
+ * DOM paragraph text (đã gộp w:t, không có \n giữa runs).
+ * Thay mọi \r\n bằng space và trim.
+ */
+const normalizeForXml = (s: string): string =>
+  s.replace(/\r?\n+/g, " ").replace(/[ \t]+/g, " ").trim();
+
+/**
  * Gộp text của các w:t trong một đoạn w:p, tìm các chỗ khớp "from",
  * thay thế bằng "to" TRÊN NHIỀU RUN (xử lý placeholder bị Word tách run).
  * Quét toàn bộ text một lần, áp dụng các match từ phải -> trái để offset không bị dịch.
@@ -139,11 +147,12 @@ const applyReplacements = (
 ): void => {
   if (textEls.length === 0 || replacements.length === 0) return;
 
-  const full = paragraphText(textEls);
+  const full = normalizeForXml(paragraphText(textEls));
   if (!full) return;
 
   const clean = replacements
-    .filter((r) => r.from && r.from.trim())
+    .map((r) => ({ from: normalizeForXml(r.from), to: r.to }))
+    .filter((r) => r.from)
     .sort((a, b) => b.from.length - a.from.length);
 
   if (clean.length === 0) return;
@@ -231,7 +240,7 @@ export async function fillDocx(file: File, values: Record<string, string>): Prom
   validateFile(file);
   const replacements = Object.entries(values)
     .filter(([, v]) => v !== undefined && v !== null)
-    .map(([name, value]) => ({ from: `{{${name.trim()}}}`, to: escapeXml(String(value)) }));
+    .map(([name, value]) => ({ from: `{{${name.trim()}}}`, to: escapeXml(normalizeForXml(String(value))) }));
   return fillAllTextXmls(file, replacements);
 }
 
@@ -239,7 +248,7 @@ export async function fillDocxMarkers(file: File, markers: DocxMarker[]): Promis
   validateFile(file);
   const replacements = markers
     .filter((m) => m.marker && m.marker.trim())
-    .map((m) => ({ from: m.marker, to: escapeXml(m.value ?? "") }));
+    .map((m) => ({ from: m.marker, to: escapeXml(normalizeForXml(m.value ?? "")) }));
   return fillAllTextXmls(file, replacements);
 }
 

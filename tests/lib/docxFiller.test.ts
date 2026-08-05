@@ -31,6 +31,7 @@ const buildDocxWithSplitRuns = async (): Promise<File> => {
           ],
         }),
         new Paragraph({ children: [new TextRun("Ghi chu: ______ ket thuc")] }),
+        new Paragraph({ children: [new TextRun("1. Muc dich: ...... noi dung")] }),
       ],
     }],
   });
@@ -94,6 +95,16 @@ describe("docx filler with split runs", () => {
     expect(text).toContain("Ghi chu: da dien ket thuc");
     expect(text).not.toContain("______");
   });
+
+  it("fillDocxMarkers xử lý marker có xuống dòng (mammoth text)", async () => {
+    const blob = await fillDocxMarkers(file, [
+      { marker: "1. Muc dich:\n\n......", value: "1. Muc dich: noi dung" },
+    ]);
+    const xml = await readXmlFromBlob(blob);
+    const text = xmlToVisibleText(xml);
+    expect(text).toContain("1. Muc dich: noi dung");
+    expect(text).not.toContain("......");
+  });
 });
 
 const buildDocxWithHeaderFooter = async (): Promise<File> => {
@@ -119,7 +130,7 @@ const buildDocxWithHeaderFooter = async (): Promise<File> => {
     }],
   });
   const buf = await Packer.toBuffer(doc);
-  return new File([new Blob([buf])], "with-hf.docx", {
+  return new File([new Uint8Array(buf)], "with-hf.docx", {
     type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   });
 };
