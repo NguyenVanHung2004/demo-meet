@@ -47,10 +47,65 @@ const readDocumentXml = async (file: File): Promise<string> => {
   return doc.async("string");
 };
 
-const writeDocumentXml = async (file: File, xml: string): Promise<Blob> => {
+/**
+ * Trả về danh sách file XML trong docx có chứa nội dung văn bản
+ * (document, header*, footer*, footnotes, endnotes, comments, etc.).
+ * Tránh các file config (styles, settings, theme, fontTable, numbering, webSettings).
+ */
+const getTextXmlFiles = async (file: File): Promise<{ name: string; xml: string }[]> => {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
-  zip.file("word/document.xml", xml);
+  const results: { name: string; xml: string }[] = [];
+  const targets: string[] = [];
+  zip.forEach((path, entry) => {
+    if (entry.dir) return;
+    if (!path.startsWith("word/") || !path.endsWith(".xml")) return;
+    const name = path.slice("word/".length);
+    // Bỏ qua file config (không chứa <w:p> thường)
+    if (/(^styles\.|^settings\.|^theme\/|^fontTable\.|^numbering\.|^webSettings\.|^theme\.xml$)/i.test(name)) {
+      return;
+    }
+    targets.push(path);
+  });
+  for (const path of targets) {
+    const entry = zip.file(path);
+    if (!entry) continue;
+    const xml = await entry.async("string");
+    if (xml.includes("<w:p") || xml.includes("<w:p>")) {
+      results.push({ name: path, xml });
+    }
+  }
+  return results;
+};
+
+const writeXmlFiles = async (file: File, updated: { name: string; xml: string }[]): Promise<Blob> => {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  for (const { name, xml } of updated) {
+    zip.file(name, xml);
+  }
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+};
+
+/**
+ * Fill replacements vào TẤT CẢ XML chứa văn bản trong docx
+ * (document + header + footer + footnotes + endnotes + comments).
+ */
+const fillAllTextXmls = async (
+  file: File,
+  replacements: { from: string; to: string }[]
+): Promise<Blob> => {
+  const files = await getTextXmlFiles(file);
+  if (files.length === 0) {
+    throw new Error("File .docx không hợp lệ (không có document.xml)");
+  }
+  const updated: { name: string; xml: string }[] = [];
+  for (const { name, xml } of files) {
+    const doc = parseXml(xml);
+    for (const p of getParagraphs(doc)) {
+      applyReplacements(getTextElements(p), replacements);
+    }
+    updated.push({ name, xml: new XMLSerializer().serializeToString(doc) });
+  }
+  return writeXmlFiles(file, updated);
 };
 
 const parseXml = (xml: string): Document => {
@@ -174,36 +229,18 @@ export async function extractPlaceholders(file: File): Promise<PlaceholderInfo[]
 
 export async function fillDocx(file: File, values: Record<string, string>): Promise<Blob> {
   validateFile(file);
-  const documentXml = await readDocumentXml(file);
-  const doc = parseXml(documentXml);
-
   const replacements = Object.entries(values)
     .filter(([, v]) => v !== undefined && v !== null)
     .map(([name, value]) => ({ from: `{{${name.trim()}}}`, to: escapeXml(String(value)) }));
-
-  for (const p of getParagraphs(doc)) {
-    applyReplacements(getTextElements(p), replacements);
-  }
-
-  const newXml = new XMLSerializer().serializeToString(doc);
-  return writeDocumentXml(file, newXml);
+  return fillAllTextXmls(file, replacements);
 }
 
 export async function fillDocxMarkers(file: File, markers: DocxMarker[]): Promise<Blob> {
   validateFile(file);
-  const documentXml = await readDocumentXml(file);
-  const doc = parseXml(documentXml);
-
   const replacements = markers
     .filter((m) => m.marker && m.marker.trim())
     .map((m) => ({ from: m.marker, to: escapeXml(m.value ?? "") }));
-
-  for (const p of getParagraphs(doc)) {
-    applyReplacements(getTextElements(p), replacements);
-  }
-
-  const newXml = new XMLSerializer().serializeToString(doc);
-  return writeDocumentXml(file, newXml);
+  return fillAllTextXmls(file, replacements);
 }
 
 export async function parseDocx(file: File): Promise<DocxParseResult> {

@@ -95,3 +95,57 @@ describe("docx filler with split runs", () => {
     expect(text).not.toContain("______");
   });
 });
+
+const buildDocxWithHeaderFooter = async (): Promise<File> => {
+  const doc = new Document({
+    sections: [{
+      headers: {
+        default: {
+          options: { children: [
+            new Paragraph({ children: [new TextRun("HEADER: {{HEADER_FIELD}}")] }),
+          ] },
+        },
+      },
+      footers: {
+        default: {
+          options: { children: [
+            new Paragraph({ children: [new TextRun("FOOTER: {{FOOTER_FIELD}}")] }),
+          ] },
+        },
+      },
+      children: [
+        new Paragraph({ children: [new TextRun("Body: {{BODY_FIELD}}")] }),
+      ],
+    }],
+  });
+  const buf = await Packer.toBuffer(doc);
+  return new File([new Blob([buf])], "with-hf.docx", {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+};
+
+const readXmlByName = async (blob: Blob, name: string): Promise<string> => {
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const f = zip.file(name);
+  if (!f) throw new Error(`Missing ${name}`);
+  return f.async("string");
+};
+
+describe("docx filler fills header/footer (not just document.xml)", () => {
+  it("fillDocx thay placeholder trong header, footer và document", async () => {
+    const file = await buildDocxWithHeaderFooter();
+    const blob = await fillDocx(file, {
+      HEADER_FIELD: "Hop dong so 1",
+      FOOTER_FIELD: "Trang 1",
+      BODY_FIELD: "Noi dung chinh",
+    });
+    const headerXml = await readXmlByName(blob, "word/header1.xml");
+    const footerXml = await readXmlByName(blob, "word/footer1.xml");
+    const docXml = await readXmlByName(blob, "word/document.xml");
+    expect(xmlToVisibleText(headerXml)).toContain("Hop dong so 1");
+    expect(xmlToVisibleText(footerXml)).toContain("Trang 1");
+    expect(xmlToVisibleText(docXml)).toContain("Noi dung chinh");
+    expect(headerXml).not.toContain("{{");
+    expect(footerXml).not.toContain("{{");
+  });
+});
