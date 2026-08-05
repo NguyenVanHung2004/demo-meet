@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives, placeholders, context } = await req.json();
+    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives, placeholders, context, duration } = await req.json();
 
     if (mode !== "fill_placeholders" && mode !== "detect_fill" && !text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
@@ -269,6 +269,10 @@ export async function POST(req: Request) {
       prompt = `
       Bạn là Thư Ký Cấp Cao chuyên nghiệp. Nhiệm vụ của bạn là tổng hợp biên bản cuộc họp từ văn bản thô (transcript), đảm bảo tính chính xác tuyệt đối của thông tin.
       ${objectivesPrompt}
+      THÔNG TIN CUỘC HỌP:
+      - Thời gian bắt đầu: ${dateContext || "không rõ"}.
+      - Thời lượng: ${duration ? `${Math.floor(duration / 60)} phút ${duration % 60} giây` : "không rõ"}.
+      (Dùng thời gian bắt đầu để quy đổi các cụm từ chỉ thời gian tương đối trong transcript như "ngày mai", "thứ 2 tới", "tuần sau" thành ngày cụ thể.)
       YÊU CẦU CỐT LÕI (XỬ LÝ DỮ LIỆU):
       1.  **Bảo toàn nguyên vẹn số liệu:** Mọi dữ kiện định lượng (con số, ngày tháng, thời gian, chi phí, số lượng...) phải được trích xuất chính xác như trong transcript. 
         Lưu ý: Transcript là dạng văn nói (speech-to-text), nên các số thường bị viết thành từ ngữ âm tiếng Việt. 

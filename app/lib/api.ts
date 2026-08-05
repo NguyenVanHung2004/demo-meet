@@ -126,7 +126,13 @@ export const requestSegmentSummary = async (text: string, previousSummary: strin
 };
 
 // Gọi Gemini trả về Text luôn
-export const requestSummary = async (text: string, templateStructure?: string, objectives?: string): Promise<string> => {
+export const requestSummary = async (
+  text: string,
+  templateStructure?: string,
+  objectives?: string,
+  dateContext?: string,
+  duration?: number
+): Promise<string> => {
   try {
 
     const response = await fetch('/api/gemini', {
@@ -136,7 +142,9 @@ export const requestSummary = async (text: string, templateStructure?: string, o
         text: text,
         mode: "full", // Báo hiệu tóm tắt full
         templateStructure: templateStructure, // [NEW] Truyền cấu trúc template nếu có
-        meetingObjectives: objectives // Truyền mục tiêu cuộc họp
+        meetingObjectives: objectives, // Truyền mục tiêu cuộc họp
+        dateContext: dateContext, // Ngày giờ bắt đầu cuộc họp (để AI tính deadline, "ngày mai", "thứ 2 tới")
+        duration: duration // Thời lượng cuộc họp (giây)
       })
     });
 

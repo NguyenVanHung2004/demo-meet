@@ -51,7 +51,13 @@ export function useSummarize(onRefresh?: () => void) {
     onRefresh?.();
 
     try {
-      const summary = await requestSummary(transcriptText, templateStructure, meeting.objectives);
+      const summary = await requestSummary(
+        transcriptText,
+        templateStructure,
+        meeting.objectives,
+        new Date(meeting.createdAt).toLocaleString("vi-VN"),
+        meeting.duration
+      );
 
       await updateMeetingProcess(meetingId, {
         status: MEETING_STATUS.COMPLETED,
