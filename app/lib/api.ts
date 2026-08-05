@@ -160,6 +160,59 @@ export interface FillContext {
   objectives?: string;
 }
 
+/**
+ * Parse JSON từ response của AI, robust trước các trường hợp:
+ * - Markdown code blocks: ```json\n{...}\n```
+ * - Extra text trước/sau JSON
+ * - Trailing commas
+ * `prefer`: ưu tiên loại JSON khi có cả 2 (object/array) trong text.
+ */
+const parseAiJson = (raw: string, context: string, prefer: "object" | "array" = "object"): unknown => {
+  const text = (raw || "").trim();
+  if (!text) throw new Error(`AI trả về rỗng (${context})`);
+
+  // Bóc tách markdown code blocks
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1].trim() : text;
+
+  const stripTrailing = (s: string) => s.replace(/,(\s*[}\]])/g, "$1");
+
+  // Thử parse trực tiếp
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    // Tiếp tục fallback
+  }
+
+  // Strip trailing commas rồi parse lại
+  try {
+    return JSON.parse(stripTrailing(candidate));
+  } catch {
+    // Tiếp tục fallback
+  }
+
+  // Tìm JSON object/array đầu tiên
+  const tryObj = (s: string) => {
+    const m = s.match(/\{[\s\S]*\}/);
+    if (!m) return undefined;
+    try { return JSON.parse(stripTrailing(m[0])); } catch { return undefined; }
+  };
+  const tryArr = (s: string) => {
+    const m = s.match(/\[[\s\S]*\]/);
+    if (!m) return undefined;
+    try { return JSON.parse(stripTrailing(m[0])); } catch { return undefined; }
+  };
+
+  // Ưu tiên theo prefer, fallback loại còn lại
+  const primary = prefer === "array" ? tryArr(candidate) : tryObj(candidate);
+  if (primary !== undefined) return primary;
+  const fallback = prefer === "array" ? tryObj(candidate) : tryArr(candidate);
+  if (fallback !== undefined) return fallback;
+
+  console.error(`[${context}] AI response không parse được:`, text.slice(0, 500));
+  throw new Error(`AI trả về JSON không hợp lệ (${context})`);
+};
+
 export const requestFillPlaceholders = async (
   placeholders: string[],
   context?: FillContext
@@ -181,12 +234,11 @@ export const requestFillPlaceholders = async (
   if (!data.summary) {
     throw new Error("AI không trả về kết quả.");
   }
-  try {
-    const parsed = JSON.parse(data.summary);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    throw new Error("AI trả về JSON không hợp lệ.");
+  const parsed = parseAiJson(data.summary, "fill_placeholders", "object");
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return parsed as Record<string, string>;
   }
+  return {};
 };
 
 export interface DetectFillItem {
@@ -215,15 +267,14 @@ export const requestDetectFill = async (
   if (!data.summary) {
     throw new Error("AI không trả về kết quả.");
   }
-  try {
-    const parsed = JSON.parse(data.summary);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((i) => i && typeof i.marker === "string" && i.marker.trim());
-    }
-    return [];
-  } catch {
-    throw new Error("AI trả về JSON không hợp lệ.");
+  const parsed = parseAiJson(data.summary, "detect_fill", "array");
+  if (Array.isArray(parsed)) {
+    return parsed.filter((i): i is DetectFillItem =>
+      !!i && typeof (i as { marker?: unknown }).marker === "string" &&
+      (i as { marker: string }).marker.trim() !== ""
+    );
   }
+  return [];
 };
 
 export interface RunPodJobStatus {
