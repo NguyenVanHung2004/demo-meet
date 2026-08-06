@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripCjk, stripThinking } from "@/app/lib/text";
+import { stripCjk, stripThinking, stripTimestamps } from "@/app/lib/text";
 
 describe("stripCjk", () => {
   it("input rỗng trả về rỗng", () => {
@@ -115,5 +115,56 @@ describe("stripThinking", () => {
 
   it("trim whitespace đầu cuối", () => {
     expect(stripThinking("   summary thường   ")).toBe("summary thường");
+  });
+});
+
+describe("stripTimestamps", () => {
+  it("input rỗng trả về rỗng", () => {
+    expect(stripTimestamps("")).toBe("");
+  });
+
+  it("strip [mm:ss] đầu bullet heading", () => {
+    expect(stripTimestamps("- **[00:00] Báo cáo kết quả:**")).toBe("- **Báo cáo kết quả:**");
+  });
+
+  it("strip nhiều [mm:ss] trong cùng một dòng", () => {
+    expect(stripTimestamps("[01:23] [04:56] nội dung")).toBe("nội dung");
+  });
+
+  it("strip [hh:mm:ss] (giờ:phút:giây)", () => {
+    expect(stripTimestamps("[01:23:45] Báo cáo")).toBe("Báo cáo");
+  });
+
+  it("strip [m:ss] (1 chữ số phút)", () => {
+    expect(stripTimestamps("[1:23] Ngắn gọn")).toBe("Ngắn gọn");
+  });
+
+  it("strip timestamp ở đầu dòng", () => {
+    const md = "- **[00:00] Báo cáo kết quả thực hiện chính sách:**\n- **[02:30] Nhiệm vụ Quân ủy:**\n- **[03:17] Nhiệm vụ cấp ủy địa phương:**";
+    const out = stripTimestamps(md);
+    expect(out).not.toContain("[00:00]");
+    expect(out).not.toContain("[02:30]");
+    expect(out).not.toContain("[03:17]");
+    expect(out).toContain("Báo cáo kết quả thực hiện chính sách:");
+    expect(out).toContain("Nhiệm vụ Quân ủy:");
+    expect(out).toContain("Nhiệm vụ cấp ủy địa phương:");
+  });
+
+  it("giữ nguyên nội dung không có timestamp", () => {
+    const input = "Đây là văn bản thường, không có mốc thời gian.";
+    expect(stripTimestamps(input)).toBe(input);
+  });
+
+  it("KHÔNG strip nội dung có chữ cái trong ngoặc vuông", () => {
+    expect(stripTimestamps("chính sách [đề xuất] mới")).toBe("chính sách [đề xuất] mới");
+    expect(stripTimestamps("phiên bản [v3.0]")).toBe("phiên bản [v3.0]");
+  });
+
+  it("KHÔNG strip version number pattern kiểu [1.2.3]", () => {
+    expect(stripTimestamps("release [1.2.3]")).toBe("release [1.2.3]");
+  });
+
+  it("trim whitespace đầu cuối", () => {
+    expect(stripTimestamps("   content thường   ")).toBe("content thường");
   });
 });

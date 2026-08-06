@@ -5,6 +5,7 @@ import { Meeting } from "../lib/db";
 import { escapeHtml, summaryToHtml } from "../lib/docx/pdfRenderer";
 import { buildSummaryDocx, parseSummaryToDocx } from "../lib/docx/parser";
 import { formatTime, formatDate } from "../lib/format";
+import { stripTimestamps } from "../lib/text";
 
 export function useExport(meeting: Meeting, toast: { success: (m: string) => void; error: (m: string) => void }) {
   const exportTxt = useCallback(() => {
@@ -22,7 +23,8 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
 
   const exportDocx = useCallback(async () => {
     try {
-      const nodes = parseSummaryToDocx(meeting.summary || "");
+      const cleanSummary = stripTimestamps(meeting.summary || "");
+      const nodes = parseSummaryToDocx(cleanSummary);
       const blob = await buildSummaryDocx(
         meeting.title,
         `Ngày: ${formatDate(meeting.createdAt)} | Thời lượng: ${formatTime(meeting.duration)}`,
@@ -43,6 +45,7 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
         return;
       }
       const html2pdf = (await import("html2pdf.js")).default;
+      const cleanSummary = stripTimestamps(meeting.summary);
 
       overlay = document.createElement("div");
       overlay.id = "meeting-summary-pdf-export";
@@ -52,7 +55,7 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
         <div id="meeting-summary-pdf-content" style="width:794px;background:#ffffff;padding:40px 48px;box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,sans-serif;line-height:1.7;color:#1e293b;font-size:13px;">
           <h1 style="font-size:22px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin:0 0 6px;">${escapeHtml(meeting.title)}</h1>
           <p style="text-align:center;color:#64748b;font-size:12px;margin:4px 0 24px;">Ngày: ${formatDate(meeting.createdAt)} | Thời lượng: ${formatTime(meeting.duration)}</p>
-          <div>${summaryToHtml(meeting.summary)}</div>
+          <div>${summaryToHtml(cleanSummary)}</div>
         </div>
       `;
       document.body.appendChild(overlay);

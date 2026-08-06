@@ -47,3 +47,21 @@ export const stripThinking = (text: string): string => {
     .replace(/<think\s*>[^<]*<\/think\s*>/gi, "")
     .trim();
 };
+
+/**
+ * Strip mốc thời gian dạng `[mm:ss]` hoặc `[hh:mm:ss]` khỏi text.
+ * Áp dụng cho nội dung summary khi xuất DOCX/PDF — tránh in mốc
+ * thời gian inline trong từng bullet heading trong khi đã có header
+ * riêng (Ngày / Thời lượng) ở đầu trang.
+ *
+ * Chỉ match khi có digits:digit:digit; KHÔNG match `[đề xuất]`,
+ * `[v3.0]` (có chữ cái/letters trong ngoặc).
+ */
+export const stripTimestamps = (text: string): string => {
+  if (!text) return "";
+  return text
+    .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]\s*/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/^[ \t]+/gm, "")
+    .trim();
+};
