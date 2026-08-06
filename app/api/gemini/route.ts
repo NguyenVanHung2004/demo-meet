@@ -1,7 +1,7 @@
 // app/api/gemini/route.ts
 import { NextResponse } from "next/server";
 import { checkRateLimit } from "@/app/lib/rate-limit";
-import { stripCjk } from "@/app/lib/text";
+import { stripCjk, stripThinking } from "@/app/lib/text";
 
 const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
 const BASE_URL = "https://opencode.ai/zen/go/v1";
@@ -42,7 +42,8 @@ async function generateWithRetry(prompt: string, model: string, mode: string, re
       }
       const data = await response.json();
       const message = data.choices?.[0]?.message;
-      const content = (message?.content || message?.reasoning_content || "").trim();
+      const raw = (message?.content || message?.reasoning_content || "").trim();
+      const content = stripThinking(raw);
       if (content) return content;
       if (attempt < retries) {
         await delay(1000 * attempt);

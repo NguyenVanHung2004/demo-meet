@@ -22,3 +22,28 @@ export const stripCjk = (text: string): string => {
     .replace(/^[ \t]+/gm, "")
     .trim();
 };
+
+/**
+ * Strip inline reasoning/thinking blocks khỏi output model.
+ * Một số model (đặc biệt khi reasoning bật) nhúng reasoning vào `content`
+ * thay vì tách riêng vào `reasoning_content`, làm response bị leak
+ * cả chain-of-thought vào summary.
+ *
+ * Cover các variant phổ biến:
+ * - `<!-- ... -->` (DeepSeek/MiMo style)
+ * - `<|thinking|>...<|/thinking|>`, `<|reasoning|>...<|/reasoning|>` (Qwen/Kimi style)
+ * - `<thinking>...</thinking>`, `<reasoning>...</reasoning>` (Qwen raw thinking style)
+ * - `<thinking/>` (self-closing — Qwen sometimes uses `<think/>`)
+ */
+export const stripThinking = (text: string): string => {
+  if (!text) return "";
+  return text
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<\|thinking\|>[\s\S]*?<\|\/thinking\|>/gi, "")
+    .replace(/<\|reasoning\|>[\s\S]*?<\|\/reasoning\|>/gi, "")
+    .replace(/<thinking[^>]*>[\s\S]*?<\/thinking>/gi, "")
+    .replace(/<reasoning[^>]*>[\s\S]*?<\/reasoning>/gi, "")
+    .replace(/<think\s*\/>/gi, "")
+    .replace(/<think\s*>[^<]*<\/think\s*>/gi, "")
+    .trim();
+};

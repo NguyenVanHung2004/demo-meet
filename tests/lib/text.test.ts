@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripCjk } from "@/app/lib/text";
+import { stripCjk, stripThinking } from "@/app/lib/text";
 
 describe("stripCjk", () => {
   it("input rỗng trả về rỗng", () => {
@@ -78,5 +78,42 @@ describe("stripCjk", () => {
     expect(stripCjk("Đẩy mạnh video   tự拍摄  (nhằm  tăng  CTR)")).toBe(
       "Đẩy mạnh video tự (nhằm tăng CTR)"
     );
+  });
+});
+
+describe("stripThinking", () => {
+  it("input rỗng trả về rỗng", () => {
+    expect(stripThinking("")).toBe("");
+  });
+
+  it("strip block thường gặp ở đầu response model hay leak", () => {
+    const input = "\u003c!--Mô hình suy luận nội bộ ở đây--\u003e# BIÊN BẢN TÓM TẮT";
+    const out = stripThinking(input);
+    expect(out).toBe("# BIÊN BẢN TÓM TẮT");
+    expect(out).not.toMatch(/<!--/);
+  });
+
+  it("strip block chiếm phần lớn content", () => {
+    const input =
+      "\u003c!--Đoạn reasoning rất dài ở đây (nhiều dòng)\n--\u003e\n# BIÊN BẢN TÓM TẮT\n\nNội dung...";
+    const out = stripThinking(input);
+    expect(out.startsWith("# BIÊN BẢN")).toBe(true);
+    expect(out).not.toMatch(/<!--/);
+    expect(out).not.toContain("Đoạn reasoning");
+  });
+
+  it("strip block ở giữa content", () => {
+    const input =
+      "Đoạn đầu.\u003cthinking\u003egặp nhiễu ở đây\u003c/thinking\u003eĐoạn sau.";
+    expect(stripThinking(input)).toBe("Đoạn đầu.Đoạn sau.");
+  });
+
+  it("giữ nguyên khi text không có think tag", () => {
+    const input = "Chỉ là văn bản thường, không có reasoning.";
+    expect(stripThinking(input)).toBe(input);
+  });
+
+  it("trim whitespace đầu cuối", () => {
+    expect(stripThinking("   summary thường   ")).toBe("summary thường");
   });
 });
