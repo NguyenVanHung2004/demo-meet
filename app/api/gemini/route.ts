@@ -5,11 +5,19 @@ import { stripCjk } from "@/app/lib/text";
 
 const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
 const BASE_URL = "https://opencode.ai/zen/go/v1";
-const MODEL = "mimo-v2.5";
+const MODELS: Record<string, string> = {
+  segment: "deepseek-v4-flash",
+  full: "minimax-m3",
+  qa: "minimax-m3",
+  fill_placeholders: "deepseek-v4-flash",
+  detect_fill: "deepseek-v4-flash",
+  extract_json: "deepseek-v4-flash",
+};
+const DEFAULT_MODEL = "mimo-v2.5";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function generateWithRetry(prompt: string, retries = 3) {
+async function generateWithRetry(prompt: string, model: string, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const response = await fetch(`${BASE_URL}/chat/completions`, {
@@ -19,7 +27,7 @@ async function generateWithRetry(prompt: string, retries = 3) {
           Authorization: `Bearer ${API_KEY}`,
         },
         body: JSON.stringify({
-          model: MODEL,
+          model: model,
           messages: [{ role: "user", content: prompt }],
           max_tokens: 16384,
         }),
@@ -61,6 +69,8 @@ export async function POST(req: Request) {
     if (mode !== "fill_placeholders" && mode !== "detect_fill" && !text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
     }
+
+    const chosenModel = MODELS[mode] || DEFAULT_MODEL;
 
     let prompt = "";
 
@@ -107,7 +117,7 @@ export async function POST(req: Request) {
       ]
       QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
-      const rawText = await generateWithRetry(prompt);
+      const rawText = await generateWithRetry(prompt, chosenModel);
       const cleanText = stripCjk(rawText.replace(/```json|```/g, "").trim());
       return NextResponse.json({ summary: cleanText });
     } else if (mode === "segment") {
@@ -208,7 +218,7 @@ export async function POST(req: Request) {
       NGỮ CẢNH CUỘC HỌP (nếu có):
       ${contextBlock}
       `;
-      const rawText = await generateWithRetry(prompt);
+      const rawText = await generateWithRetry(prompt, chosenModel);
       const cleanText = stripCjk(rawText.replace(/```json|```/g, "").trim());
       return NextResponse.json({ summary: cleanText });
     } else if (mode === "qa") {
@@ -331,7 +341,7 @@ export async function POST(req: Request) {
       `;
     }
 
-    const summary = stripCjk(await generateWithRetry(prompt));
+    const summary = stripCjk(await generateWithRetry(prompt, chosenModel));
     return NextResponse.json({ summary });
 
   } catch (error: any) {
