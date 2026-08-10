@@ -7,8 +7,8 @@ const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
 const BASE_URL = "https://opencode.ai/zen/go/v1";
 const MODELS: Record<string, string> = {
   segment: "deepseek-v4-flash",
-  full: "minimax-m3",
-  qa: "minimax-m3",
+  full: "minimax-m2.7",
+  qa: "minimax-m2.7",
   fill_placeholders: "deepseek-v4-flash",
   detect_fill: "deepseek-v4-flash",
   extract_json: "deepseek-v4-flash",
@@ -346,6 +346,7 @@ export async function POST(req: Request) {
       `;
     }
 
+    console.log(`[gemini] mode=${mode} → model=${chosenModel}`);
     const summary = stripCjk(await generateWithRetry(prompt, chosenModel, mode));
     return NextResponse.json({ summary });
 
