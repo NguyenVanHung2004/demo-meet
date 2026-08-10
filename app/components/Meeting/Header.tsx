@@ -81,6 +81,8 @@ export default function MeetingHeader({
 
           {!isReadOnly && showTemplateBtn && (
             <Button variant="outline" size="sm" onClick={onOpenTemplateModal} leftIcon={<Sparkles className="w-4 h-4" />}
+              title="Tóm tắt lại"
+              aria-label="Tóm tắt lại"
               className="hidden md:flex text-orange-700 border-orange-200 bg-orange-50 hover:bg-orange-100">
               Tóm tắt lại
             </Button>
@@ -88,7 +90,9 @@ export default function MeetingHeader({
 
           {!isReadOnly && (
             <Button variant="outline" size="sm" onClick={onOpenDocsFill} leftIcon={<FileIcon className="w-4 h-4" />}
-              className="hidden lg:flex text-indigo-700 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 whitespace-nowrap">
+              title="Tạo từ template"
+              aria-label="Tạo từ template"
+              className="hidden md:flex text-indigo-700 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 whitespace-nowrap">
               Tạo từ template
             </Button>
           )}

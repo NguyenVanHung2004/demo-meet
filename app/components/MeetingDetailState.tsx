@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useRef, useState } from "react";
+import { Sparkles, FileText as FileIcon, Share2 } from "lucide-react";
 import { Meeting } from "../lib/db";
 import type { Segment, Speaker } from "../lib/db";
 import { useGlobalUI } from "../context/GlobalUIProvider";
@@ -94,6 +95,40 @@ export default function MeetingDetailState({
         formatDate={formatDate}
         formatDuration={formatDuration}
       />
+
+      {!isReadOnly && (
+        <div className="md:hidden bg-white border-b border-slate-200 p-3 grid grid-cols-2 gap-2 shrink-0">
+          {!!onSummarize && (
+            <button
+              onClick={() => setShowTemplateModal(true)}
+              title="Tóm tắt lại"
+              aria-label="Tóm tắt lại"
+              className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-orange-700 bg-orange-50 hover:bg-orange-100 active:bg-orange-200 border border-orange-200 rounded-lg text-sm font-medium transition-colors min-w-0"
+            >
+              <Sparkles className="w-4 h-4 shrink-0" />
+              <span className="truncate">Tóm tắt lại</span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowDocsFill(true)}
+            title="Tạo từ template"
+            aria-label="Tạo từ template"
+            className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border border-indigo-200 rounded-lg text-sm font-medium transition-colors min-w-0"
+          >
+            <FileIcon className="w-4 h-4 shrink-0" />
+            <span className="truncate">Tạo từ template</span>
+          </button>
+          <button
+            onClick={handleShare}
+            title="Chia sẻ"
+            aria-label="Chia sẻ"
+            className="col-span-2 flex items-center justify-center gap-1.5 px-2.5 py-2 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-200 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Share2 className="w-4 h-4 shrink-0" />
+            <span>Chia sẻ</span>
+          </button>
+        </div>
+      )}
 
       <TabSwitcher activeTab={activeTab} onTabChange={setActiveTab} />
 

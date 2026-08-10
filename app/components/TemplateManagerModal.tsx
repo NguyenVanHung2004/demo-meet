@@ -119,10 +119,10 @@ export default function TemplateManagerModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row min-h-0">
           {/* SIDEBAR LIST */}
           {!isCreatingTemplate && (
-            <div className="w-full md:w-1/3 border-r bg-slate-50 overflow-y-auto p-3 space-y-2">
+            <div className="w-full md:w-1/3 md:max-h-full max-h-[35vh] border-r bg-slate-50 overflow-y-auto p-3 space-y-2 shrink-0">
               <div className="text-xs font-bold text-slate-400 uppercase px-2 py-1">Hệ thống</div>
               {templates
                 .filter((t) => !t.isCustom)
@@ -180,7 +180,7 @@ export default function TemplateManagerModal({
           )}
 
           {/* PREVIEW / CREATE AREA */}
-          <div className="flex-1 bg-white overflow-hidden flex flex-col p-4 md:p-8">
+          <div className="flex-1 bg-white overflow-y-auto flex flex-col p-4 md:p-8 min-h-0">
             {isCreatingTemplate ? (
               <div className="flex flex-col h-full space-y-4 animate-in slide-in-from-right duration-200">
                 <div>
@@ -201,7 +201,7 @@ export default function TemplateManagerModal({
                     placeholder="Mô tả mục đích sử dụng..."
                   />
                 </div>
-                <div className="flex-1 flex flex-col">
+                <div className="flex flex-col">
                   <label className="block text-sm font-bold text-slate-700 mb-1">
                     Cấu trúc Prompt (AI Instruction)
                   </label>
@@ -237,7 +237,7 @@ export default function TemplateManagerModal({
                     ref={templateStructRef}
                     value={newTemplateStructure}
                     onChange={(e) => setNewTemplateStructure(e.target.value)}
-                    className="flex-1 w-full p-3 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none bg-slate-50"
+                    className="w-full min-h-[160px] p-3 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none bg-slate-50"
                     placeholder={`# MẪU BIÊN BẢN \n\n## 1. PHẦN 1...\n## 2. PHẦN 2...`}
                   />
                   <p className="text-xs text-slate-500 mt-1">Hoặc nhập trực tiếp bằng Markdown.</p>

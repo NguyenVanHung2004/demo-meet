@@ -497,6 +497,28 @@ export default function EditorState({
         onSave={handleSave}
       />
 
+      {/* ------------------- MOBILE ACTION BAR ------------------- */}
+      <div className="md:hidden bg-white border-b border-slate-200 px-3 py-2 flex gap-2 shrink-0">
+        <button
+          onClick={() => setShowTemplateModal(true)}
+          title={`Mẫu: ${selectedTemplate.name}`}
+          aria-label="Chọn mẫu biên bản"
+          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-slate-700 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 rounded-lg text-sm font-medium transition-colors min-w-0"
+        >
+          <LayoutTemplate className="w-4 h-4 text-primary-600 shrink-0" />
+          <span className="truncate">{selectedTemplate.name}</span>
+        </button>
+        <button
+          onClick={handleSummarizeRequest}
+          title="Tóm tắt lại"
+          aria-label="Tóm tắt lại"
+          className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-2 text-orange-700 bg-orange-50 hover:bg-orange-100 active:bg-orange-200 border border-orange-200 rounded-lg text-sm font-medium transition-colors min-w-0"
+        >
+          <Sparkles className="w-4 h-4 shrink-0" />
+          <span className="truncate">Tóm tắt lại</span>
+        </button>
+      </div>
+
       {/* ------------------- MOBILE TABS ------------------- */}
       <div className="md:hidden flex bg-white border-b sticky top-0 z-10 shrink-0">
         <button onClick={() => setMobileTab('edit')} className={`flex-1 py-3 text-xs font-bold uppercase flex items-center justify-center gap-2 border-b-2 ${mobileTab === 'edit' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500'}`}>

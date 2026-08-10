@@ -71,7 +71,9 @@ export default function EditorHeader({
             size="sm"
             onClick={onSummarize}
             leftIcon={<Sparkles className="w-4 h-4" />}
-            className="text-orange-700 border-orange-200 bg-orange-50 hover:bg-orange-100 hidden md:flex whitespace-nowrap"
+            title="Tóm tắt lại"
+            aria-label="Tóm tắt lại"
+            className="hidden md:flex text-orange-700 border-orange-200 bg-orange-50 hover:bg-orange-100 whitespace-nowrap"
           >
             Tóm tắt lại
           </Button>
