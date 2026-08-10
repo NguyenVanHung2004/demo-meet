@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { X, LayoutTemplate, Plus, Trash2, Check, Sparkles } from "lucide-react";
+import { X, LayoutTemplate, Plus, Trash2, Check, Sparkles, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { MeetingTemplate, DEFAULT_TEMPLATES } from "../lib/templates";
@@ -25,6 +25,7 @@ export default function TemplateManagerModal({
 
   const [templates, setTemplates] = useState<MeetingTemplate[]>(DEFAULT_TEMPLATES);
   const [selectedTemplate, setSelectedTemplate] = useState<MeetingTemplate>(DEFAULT_TEMPLATES[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Create Template Form
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
@@ -270,12 +271,31 @@ export default function TemplateManagerModal({
                 </div>
                 <div className="mt-6 flex justify-end">
                   <button
-                    onClick={() => onSelectTemplate(selectedTemplate)}
-                    className={`px-6 py-3 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 ${actionIcon === "sparkles" ? "bg-orange-600 hover:bg-orange-700" : "bg-indigo-600 hover:bg-indigo-700"
+                    onClick={async () => {
+                      if (isSubmitting) return;
+                      setIsSubmitting(true);
+                      try {
+                        await onSelectTemplate(selectedTemplate);
+                      } catch (e) {
+                        console.error("[template] select error:", e);
+                        setIsSubmitting(false);
+                      }
+                    }}
+                    disabled={isSubmitting}
+                    className={`px-6 py-3 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed ${actionIcon === "sparkles" ? "bg-orange-600 hover:bg-orange-700" : "bg-indigo-600 hover:bg-indigo-700"
                       }`}
                   >
-                    {actionIcon === "sparkles" ? <Sparkles className="w-5 h-5" /> : <Check className="w-5 h-5" />}
-                    {actionText}
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Đang tóm tắt...
+                      </>
+                    ) : (
+                      <>
+                        {actionIcon === "sparkles" ? <Sparkles className="w-5 h-5" /> : <Check className="w-5 h-5" />}
+                        {actionText}
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

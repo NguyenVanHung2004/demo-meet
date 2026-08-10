@@ -20,6 +20,8 @@ const BODY_OPTIONS_BY_MODE: Record<string, Record<string, unknown>> = {
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
+
 async function generateWithRetry(prompt: string, model: string, mode: string, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -38,6 +40,11 @@ async function generateWithRetry(prompt: string, model: string, mode: string, re
       });
       if (!response.ok) {
         const errorBody = await response.text().catch(() => "");
+        if (RETRYABLE_STATUS.has(response.status) && attempt < retries) {
+          console.warn(`[gemini] ${response.status} → retry ${attempt}/${retries} in ${1000 * Math.pow(2, attempt - 1)}ms`);
+          await delay(1000 * Math.pow(2, attempt - 1));
+          continue;
+        }
         throw new Error(`API error: ${response.status} ${response.statusText} — ${errorBody}`);
       }
       const data = await response.json();
@@ -46,13 +53,20 @@ async function generateWithRetry(prompt: string, model: string, mode: string, re
       const content = stripThinking(raw);
       if (content) return content;
       if (attempt < retries) {
-        await delay(1000 * attempt);
+        console.warn(`[gemini] empty content → retry ${attempt}/${retries} in ${1000 * Math.pow(2, attempt - 1)}ms`);
+        await delay(1000 * Math.pow(2, attempt - 1));
         continue;
       }
-      throw new Error("Model trả về nội dung rỗng");
+      throw new Error("Model trả về nội dung rỗng sau " + retries + " lần thử");
     } catch (error: any) {
-      if (attempt < retries) {
-        await delay(1000 * attempt);
+      const isNetworkErr = error?.name === "AbortError"
+        || error?.code === "ECONNRESET"
+        || error?.code === "ETIMEDOUT"
+        || error?.code === "ENOTFOUND"
+        || error?.cause?.code === "ECONNRESET";
+      if (attempt < retries && isNetworkErr) {
+        console.warn(`[gemini] network error: ${error.message} → retry ${attempt}/${retries} in ${1000 * Math.pow(2, attempt - 1)}ms`);
+        await delay(1000 * Math.pow(2, attempt - 1));
         continue;
       }
       throw error;

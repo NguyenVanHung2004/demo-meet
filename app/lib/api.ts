@@ -134,6 +134,8 @@ export const requestSummary = async (
   duration?: number
 ): Promise<string> => {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 420_000); // 7 phút
 
     const response = await fetch('/api/gemini', {
       method: 'POST',
@@ -145,16 +147,32 @@ export const requestSummary = async (
         meetingObjectives: objectives, // Truyền mục tiêu cuộc họp
         createdAt: createdAt, // Timestamp (ms) bắt đầu cuộc họp
         duration: duration // Thời lượng cuộc họp (giây)
-      })
-    });
+      }),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
-    const data = await response.json();
-
-    if (data.summary) {
-      return data.summary; // Trả về nội dung tóm tắt ngay
+    // Đọc body an toàn (có thể là JSON, HTML, hoặc rỗng)
+    const rawBody = await response.text();
+    let data: any = {};
+    try {
+      data = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      data = { error: rawBody.slice(0, 200) };
     }
 
-    throw new Error("Gemini không trả về kết quả.");
+    console.log('[summarize] status:', response.status, 'body:', rawBody.slice(0, 500));
+
+    if (!response.ok) {
+      const err = new Error(data.error || `HTTP ${response.status}`);
+      (err as any).status = response.status;
+      throw err;
+    }
+
+    if (data.summary) {
+      return data.summary;
+    }
+
+    throw new Error("Model trả về nội dung rỗng");
 
   } catch (e) {
     console.error("Lỗi Full Summary:", e);

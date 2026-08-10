@@ -74,13 +74,35 @@ export function useSummarize(onRefresh?: () => void) {
       }
 
       toast.success(`Đã tóm tắt xong cuộc họp!`);
-    } catch (error) {
-      console.error("Background Summary Error:", error);
+    } catch (error: any) {
+      console.error("[summarize] failed:", {
+        meetingId,
+        status: error.status,
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+
       await updateMeetingProcess(meetingId, {
         status: MEETING_STATUS.FAILED,
-        errorMessage: (error as Error).message,
+        errorMessage: error.message,
       });
-      toast.error("Lỗi tóm tắt ngầm: " + (error as Error).message);
+
+      let userMessage: string;
+      if (error.status === 429) {
+        userMessage = "Đang quá tải (429). Đợi 30 giây rồi thử lại.";
+      } else if (error.status === 400) {
+        userMessage = "Transcript trống hoặc không hợp lệ. Không thể tóm tắt.";
+      } else if (error.status === 503 || error.status === 502 || error.status === 504) {
+        userMessage = "Server AI tạm thời không khả dụng. Thử lại sau ít phút.";
+      } else if (error.name === "AbortError") {
+        userMessage = "Quá thời gian chờ (7 phút). Mạng chậm hoặc model bận. Thử lại sau.";
+      } else if (typeof navigator !== "undefined" && !navigator.onLine) {
+        userMessage = "Mất kết nối mạng. Kiểm tra và thử lại.";
+      } else {
+        userMessage = `Lỗi tóm tắt: ${error.message}`;
+      }
+      toast.error(userMessage);
     } finally {
       onRefresh?.();
     }
