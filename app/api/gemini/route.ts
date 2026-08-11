@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit } from "@/app/lib/rate-limit";
 import { stripCjk, stripThinking } from "@/app/lib/text";
+import { parseAiJson } from "@/app/lib/json-parser";
 
 const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
 const BASE_URL = "https://opencode.ai/zen/go/v1";
@@ -20,7 +21,7 @@ const BODY_OPTIONS_BY_MODE: Record<string, Record<string, unknown>> = {
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 async function generateWithRetry(prompt: string, model: string, mode: string, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -137,7 +138,10 @@ export async function POST(req: Request) {
       QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
       const rawText = await generateWithRetry(prompt, chosenModel, mode);
-      const cleanText = stripCjk(rawText.replace(/```json|```/g, "").trim());
+      const parsed = parseAiJson(rawText, "extract_json", "array");
+      const cleanText = Array.isArray(parsed)
+        ? JSON.stringify(parsed, (_k, v) => typeof v === "string" ? stripCjk(v) : v)
+        : "[]";
       return NextResponse.json({ summary: cleanText });
     } else if (mode === "segment") {
       prompt = `

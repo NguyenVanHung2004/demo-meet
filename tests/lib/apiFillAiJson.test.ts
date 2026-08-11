@@ -6,12 +6,14 @@ const importApi = async () => {
 };
 
 const mockFetch = (response: unknown, ok = true) => {
+  const body = typeof response === "string" ? response : JSON.stringify(response);
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({
       ok,
       status: ok ? 200 : 500,
       json: async () => response,
+      text: async () => body,
     })) as unknown as typeof fetch
   );
 };

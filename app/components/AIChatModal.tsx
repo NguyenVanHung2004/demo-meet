@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, X, Send, Loader2, User, Bot, Trash2, MinusCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { postGemini } from "@/app/lib/api";
 
 interface AIChatModalProps {
     isOpen: boolean;
@@ -51,23 +52,18 @@ export default function AIChatModal({ isOpen, onClose, onClearContext, contextTe
         setLoading(true);
 
         try {
-            // Send request with history
-            const res = await fetch('/api/gemini', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    text: contextText,
-                    question: userMsg.content,
-                    mode: 'qa',
-                    history: messages // Send previous messages
-                })
-            });
-            const data = await res.json();
+            const data = await postGemini({
+                text: contextText,
+                question: userMsg.content,
+                mode: 'qa',
+                history: messages
+            }, 90_000); // 90s cho chat ngắn
             const aiMsg: Message = { role: 'model', content: data.summary || "Lỗi: Không nhận được phản hồi." };
             setMessages(prev => [...prev, aiMsg]);
         } catch (e: unknown) {
-            console.error(e);
-            setMessages(prev => [...prev, { role: 'model', content: "Error: " + (e instanceof Error ? e.message : String(e)) }]);
+            console.error('[qa] failed:', { status: (e as any)?.status, message: (e as any)?.message });
+            const errMsg = e instanceof Error ? e.message : String(e);
+            setMessages(prev => [...prev, { role: 'model', content: "Error: " + errMsg }]);
         } finally {
             setLoading(false);
         }

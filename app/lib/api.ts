@@ -1,12 +1,57 @@
 // app/lib/api.ts
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { storage, auth } from "./firebase";
+import { parseAiJson } from "./json-parser";
 const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
 const RUNPOD_ENDPOINT_ID = process.env.NEXT_PUBLIC_RUNPOD_ENDPOINT_ID;
 
 interface SendTaskEmailResult {
   count: number;
   failures: number;
+}
+
+/**
+ * Wrapper chung gọi /api/gemini với safety net:
+ * - AbortController timeout (mặc định 7 phút)
+ * - Đọc body an toàn qua response.text() + try/catch
+ * - Check response.ok, throw error có status code
+ * - Log request + response status
+ */
+export async function postGemini(body: Record<string, unknown>, timeoutMs = 420_000): Promise<any> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+
+    const rawBody = await response.text();
+    let data: any = {};
+    try {
+      data = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      data = { error: rawBody.slice(0, 200) };
+    }
+
+    console.log('[gemini]', body.mode, '→ status:', response.status);
+
+    if (!response.ok) {
+      const err = new Error(data.error || `HTTP ${response.status}`);
+      (err as any).status = response.status;
+      throw err;
+    }
+
+    return data;
+  } catch (e: any) {
+    if (e?.name === "AbortError") {
+      console.error('[gemini] timeout after', timeoutMs, 'ms, mode:', body.mode);
+    }
+    throw e;
+  }
 }
 
 // Gửi email phân công nhiệm vụ (bắt buộc kèm Firebase ID token)
@@ -105,20 +150,13 @@ export const startTranscriptionJob = async (audioUrl: string, language: "vi" | "
 // [SỬA] Dùng Gemini (Next.js API) để trả kết quả NGAY LẬP TỨC
 export const requestSegmentSummary = async (text: string, previousSummary: string = ""): Promise<string> => {
   try {
-    const response = await fetch('/api/gemini', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: text,
-        previousSummary: previousSummary, // Gửi kèm ngữ cảnh
-        mode: "segment"
-      })
+    const data = await postGemini({
+      text: text,
+      previousSummary: previousSummary,
+      mode: "segment"
     });
-
-    const data = await response.json();
     if (data.summary) return data.summary;
     return "";
-
   } catch (e) {
     console.error("Lỗi Live Summary:", e);
     return "";
@@ -134,39 +172,14 @@ export const requestSummary = async (
   duration?: number
 ): Promise<string> => {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 420_000); // 7 phút
-
-    const response = await fetch('/api/gemini', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: text,
-        mode: "full", // Báo hiệu tóm tắt full
-        templateStructure: templateStructure, // [NEW] Truyền cấu trúc template nếu có
-        meetingObjectives: objectives, // Truyền mục tiêu cuộc họp
-        createdAt: createdAt, // Timestamp (ms) bắt đầu cuộc họp
-        duration: duration // Thời lượng cuộc họp (giây)
-      }),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeoutId));
-
-    // Đọc body an toàn (có thể là JSON, HTML, hoặc rỗng)
-    const rawBody = await response.text();
-    let data: any = {};
-    try {
-      data = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
-      data = { error: rawBody.slice(0, 200) };
-    }
-
-    console.log('[summarize] status:', response.status, 'body:', rawBody.slice(0, 500));
-
-    if (!response.ok) {
-      const err = new Error(data.error || `HTTP ${response.status}`);
-      (err as any).status = response.status;
-      throw err;
-    }
+    const data = await postGemini({
+      text: text,
+      mode: "full", // Báo hiệu tóm tắt full
+      templateStructure: templateStructure,
+      meetingObjectives: objectives,
+      createdAt: createdAt,
+      duration: duration
+    });
 
     if (data.summary) {
       return data.summary;
@@ -186,77 +199,16 @@ export interface FillContext {
   objectives?: string;
 }
 
-/**
- * Parse JSON từ response của AI, robust trước các trường hợp:
- * - Markdown code blocks: ```json\n{...}\n```
- * - Extra text trước/sau JSON
- * - Trailing commas
- * `prefer`: ưu tiên loại JSON khi có cả 2 (object/array) trong text.
- */
-const parseAiJson = (raw: string, context: string, prefer: "object" | "array" = "object"): unknown => {
-  const text = (raw || "").trim();
-  if (!text) throw new Error(`AI trả về rỗng (${context})`);
-
-  // Bóc tách markdown code blocks
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1].trim() : text;
-
-  const stripTrailing = (s: string) => s.replace(/,(\s*[}\]])/g, "$1");
-
-  // Thử parse trực tiếp
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    // Tiếp tục fallback
-  }
-
-  // Strip trailing commas rồi parse lại
-  try {
-    return JSON.parse(stripTrailing(candidate));
-  } catch {
-    // Tiếp tục fallback
-  }
-
-  // Tìm JSON object/array đầu tiên
-  const tryObj = (s: string) => {
-    const m = s.match(/\{[\s\S]*\}/);
-    if (!m) return undefined;
-    try { return JSON.parse(stripTrailing(m[0])); } catch { return undefined; }
-  };
-  const tryArr = (s: string) => {
-    const m = s.match(/\[[\s\S]*\]/);
-    if (!m) return undefined;
-    try { return JSON.parse(stripTrailing(m[0])); } catch { return undefined; }
-  };
-
-  // Ưu tiên theo prefer, fallback loại còn lại
-  const primary = prefer === "array" ? tryArr(candidate) : tryObj(candidate);
-  if (primary !== undefined) return primary;
-  const fallback = prefer === "array" ? tryObj(candidate) : tryArr(candidate);
-  if (fallback !== undefined) return fallback;
-
-  console.error(`[${context}] AI response không parse được:`, text.slice(0, 500));
-  throw new Error(`AI trả về JSON không hợp lệ (${context})`);
-};
-
 export const requestFillPlaceholders = async (
   placeholders: string[],
   context?: FillContext
 ): Promise<Record<string, string>> => {
-  const response = await fetch("/api/gemini", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      mode: "fill_placeholders",
-      placeholders,
-      context: context || {},
-    }),
+  const data = await postGemini({
+    mode: "fill_placeholders",
+    placeholders,
+    context: context || {},
   });
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data?.error || "Lỗi khi AI điền placeholder");
-  }
   if (!data.summary) {
     throw new Error("AI không trả về kết quả.");
   }
@@ -276,20 +228,12 @@ export const requestDetectFill = async (
   text: string,
   context?: FillContext
 ): Promise<DetectFillItem[]> => {
-  const response = await fetch("/api/gemini", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      mode: "detect_fill",
-      text,
-      context: context || {},
-    }),
+  const data = await postGemini({
+    mode: "detect_fill",
+    text,
+    context: context || {},
   });
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data?.error || "Lỗi khi AI phân tích file");
-  }
   if (!data.summary) {
     throw new Error("AI không trả về kết quả.");
   }

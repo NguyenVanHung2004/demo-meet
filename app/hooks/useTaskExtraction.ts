@@ -3,6 +3,8 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Meeting, Member, updateMeetingProcess } from "../lib/db";
 import { useGlobalUI } from "../context/GlobalUIProvider";
+import { parseAiJson } from "../lib/json-parser";
+import { postGemini } from "../lib/api";
 
 export function useTaskExtraction() {
   const { toast, confirm } = useGlobalUI();
@@ -40,25 +42,20 @@ export function useTaskExtraction() {
       const uniqueDepartments = Array.from(new Set(members.map((m) => m.department).filter(Boolean)));
       const uniqueTeams = Array.from(new Set(members.map((m) => m.team).filter(Boolean)));
 
-      const response = await fetch("/api/gemini", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: fullTranscript,
-          mode: "extract_json",
-          departments: uniqueDepartments,
-          teams: uniqueTeams,
-          prompt_instruction: `Bạn là thư ký chuyên nghiệp. Hãy trích xuất Action Items.`,
-          dateContext: new Date(meeting.createdAt).toLocaleString("vi-VN"),
-        }),
+      const response = await postGemini({
+        text: fullTranscript,
+        mode: "extract_json",
+        departments: uniqueDepartments,
+        teams: uniqueTeams,
+        prompt_instruction: `Bạn là thư ký chuyên nghiệp. Hãy trích xuất Action Items.`,
+        dateContext: new Date(meeting.createdAt).toLocaleString("vi-VN"),
       });
-      const data = await response.json();
-      const jsonMatch = data.summary.match(/\[[\s\S]*\]/);
-      const cleanJson = jsonMatch ? jsonMatch[0] : (data.summary.match(/\{[\s\S]*\}/) ? `[${data.summary.match(/\{[\s\S]*\}/)[0]}]` : "[]");
+      const data = response;
 
       let rawTasks: any[];
       try {
-        rawTasks = JSON.parse(cleanJson);
+        const parsed = parseAiJson(data.summary, "extract_json", "array");
+        rawTasks = Array.isArray(parsed) ? parsed : [];
       } catch {
         toast.error("AI trả về dữ liệu lỗi. Hãy thử lại!");
         return;
