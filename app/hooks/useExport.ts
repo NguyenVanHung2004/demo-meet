@@ -7,7 +7,15 @@ import { buildSummaryDocx, parseSummaryToDocx } from "../lib/docx/parser";
 import { formatTime, formatDate } from "../lib/format";
 import { stripTimestamps } from "../lib/text";
 
-export function useExport(meeting: Meeting, toast: { success: (m: string) => void; error: (m: string) => void }) {
+export function useExport(
+  meeting: Meeting,
+  toast: {
+    success: (m: string) => unknown;
+    error: (m: string) => unknown;
+    loading: (m: string) => unknown;
+    dismiss: (id: string) => unknown;
+  }
+) {
   const exportTxt = useCallback(() => {
     try {
       const txt = meeting.segments
@@ -87,7 +95,7 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
       toast.error("Không có file âm thanh");
       return;
     }
-    const toastId = toast.loading("Đang tải audio...");
+    const toastId = toast.loading("Đang tải audio...") as string;
     try {
       const proxyUrl = `/api/proxy-file?url=${encodeURIComponent(meeting.audioUrl)}`;
       const response = await fetch(proxyUrl);
