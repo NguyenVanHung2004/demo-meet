@@ -87,11 +87,17 @@ export function useExport(meeting: Meeting, toast: { success: (m: string) => voi
       toast.error("Không có file âm thanh");
       return;
     }
+    const toastId = toast.loading("Đang tải audio...");
     try {
-      const response = await fetch(meeting.audioUrl);
+      const proxyUrl = `/api/proxy-file?url=${encodeURIComponent(meeting.audioUrl)}`;
+      const response = await fetch(proxyUrl);
+      if (!response.ok) throw new Error(`Proxy fetch failed: ${response.statusText}`);
       const blob = await response.blob();
       saveAs(blob, `${meeting.title}.mp3`);
+      toast.dismiss(toastId);
+      toast.success("Đã tải audio");
     } catch {
+      toast.dismiss(toastId);
       toast.error("Lỗi khi tải audio");
     }
   }, [meeting, toast]);
