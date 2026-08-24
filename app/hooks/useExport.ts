@@ -14,7 +14,8 @@ export function useExport(
     error: (m: string) => unknown;
     loading: (m: string) => unknown;
     dismiss: (id: string) => unknown;
-  }
+  },
+  audioSrc = ""
 ) {
   const exportTxt = useCallback(() => {
     try {
@@ -91,24 +92,36 @@ export function useExport(
   }, [meeting, toast]);
 
   const downloadAudio = useCallback(async () => {
-    if (!meeting.audioUrl) {
+    const source = audioSrc || meeting.audioUrl;
+    if (!source) {
       toast.error("Không có file âm thanh");
       return;
     }
     const toastId = toast.loading("Đang tải audio...") as string;
     try {
-      const proxyUrl = `/api/proxy-file?url=${encodeURIComponent(meeting.audioUrl)}`;
-      const response = await fetch(proxyUrl);
-      if (!response.ok) throw new Error(`Proxy fetch failed: ${response.statusText}`);
+      const downloadUrl = source.startsWith("blob:")
+        ? source
+        : `/api/proxy-file?url=${encodeURIComponent(source)}`;
+      const response = await fetch(downloadUrl);
+      if (!response.ok) throw new Error(`Audio fetch failed: ${response.statusText}`);
       const blob = await response.blob();
-      saveAs(blob, `${meeting.title}.mp3`);
+      if (blob.size === 0) throw new Error("Audio file is empty");
+
+      const extension = blob.type.includes("webm")
+        ? "webm"
+        : blob.type.includes("mp4")
+          ? "m4a"
+          : blob.type.includes("ogg")
+            ? "ogg"
+            : "mp3";
+      saveAs(blob, `${meeting.title}.${extension}`);
       toast.dismiss(toastId);
       toast.success("Đã tải audio");
     } catch {
       toast.dismiss(toastId);
       toast.error("Lỗi khi tải audio");
     }
-  }, [meeting, toast]);
+  }, [audioSrc, meeting, toast]);
 
   return { exportTxt, exportDocx, exportPdf, downloadAudio };
 }
