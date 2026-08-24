@@ -8,8 +8,8 @@ const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
 const BASE_URL = "https://opencode.ai/zen/go/v1";
 const MODELS: Record<string, string> = {
   segment: "deepseek-v4-flash",
-  full: "minimax-m2.7",
-  qa: "minimax-m2.7",
+  full: "deepseek-v4-flash",
+  qa: "deepseek-v4-flash",
   fill_placeholders: "deepseek-v4-flash",
   detect_fill: "deepseek-v4-flash",
   extract_json: "deepseek-v4-flash",
