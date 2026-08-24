@@ -15,6 +15,7 @@ const MODELS: Record<string, string> = {
   extract_json: "deepseek-v4-flash",
 };
 const DEFAULT_MODEL = "mimo-v2.5";
+const FALLBACK_MODELS = ["minimax-m3", "mimo-v2.5"];
 const BODY_OPTIONS_BY_MODE: Record<string, Record<string, unknown>> = {
   segment: { reasoning: false },
 };
@@ -76,6 +77,22 @@ async function generateWithRetry(prompt: string, model: string, mode: string, re
   throw new Error("Retry failed");
 }
 
+async function generateWithFallback(prompt: string, models: string[], mode: string) {
+  let lastError: unknown;
+  for (const [index, model] of models.entries()) {
+    try {
+      return await generateWithRetry(prompt, model, mode);
+    } catch (error) {
+      lastError = error;
+      const fallback = models[index + 1];
+      if (fallback) {
+        console.warn(`[gemini] model=${model} failed → fallback=${fallback}`);
+      }
+    }
+  }
+  throw lastError;
+}
+
 export async function POST(req: Request) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
   const { allowed } = checkRateLimit(`gemini:${ip}`, 20, 60 * 1000);
@@ -90,7 +107,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
     }
 
-    const chosenModel = MODELS[mode] || DEFAULT_MODEL;
+    const primaryModel = MODELS[mode] || DEFAULT_MODEL;
+    const chosenModels = MODELS[mode]
+      ? [primaryModel, ...FALLBACK_MODELS]
+      : [primaryModel];
 
     let prompt = "";
 
@@ -137,7 +157,7 @@ export async function POST(req: Request) {
       ]
       QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
-      const rawText = await generateWithRetry(prompt, chosenModel, mode);
+      const rawText = await generateWithFallback(prompt, chosenModels, mode);
       const parsed = parseAiJson(rawText, "extract_json", "array");
       const cleanText = Array.isArray(parsed)
         ? JSON.stringify(parsed, (_k, v) => typeof v === "string" ? stripCjk(v) : v)
@@ -241,7 +261,7 @@ export async function POST(req: Request) {
       NGỮ CẢNH CUỘC HỌP (nếu có):
       ${contextBlock}
       `;
-      const rawText = await generateWithRetry(prompt, chosenModel, mode);
+      const rawText = await generateWithFallback(prompt, chosenModels, mode);
       const cleanText = stripCjk(rawText.replace(/```json|```/g, "").trim());
       return NextResponse.json({ summary: cleanText });
     } else if (mode === "qa") {
@@ -364,8 +384,8 @@ export async function POST(req: Request) {
       `;
     }
 
-    console.log(`[gemini] mode=${mode} → model=${chosenModel}`);
-    const summary = stripCjk(await generateWithRetry(prompt, chosenModel, mode));
+    console.log(`[gemini] mode=${mode} → models=${chosenModels.join(" → ")}`);
+    const summary = stripCjk(await generateWithFallback(prompt, chosenModels, mode));
     return NextResponse.json({ summary });
 
   } catch (error: any) {

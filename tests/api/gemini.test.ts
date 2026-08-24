@@ -68,6 +68,38 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
     expect(body.summary).toBe("Summary OK");
   });
 
+  it("fallback qua các model theo thứ tự cho mọi mode cấu hình", async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        text: async () => "deepseek failed",
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        text: async () => "minimax failed",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: "Fallback OK" } }] }),
+      });
+
+    const req = makeRequest({ text: "Test transcript", mode: "segment" });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([, opts]) => JSON.parse(opts.body).model)).toEqual([
+      "deepseek-v4-flash",
+      "minimax-m3",
+      "mimo-v2.5",
+    ]);
+    await expect(res.json()).resolves.toMatchObject({ summary: "Fallback OK" });
+  });
+
   it("gọi API với model và max_tokens đúng", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
