@@ -64,7 +64,7 @@ export default function MeetingHeader({
             {showExportMenu && (
               <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-100">
                 <button onClick={() => { onDownloadAudio(); setShowExportMenu(false); }} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700">
-                  <Music className="w-4 h-4 text-pink-500" /> Audio (.mp3)
+                  <Music className="w-4 h-4 text-pink-500" /> Audio
                 </button>
                 <button onClick={() => { onExportTxt(); setShowExportMenu(false); }} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-3 text-slate-700 border-t border-slate-100">
                   <FileText className="w-4 h-4 text-slate-400" /> Nội dung (.txt)
