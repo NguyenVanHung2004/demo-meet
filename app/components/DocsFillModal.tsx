@@ -12,6 +12,7 @@ import {
 } from "@/app/lib/docx/filler";
 import { requestFillPlaceholders, requestDetectFill, type FillContext, type DetectFillItem } from "@/app/lib/api";
 import { cn } from "@/app/lib/cn";
+import { createAiSessionId } from "@/app/lib/ai-session";
 
 type Step = "upload" | "ai-filling" | "review" | "generating";
 
@@ -24,6 +25,7 @@ interface DocsFillModalProps {
 export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModalProps) {
   const { toast } = useGlobalUI();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sessionIdRef = useRef<string | null>(null);
 
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -35,6 +37,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
   const [aiError, setAiError] = useState(false);
 
   const reset = () => {
+    sessionIdRef.current = null;
     setStep("upload");
     setFile(null);
     setPlaceholders([]);
@@ -58,10 +61,14 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
     const selected = e.target.files?.[0];
     e.target.value = "";
     if (!selected) return;
+    reset();
+    const sessionId = createAiSessionId("docs");
+    sessionIdRef.current = sessionId;
 
     setFileError(null);
     try {
       const found = await extractPlaceholders(selected);
+      if (sessionIdRef.current !== sessionId) return;
       setFile(selected);
       setPlaceholders(found);
       setMarkers([]);
@@ -71,18 +78,21 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
       setValues(initial);
       setStep("upload");
     } catch (err) {
+      if (sessionIdRef.current !== sessionId) return;
       setFileError((err as Error).message);
     }
   };
 
   const handleContinue = async () => {
     if (!file) return;
+    const sessionId = sessionIdRef.current ??= createAiSessionId("docs");
     setStep("ai-filling");
     setAiError(false);
     try {
       if (placeholders.length > 0) {
         const names = placeholders.map((p) => p.name);
-        const result = await requestFillPlaceholders(names, context);
+        const result = await requestFillPlaceholders(names, sessionId, context);
+        if (sessionIdRef.current !== sessionId) return;
         setValues((prev) => {
           const next = { ...prev };
           names.forEach((n) => {
@@ -95,10 +105,12 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
         });
       } else {
         const plainText = await extractPlainText(file);
+        if (sessionIdRef.current !== sessionId) return;
         if (!plainText.trim()) {
           throw new Error("Không thể đọc nội dung file.");
         }
-        const detected = await requestDetectFill(plainText, context);
+        const detected = await requestDetectFill(plainText, sessionId, context);
+        if (sessionIdRef.current !== sessionId) return;
         setMarkers(detected);
         const init: Record<string, string> = {};
         detected.forEach((d) => { init[d.marker] = d.value || ""; });
@@ -107,6 +119,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
       setStep("review");
     } catch (err) {
       console.error("AI fill error:", err);
+      if (sessionIdRef.current !== sessionId) return;
       setAiError(true);
       setStep("review");
     }
@@ -114,6 +127,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
 
   const handleGenerate = async () => {
     if (!file) return;
+    const sessionId = sessionIdRef.current;
     setStep("generating");
     try {
       let blob: Blob;
@@ -123,6 +137,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
       } else {
         blob = await fillDocx(file, values);
       }
+      if (sessionIdRef.current !== sessionId) return;
       const cleanName = file.name.replace(/\.docx$/i, "");
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -133,6 +148,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
       reset();
       onClose();
     } catch (err) {
+      if (sessionIdRef.current !== sessionId) return;
       console.error("Fill docx error:", err);
       toast.error("Lỗi khi tạo file: " + (err as Error).message);
       setStep("review");
@@ -256,7 +272,7 @@ export default function DocsFillModal({ isOpen, onClose, context }: DocsFillModa
               <FileText className="w-12 h-12 mb-2 opacity-30" />
               <p className="text-sm">Không tìm thấy placeholder {`{{...}}`} hoặc chỗ trống nào trong file.</p>
               <p className="text-xs mt-1">Hãy thử file khác, hoặc thêm placeholder {`{{TEN_FIELD}}`} vào file.</p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={() => { setStep("upload"); setFile(null); setPlaceholders([]); setMarkers([]); setMarkerValues({}); }}>
+              <Button variant="outline" size="sm" className="mt-4" onClick={reset}>
                 Chọn file khác
               </Button>
             </div>

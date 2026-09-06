@@ -2,6 +2,7 @@
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { storage, auth } from "./firebase";
 import { parseAiJson } from "./json-parser";
+import { isValidAiSessionId } from "./ai-session";
 const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
 const RUNPOD_ENDPOINT_ID = process.env.NEXT_PUBLIC_RUNPOD_ENDPOINT_ID;
 
@@ -17,7 +18,8 @@ interface SendTaskEmailResult {
  * - Check response.ok, throw error có status code
  * - Log request + response status
  */
-export async function postGemini(body: Record<string, unknown>, timeoutMs = 420_000): Promise<any> {
+export async function postGemini(body: Record<string, unknown> & { sessionId: string }, timeoutMs = 420_000): Promise<any> {
+  if (!isValidAiSessionId(body.sessionId)) throw new Error("Invalid or missing sessionId");
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -148,11 +150,12 @@ export const startTranscriptionJob = async (audioUrl: string, language: "vi" | "
 
 // --- HÀM 2: TÓM TẮT NHANH (Text -> Summary) ---
 // [SỬA] Dùng Gemini (Next.js API) để trả kết quả NGAY LẬP TỨC
-export const requestSegmentSummary = async (text: string, previousSummary: string = ""): Promise<string> => {
+export const requestSegmentSummary = async (text: string, sessionId: string, previousSummary: string = ""): Promise<string> => {
   try {
     const data = await postGemini({
       text: text,
       previousSummary: previousSummary,
+      sessionId,
       mode: "segment"
     });
     if (data.summary) return data.summary;
@@ -166,6 +169,7 @@ export const requestSegmentSummary = async (text: string, previousSummary: strin
 // Gọi Gemini trả về Text luôn
 export const requestSummary = async (
   text: string,
+  sessionId: string,
   templateStructure?: string,
   objectives?: string,
   createdAt?: number,
@@ -175,6 +179,7 @@ export const requestSummary = async (
     const data = await postGemini({
       text: text,
       mode: "full", // Báo hiệu tóm tắt full
+      sessionId,
       templateStructure: templateStructure,
       meetingObjectives: objectives,
       createdAt: createdAt,
@@ -201,10 +206,12 @@ export interface FillContext {
 
 export const requestFillPlaceholders = async (
   placeholders: string[],
+  sessionId: string,
   context?: FillContext
 ): Promise<Record<string, string>> => {
   const data = await postGemini({
     mode: "fill_placeholders",
+    sessionId,
     placeholders,
     context: context || {},
   });
@@ -226,10 +233,12 @@ export interface DetectFillItem {
 
 export const requestDetectFill = async (
   text: string,
+  sessionId: string,
   context?: FillContext
 ): Promise<DetectFillItem[]> => {
   const data = await postGemini({
     mode: "detect_fill",
+    sessionId,
     text,
     context: context || {},
   });

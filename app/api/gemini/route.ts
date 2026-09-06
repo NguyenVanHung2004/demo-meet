@@ -3,12 +3,13 @@ import { NextResponse } from "next/server";
 import { checkRateLimit } from "@/app/lib/rate-limit";
 import { stripCjk, stripThinking } from "@/app/lib/text";
 import { parseAiJson } from "@/app/lib/json-parser";
+import { isValidAiSessionId } from "@/app/lib/ai-session";
 
 const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
 const BASE_URL = "https://opencode.ai/zen/go/v1";
 const MODELS: Record<string, string> = {
   segment: "deepseek-v4-flash",
-  full: "deepseek-v4-flash",
+  full: "minimax-m3",
   qa: "deepseek-v4-flash",
   fill_placeholders: "deepseek-v4-flash",
   detect_fill: "deepseek-v4-flash",
@@ -18,20 +19,47 @@ const DEFAULT_MODEL = "mimo-v2.5";
 const FALLBACK_MODELS = ["minimax-m3", "mimo-v2.5"];
 const BODY_OPTIONS_BY_MODE: Record<string, Record<string, unknown>> = {
   segment: { reasoning: false },
+  full: { reasoning: false },
 };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
-async function generateWithRetry(prompt: string, model: string, mode: string, retries = 3) {
+type DiagnosticContext = { requestId: string; mode: string };
+
+function logDiagnostic(event: string, context: DiagnosticContext, metadata: Record<string, unknown> = {}) {
+  console.info("[gemini]", { event, ...context, ...metadata });
+}
+
+function tokenUsage(usage: any) {
+  const result: Record<string, number> = {};
+  for (const key of ["prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens"]) {
+    const value = key === "reasoning_tokens"
+      ? usage?.completion_tokens_details?.reasoning_tokens ?? usage?.reasoning_tokens
+      : usage?.[key];
+    if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) result[key] = value;
+  }
+  return result;
+}
+
+async function generateWithRetry(prompt: string, model: string, mode: string, sessionId: string, diagnostic: DiagnosticContext, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
+    const startedAt = performance.now();
+    const metadata = { requestedModel: model, attempt };
+    let reason = "response";
+    const logRetry = (retryReason: string, status?: number) => logDiagnostic("retry", diagnostic, {
+      ...metadata, reason: retryReason, ...(status === undefined ? {} : { status }),
+      backoffMs: 1000 * Math.pow(2, attempt - 1),
+    });
+    logDiagnostic("attempt_start", diagnostic, metadata);
     try {
       const response = await fetch(`${BASE_URL}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${API_KEY}`,
+          "x-opencode-session": sessionId,
         },
         body: JSON.stringify({
           model: model,
@@ -40,22 +68,35 @@ async function generateWithRetry(prompt: string, model: string, mode: string, re
           ...(BODY_OPTIONS_BY_MODE[mode] || {}),
         }),
       });
+      logDiagnostic("headers", diagnostic, { ...metadata, status: response.status, headersMs: performance.now() - startedAt });
       if (!response.ok) {
-        const errorBody = await response.text().catch(() => "");
+        reason = "http";
+        let bodyReadFailed = false;
+        const errorBody = await response.text().catch(() => { bodyReadFailed = true; return ""; });
+        logDiagnostic(bodyReadFailed ? "body_failure" : "body_complete", diagnostic, { ...metadata, status: response.status, durationMs: performance.now() - startedAt });
         if (RETRYABLE_STATUS.has(response.status) && attempt < retries) {
-          console.warn(`[gemini] ${response.status} → retry ${attempt}/${retries} in ${1000 * Math.pow(2, attempt - 1)}ms`);
+          logRetry("http", response.status);
           await delay(1000 * Math.pow(2, attempt - 1));
           continue;
         }
         throw new Error(`API error: ${response.status} ${response.statusText} — ${errorBody}`);
       }
       const data = await response.json();
+      logDiagnostic("body_complete", diagnostic, { ...metadata, status: response.status, durationMs: performance.now() - startedAt });
       const message = data.choices?.[0]?.message;
       const raw = (message?.content || message?.reasoning_content || "").trim();
       const content = stripThinking(raw);
-      if (content) return content;
+      if (content) {
+        logDiagnostic("attempt_success", diagnostic, {
+          ...metadata, durationMs: performance.now() - startedAt,
+          ...(typeof data.model === "string" ? { returnedModel: data.model } : {}),
+          usage: tokenUsage(data.usage),
+        });
+        return content;
+      }
+      reason = "empty";
       if (attempt < retries) {
-        console.warn(`[gemini] empty content → retry ${attempt}/${retries} in ${1000 * Math.pow(2, attempt - 1)}ms`);
+        logRetry("empty");
         await delay(1000 * Math.pow(2, attempt - 1));
         continue;
       }
@@ -67,33 +108,42 @@ async function generateWithRetry(prompt: string, model: string, mode: string, re
         || error?.code === "ENOTFOUND"
         || error?.cause?.code === "ECONNRESET";
       if (attempt < retries && isNetworkErr) {
-        console.warn(`[gemini] network error: ${error.message} → retry ${attempt}/${retries} in ${1000 * Math.pow(2, attempt - 1)}ms`);
+        logRetry("network");
         await delay(1000 * Math.pow(2, attempt - 1));
         continue;
       }
+      logDiagnostic("attempt_failure", diagnostic, { ...metadata, reason: isNetworkErr ? "network" : reason, durationMs: performance.now() - startedAt });
       throw error;
     }
   }
   throw new Error("Retry failed");
 }
 
-async function generateWithFallback(prompt: string, models: string[], mode: string) {
+async function generateWithFallback(prompt: string, models: string[], mode: string, sessionId: string, requestId: string) {
+  const startedAt = performance.now();
+  // Never log arbitrary client mode values or upstream error messages/bodies.
+  const diagnostic = { requestId, mode: Object.prototype.hasOwnProperty.call(MODELS, mode) ? mode : "unknown" };
+  logDiagnostic("pipeline_start", diagnostic, { requestedModel: models[0], models });
   let lastError: unknown;
   for (const [index, model] of models.entries()) {
     try {
-      return await generateWithRetry(prompt, model, mode);
+      const content = await generateWithRetry(prompt, model, mode, sessionId, diagnostic);
+      logDiagnostic("pipeline_complete", diagnostic, { outcome: "success", requestedModel: model, durationMs: performance.now() - startedAt });
+      return content;
     } catch (error) {
       lastError = error;
       const fallback = models[index + 1];
       if (fallback) {
-        console.warn(`[gemini] model=${model} failed → fallback=${fallback}`);
+        logDiagnostic("fallback", diagnostic, { requestedModel: model, fallbackModel: fallback });
       }
     }
   }
+  logDiagnostic("pipeline_complete", diagnostic, { outcome: "failure", durationMs: performance.now() - startedAt });
   throw lastError;
 }
 
 export async function POST(req: Request) {
+  const requestId = crypto.randomUUID();
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
   const { allowed } = checkRateLimit(`gemini:${ip}`, 20, 60 * 1000);
   if (!allowed) {
@@ -101,7 +151,13 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { text, mode, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives, placeholders, context, duration, createdAt } = await req.json();
+    const { text, mode, sessionId, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives, placeholders, context, duration, createdAt } = await req.json();
+
+    // Legacy clients have no reliable conversation key. Fail closed rather than
+    // merge unrelated users or invent a new provider conversation on every turn.
+    if (!isValidAiSessionId(sessionId)) {
+      return NextResponse.json({ error: "Invalid or missing sessionId. Refresh the page and try again." }, { status: 400 });
+    }
 
     if (mode !== "fill_placeholders" && mode !== "detect_fill" && !text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
@@ -109,7 +165,7 @@ export async function POST(req: Request) {
 
     const primaryModel = MODELS[mode] || DEFAULT_MODEL;
     const chosenModels = MODELS[mode]
-      ? [primaryModel, ...FALLBACK_MODELS]
+      ? [...new Set([primaryModel, ...FALLBACK_MODELS])]
       : [primaryModel];
 
     let prompt = "";
@@ -157,7 +213,7 @@ export async function POST(req: Request) {
       ]
       QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
-      const rawText = await generateWithFallback(prompt, chosenModels, mode);
+      const rawText = await generateWithFallback(prompt, chosenModels, mode, sessionId, requestId);
       const parsed = parseAiJson(rawText, "extract_json", "array");
       const cleanText = Array.isArray(parsed)
         ? JSON.stringify(parsed, (_k, v) => typeof v === "string" ? stripCjk(v) : v)
@@ -261,7 +317,7 @@ export async function POST(req: Request) {
       NGỮ CẢNH CUỘC HỌP (nếu có):
       ${contextBlock}
       `;
-      const rawText = await generateWithFallback(prompt, chosenModels, mode);
+      const rawText = await generateWithFallback(prompt, chosenModels, mode, sessionId, requestId);
       const cleanText = stripCjk(rawText.replace(/```json|```/g, "").trim());
       return NextResponse.json({ summary: cleanText });
     } else if (mode === "qa") {
@@ -384,12 +440,11 @@ export async function POST(req: Request) {
       `;
     }
 
-    console.log(`[gemini] mode=${mode} → models=${chosenModels.join(" → ")}`);
-    const summary = stripCjk(await generateWithFallback(prompt, chosenModels, mode));
+    const summary = stripCjk(await generateWithFallback(prompt, chosenModels, mode, sessionId, requestId));
     return NextResponse.json({ summary });
 
   } catch (error: any) {
-    console.error("Gemini route error:", error);
+    console.error("[gemini]", { event: "route_failure", requestId });
     const errorMessage = error.status === 503
       ? "Hệ thống AI đang quá tải, vui lòng thử lại sau."
       : (error.message || "Lỗi xử lý AI.");

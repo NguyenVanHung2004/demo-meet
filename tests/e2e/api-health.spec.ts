@@ -60,9 +60,10 @@ test.describe("API routes — health check (không cần auth)", () => {
 
   test("POST /api/gemini thiếu text → 400", async ({ request }) => {
     const res = await request.post("/api/gemini", {
-      data: { mode: "default" },
+      data: { mode: "default", sessionId: "health-missing-text" },
     });
     expect(res.status()).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: "Thiếu nội dung text" });
   });
 
   test("POST /api/webhooks/meetingbaas thiếu signature → 401", async ({

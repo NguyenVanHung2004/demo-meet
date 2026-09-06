@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { makeRequest } from "@/tests/helpers/fixtures";
+import { makeRequest as makeBaseRequest } from "@/tests/helpers/fixtures";
+
+const makeRequest = (body: Record<string, unknown>, options?: Parameters<typeof makeBaseRequest>[1]) =>
+  makeBaseRequest({ sessionId: "test-conversation", ...body }, options);
 
 vi.mock("@/app/lib/rate-limit", async () => {
   const actual = await vi.importActual<typeof import("@/app/lib/rate-limit")>(

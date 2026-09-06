@@ -13,6 +13,7 @@ import LiveStatusBar from "./Live/StatusBar";
 import TranscriptView from "./Live/TranscriptView";
 import LVSummaryPanel from "./Live/LVSummaryPanel";
 import { MEETING_STATUS } from "../lib/constants";
+import { createAiSessionId } from "../lib/ai-session";
 
 type SummaryItem = {
   id: number;
@@ -115,6 +116,8 @@ export default function LiveRecordingState({
 
   // --- LOGIC TÓM TẮT THÔNG MINH ---
   const bufferTextRef = useRef("");
+  // Independent of the public live-share ID; retained across pause/resume.
+  const aiSessionIdRef = useRef<string | null>(null);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const wordCountRef = useRef(0);
 
@@ -152,7 +155,9 @@ export default function LiveRecordingState({
     wordCountRef.current = 0;
 
     try {
-      const summary = await requestSegmentSummary(textToProcess);
+      const sessionId = aiSessionIdRef.current ??= createAiSessionId("live");
+      const summary = await requestSegmentSummary(textToProcess, sessionId);
+      if (aiSessionIdRef.current !== sessionId) return;
       setSummaries(prev => prev.map(item =>
         item.id === currentId
           ? { ...item, content: summary || "Không có nội dung chính.", isLoading: false }
@@ -583,6 +588,7 @@ export default function LiveRecordingState({
       type: "danger"
     });
     if (!isConfirmed) return;
+    aiSessionIdRef.current = null;
     resetTranscript();
     setSummaries([]);
     bufferTextRef.current = "";

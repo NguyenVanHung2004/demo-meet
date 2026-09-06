@@ -5,6 +5,7 @@ import { MEETING_STATUS } from "../lib/constants";
 import { uploadAudioToFirebase, requestSummary } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useGlobalUI } from "../context/GlobalUIProvider";
+import { meetingAiSessionId } from "../lib/ai-session";
 
 export function useSummarize(onRefresh?: () => void) {
   const { user } = useAuth();
@@ -53,6 +54,7 @@ export function useSummarize(onRefresh?: () => void) {
     try {
       const summary = await requestSummary(
         transcriptText,
+        meetingAiSessionId("summary", meetingId),
         templateStructure,
         meeting.objectives,
         meeting.createdAt,

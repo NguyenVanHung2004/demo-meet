@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, X, Send, Loader2, User, Bot, Trash2, MinusCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { postGemini } from "@/app/lib/api";
+import { createAiSessionId } from "@/app/lib/ai-session";
 
 interface AIChatModalProps {
     isOpen: boolean;
@@ -20,6 +21,7 @@ interface Message {
 
 export default function AIChatModal({ isOpen, onClose, onClearContext, contextText, contextCount }: AIChatModalProps) {
     const [messages, setMessages] = useState<Message[]>([]);
+    const sessionIdRef = useRef<string | null>(null);
     const [inputValue, setInputValue] = useState("");
     const [loading, setLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -32,19 +34,16 @@ export default function AIChatModal({ isOpen, onClose, onClearContext, contextTe
         }
     }, [messages, loading, isOpen]);
 
-    // Reset only on hard close/unmount, NOT on open (to keep history if just hidden, though isOpen controls render)
-    // Actually if isOpen becomes false from parent, component might unmount or just hide.
-    // If it's conditional render {show && <Modal/>}, state is lost.
-    // User wants PERSISTENCE. MinutesState keeps <Modal> rendered? 
-    // In MinutesState: {showAIChat && (...)} -> This UNMOUNTS.
-    // To fix persistence, we must change MinutesState to ALWAYS render Modal but hide via CSS?
-    // OR: Move state up.
-    // User said: "Now I back, it lost all".
-    // My plan: Open Link in NEW TAB -> User never leaves dashboard -> Component never unmounts -> State preserved.
-    // So current conditional render is fine AS LONG AS user doesn't navigate away.
+    // MinutesState keeps this mounted when hidden: history and ID share a lifetime.
+    const resetHistory = () => {
+        sessionIdRef.current = null;
+        setMessages([]);
+        setLoading(false);
+    };
 
     const handleSendMessage = async () => {
         if (!inputValue.trim() || loading) return;
+        const sessionId = sessionIdRef.current ??= createAiSessionId("chat");
 
         const userMsg: Message = { role: 'user', content: inputValue };
         setMessages(prev => [...prev, userMsg]);
@@ -56,16 +55,19 @@ export default function AIChatModal({ isOpen, onClose, onClearContext, contextTe
                 text: contextText,
                 question: userMsg.content,
                 mode: 'qa',
+                sessionId,
                 history: messages
             }, 90_000); // 90s cho chat ngắn
             const aiMsg: Message = { role: 'model', content: data.summary || "Lỗi: Không nhận được phản hồi." };
+            if (sessionIdRef.current !== sessionId) return;
             setMessages(prev => [...prev, aiMsg]);
         } catch (e: unknown) {
+            if (sessionIdRef.current !== sessionId) return;
             console.error('[qa] failed:', { status: (e as any)?.status, message: (e as any)?.message });
             const errMsg = e instanceof Error ? e.message : String(e);
             setMessages(prev => [...prev, { role: 'model', content: "Error: " + errMsg }]);
         } finally {
-            setLoading(false);
+            if (sessionIdRef.current === sessionId) setLoading(false);
         }
     };
 
@@ -104,7 +106,7 @@ export default function AIChatModal({ isOpen, onClose, onClearContext, contextTe
                         {/* Clear History */}
                         {messages.length > 0 && (
                             <button
-                                onClick={() => setMessages([])}
+                                onClick={resetHistory}
                                 className="p-2 hover:bg-slate-100 text-slate-400 hover:text-red-500 rounded-lg transition-colors border border-transparent hover:border-slate-200"
                                 title="Xóa lịch sử trò chuyện"
                             >

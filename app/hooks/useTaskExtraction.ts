@@ -5,6 +5,7 @@ import { Meeting, Member, updateMeetingProcess } from "../lib/db";
 import { useGlobalUI } from "../context/GlobalUIProvider";
 import { parseAiJson } from "../lib/json-parser";
 import { postGemini } from "../lib/api";
+import { meetingAiSessionId } from "../lib/ai-session";
 
 export function useTaskExtraction() {
   const { toast, confirm } = useGlobalUI();
@@ -45,6 +46,7 @@ export function useTaskExtraction() {
       const response = await postGemini({
         text: fullTranscript,
         mode: "extract_json",
+        sessionId: meetingAiSessionId("tasks", meeting.id),
         departments: uniqueDepartments,
         teams: uniqueTeams,
         prompt_instruction: `Bạn là thư ký chuyên nghiệp. Hãy trích xuất Action Items.`,
