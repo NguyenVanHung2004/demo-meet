@@ -1,26 +1,15 @@
-// Live, quota-consuming benchmark: node scripts/benchmark-opencode.mjs
-// Five sequential calls, no retries, 60s per call; synthetic data only.
-// Opt-in: --full-minimax runs ONE full-summary call instead, with a 90s timeout.
-import nextEnv from '@next/env';
-import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+// Paid opt-in: node scripts/benchmark-deepseek.mjs --live [--full]
+// One synthetic call, no retries, 30s timeout; credentials from shell only.
 import { readFile } from 'node:fs/promises';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
-// Suppress env-loader diagnostics so neither paths nor raw errors are logged.
-nextEnv.loadEnvConfig(root, true, { info() {}, error() {} });
-const key = process.env.OPEN_CODE_GO_API_KEY;
+const key = process.env.DEEPSEEK_API_KEY?.trim();
 const log = (value) => console.log(JSON.stringify(value));
 const prompt = `Tóm tắt cuộc họp giả lập sau bằng đúng 3 gạch đầu dòng tiếng Việt ngắn, mỗi dòng tối đa 20 từ. Chỉ xuất bản tóm tắt, không giải thích.
 [00:00] An: Nhóm thống nhất phát hành bản thử nghiệm vào ngày 15/09/2026.
 [00:20] Bình: Tôi sẽ sửa lỗi đăng nhập trước ngày 10/09/2026.
 [00:40] Chi: Tôi sẽ kiểm thử và gửi báo cáo trước ngày 12/09/2026. Ngân sách kiểm thử là 5 triệu đồng.`;
 const trials = [
-  { model: 'deepseek-v4-flash' },
-  { model: 'minimax-m3' },
-  { model: 'mimo-v2.5' },
-  { model: 'deepseek-v4-flash', reasoning: false },
-  { model: 'minimax-m3', reasoning: false },
+  { model: 'deepseek-flash' },
 ];
 // Only known error identifiers are emitted, never arbitrary upstream strings.
 const safeErrors = new Set([
@@ -69,30 +58,27 @@ async function fullPrompt() {
 }
 
 async function runTrial(trial, index) {
-  // One synthetic conversation per trial; its session stays stable for the call.
-  const session = randomUUID();
-  const timeoutMs = trial.timeoutMs ?? 60_000;
+  const timeoutMs = 30_000;
   const signal = AbortSignal.timeout(timeoutMs);
   const started = performance.now();
   const elapsed = () => Math.round((performance.now() - started) * 100) / 100;
   const result = {
     trial: index + 1, startedAt: new Date().toISOString(),
     requestedModel: trial.model, max_tokens: 16384,
-    reasoning: trial.reasoning === false ? false : 'omitted',
+    thinking: { type: 'disabled' }, stream: false,
     timeoutMs, status: null, headersMs: null,
   };
   log({ event: 'trial_start', ...result });
   try {
-    const response = await fetch('https://opencode.ai/zen/go/v1/chat/completions', {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST', signal,
       headers: {
         'Content-Type': 'application/json', Authorization: `Bearer ${key}`,
-        'x-opencode-session': session,
       },
       body: JSON.stringify({
         model: trial.model, messages: [{ role: 'user', content: trial.prompt ?? prompt }],
         max_tokens: 16384,
-        ...(trial.reasoning === false ? { reasoning: false } : {}),
+        thinking: { type: 'disabled' }, stream: false,
       }),
     });
     result.status = response.status;
@@ -112,7 +98,9 @@ async function runTrial(trial, index) {
     }
     const choice = data?.choices?.[0];
     const usage = data?.usage;
-    log({ event: 'trial_complete', ...result, outcome: 'success',
+    log({ event: 'trial_complete', ...result,
+      outcome: choice?.finish_reason === 'length' ? 'truncated' :
+        (typeof choice?.message?.content === 'string' && choice.message.content.trim() ? 'success' : 'empty'),
       returnedModel: identifier(data?.model),
       promptTokens: count(usage?.prompt_tokens),
       completionTokens: count(usage?.completion_tokens),
@@ -129,14 +117,16 @@ async function runTrial(trial, index) {
   }
 }
 
-if (!key) {
+if (!process.argv.includes('--live')) {
+  log({ event: 'benchmark_skipped', reason: 'requires_--live_paid_opt_in' });
+} else if (!key) {
   log({ event: 'benchmark_skipped', reason: 'missing_credentials' });
   process.exitCode = 1;
 } else {
   let selectedTrials = trials;
-  if (process.argv.includes('--full-minimax')) {
+  if (process.argv.includes('--full')) {
     try {
-      selectedTrials = [{ model: 'minimax-m3', reasoning: false, timeoutMs: 90_000, prompt: await fullPrompt() }];
+      selectedTrials = [{ model: 'deepseek-flash', prompt: await fullPrompt() }];
     } catch {
       log({ event: 'benchmark_skipped', reason: 'full_prompt_unavailable' });
       process.exit(1);

@@ -35,7 +35,7 @@ A smart web application built with **Next.js 16** + **React 19** to record, tran
 - **Split / Merge**: Tách/ghép câu bằng `Enter` / `Backspace` (tại đầu dòng)
 - **Speaker management**: Đổi tên người nói, sắp xếp
 
-### ✨ AI-Powered Summarization (OpenCode Go)
+### ✨ AI-Powered Summarization (DeepSeek Flash)
 - **Biên bản cuộc họp**: Tóm tắt theo template Markdown tùy chỉnh
 - **Live summary**: Tóm tắt incremental trong khi nghe (mode `segment`)
 - **Action items**: Trích xuất task từ transcript (mode `extract_json`)
@@ -80,7 +80,7 @@ A smart web application built with **Next.js 16** + **React 19** to record, tran
 - **Cloud storage (alternative)**: `@vercel/blob`
 
 ### AI / ML
-- **LLM**: OpenCode Go (`https://opencode.ai/zen/go/v1`, model `mimo-v2.5`)
+- **LLM**: Direct DeepSeek (`https://api.deepseek.com/chat/completions`), model `deepseek-flash` for every mode, with `thinking: { type: "disabled" }` and `stream: false`; native server-side fetch, no SDK or model fallbacks.
 - **ASR**: Server từ repo [`Server-local-ai-meeting-assistant`](https://github.com/NguyenVanHung2004/Server-local-ai-meeting-assistant) deploy trên RunPod Serverless (Sherpa-ONNX Zipformer + Pyannote)
 - **Bot recording**: MeetingBaaS API
 - **Zoom integration**: Zoom OAuth + Recording API
@@ -103,7 +103,7 @@ A smart web application built with **Next.js 16** + **React 19** to record, tran
 - **Node.js**: v20+ (Next.js 16 yêu cầu tối thiểu)
 - **npm** hoặc **yarn** hoặc **pnpm**
 - **Firebase project** (Auth + Firestore + Storage enabled)
-- **OpenCode Go API key** (lấy tại https://opencode.ai/zen/go/v1)
+- **DeepSeek API key** (lấy tại https://platform.deepseek.com/api_keys)
 - **RunPod Serverless endpoint** (ASR backend) — xem [Tích hợp Server-local](#-tích-hợp-backend-asr-server-local)
 
 ### Bước 1: Clone & install
@@ -146,7 +146,7 @@ File `.env.example` liệt kê **22 biến** đã được verify là đang đư
 | Nhóm | Biến chính | Mục đích |
 |---|---|---|
 | **RunPod** | `NEXT_PUBLIC_RUNPOD_API_KEY`, `NEXT_PUBLIC_RUNPOD_ENDPOINT_ID` | Gọi ASR backend |
-| **AI/LLM** | `OPEN_CODE_GO_API_KEY` | Tóm tắt, action items, Q&A |
+| **AI/LLM** | `DEEPSEEK_API_KEY` | Server-only: tóm tắt, action items, Q&A, điền biểu mẫu |
 | **Firebase** | `NEXT_PUBLIC_FIREBASE_*` (7 vars), `FIREBASE_SERVICE_ACCOUNT_KEY` | Auth + Storage |
 | **Email** | `EMAIL_USER`, `EMAIL_PASS` | Gửi task assignment |
 | **Google OAuth** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Drive import |
@@ -160,6 +160,8 @@ File `.env.example` liệt kê **22 biến** đã được verify là đang đư
 - Các biến không có prefix → chỉ server-side API routes
 
 Xem [`.env.example`](./.env.example) để có example đầy đủ cho từng biến.
+
+Set `DEEPSEEK_API_KEY` yourself in `.env.local` or your server deployment secrets, then restart the server. Never prefix it with `NEXT_PUBLIC_`. The frontend still calls `/api/gemini` with a valid app `sessionId` and receives `{ summary: string }`; the session ID is not sent upstream. Existing Markdown/JSON-array/JSON-object prompt contracts are unchanged (no provider JSON mode). Only final `message.content` is used, never reasoning content. Missing keys, empty final content, and truncated responses return clear errors. Each upstream attempt has a 30-second timeout including body reading; at most three attempts with 1s/2s backoff (about 93s total) for transient HTTP/network failures only. Upstream error bodies are not exposed. Configure the hosting request timeout accordingly.
 
 ---
 
@@ -176,6 +178,8 @@ npm run test:ui          # Vitest UI
 npm run test:e2e         # Run Playwright E2E tests
 npm run test:e2e:ui      # Playwright UI
 ```
+
+Optional **paid, live** synthetic benchmark (not part of tests): explicitly supply `DEEPSEEK_API_KEY` in the shell, then run `node scripts/benchmark-deepseek.mjs --live` (one short call, 30s timeout) or add `--full` (one full-summary call). It does not load env files, has no retries, and always uses Flash with thinking disabled. Without `--live`, it makes no requests. Do not run it for mocked verification.
 
 ---
 
@@ -194,7 +198,7 @@ demo-meet/
 │   │   │   └── status/               # GET: poll bot status
 │   │   ├── drive/                    # Google Drive import
 │   │   ├── email/                    # SMTP send (task assignment)
-│   │   ├── gemini/                   # OpenCode Go LLM (5 modes)
+│   │   ├── gemini/                   # DeepSeek Flash LLM (6 modes)
 │   │   ├── proxy-file/               # Proxy files (CORS workaround)
 │   │   ├── training-data/            # Export training data
 │   │   ├── upload/                   # Vercel Blob client upload
@@ -364,7 +368,7 @@ Chi tiết API xem tại: https://github.com/NguyenVanHung2004/Server-local-ai-m
 - [ ] Authorized redirect URIs trong Google Cloud Console (cho Drive + Zoom OAuth)
 - [ ] MeetingBaaS webhook URL trỏ về `https://your-app.com/api/webhooks/meetingbaas`
 - [ ] Email SMTP (Gmail App Password recommended)
-- [ ] OpenCode Go API key
+- [ ] Server-only DeepSeek API key
 - [ ] RunPod Serverless endpoint running
 
 ---

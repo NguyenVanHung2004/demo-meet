@@ -16,7 +16,7 @@ const fetchMock = vi.fn();
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  process.env.OPEN_CODE_GO_API_KEY = "test-gemini-key";
+  process.env.DEEPSEEK_API_KEY = "test-gemini-key";
 });
 
 describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)", () => {
@@ -71,36 +71,24 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
     expect(body.summary).toBe("Summary OK");
   });
 
-  it("fallback qua các model theo thứ tự cho mọi mode cấu hình", async () => {
+  it("does not retry or fall back on non-transient errors", async () => {
     fetchMock
       .mockResolvedValueOnce({
         ok: false,
         status: 400,
         statusText: "Bad Request",
-        text: async () => "deepseek failed",
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: "Bad Request",
-        text: async () => "minimax failed",
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ choices: [{ message: { content: "Fallback OK" } }] }),
+        text: async () => "PRIVATE_UPSTREAM_BODY",
       });
 
     const req = makeRequest({ text: "Test transcript", mode: "segment" });
     const res = await POST(req);
 
-    expect(res.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(res.status).toBe(500);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls.map(([, opts]) => JSON.parse(opts.body).model)).toEqual([
-      "deepseek-v4-flash",
-      "minimax-m3",
-      "mimo-v2.5",
+      "deepseek-flash",
     ]);
-    await expect(res.json()).resolves.toMatchObject({ summary: "Fallback OK" });
+    expect(JSON.stringify(await res.json())).not.toContain("PRIVATE_UPSTREAM_BODY");
   });
 
   it("gọi API với model và max_tokens đúng", async () => {
@@ -114,7 +102,7 @@ describe("POST /api/gemini — retry + validate (bug unknown, test logic mới)"
 
     const [, opts] = fetchMock.mock.calls[0];
     const body = JSON.parse(opts.body);
-    expect(body.model).toBe("mimo-v2.5");
+    expect(body.model).toBe("deepseek-flash");
     expect(body.max_tokens).toBe(16384);
     const headers = opts.headers;
     expect(headers.Authorization).toBe("Bearer test-gemini-key");

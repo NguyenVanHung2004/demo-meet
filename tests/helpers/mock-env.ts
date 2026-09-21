@@ -8,7 +8,7 @@ export const setEnv = (overrides: Record<string, string> = {}) => {
     GOOGLE_REDIRECT_URI: "http://localhost:3000/api/drive/callback",
     MEETINGBAAS_API_KEY: "test-meetingbaas-key",
     MEETINGBAAS_WEBHOOK_SECRET: "test-webhook-secret",
-    OPEN_CODE_GO_API_KEY: "test-gemini-key",
+    DEEPSEEK_API_KEY: "test-gemini-key",
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
   };
 

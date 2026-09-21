@@ -5,22 +5,13 @@ import { stripCjk, stripThinking } from "@/app/lib/text";
 import { parseAiJson } from "@/app/lib/json-parser";
 import { isValidAiSessionId } from "@/app/lib/ai-session";
 
-const API_KEY = process.env.OPEN_CODE_GO_API_KEY || "";
-const BASE_URL = "https://opencode.ai/zen/go/v1";
-const MODELS: Record<string, string> = {
-  segment: "deepseek-v4-flash",
-  full: "minimax-m3",
-  qa: "deepseek-v4-flash",
-  fill_placeholders: "deepseek-v4-flash",
-  detect_fill: "deepseek-v4-flash",
-  extract_json: "deepseek-v4-flash",
-};
-const DEFAULT_MODEL = "mimo-v2.5";
-const FALLBACK_MODELS = ["minimax-m3", "mimo-v2.5"];
-const BODY_OPTIONS_BY_MODE: Record<string, Record<string, unknown>> = {
-  segment: { reasoning: false },
-  full: { reasoning: false },
-};
+const API_URL = "https://api.deepseek.com/chat/completions";
+const MODEL = "deepseek-flash";
+const MODES = new Set(["segment", "full", "qa", "fill_placeholders", "detect_fill", "extract_json"]);
+const ATTEMPT_TIMEOUT_MS = 30_000;
+
+// Only errors constructed here may be returned to clients.
+class AiError extends Error {}
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -43,10 +34,14 @@ function tokenUsage(usage: any) {
   return result;
 }
 
-async function generateWithRetry(prompt: string, model: string, mode: string, sessionId: string, diagnostic: DiagnosticContext, retries = 3) {
+async function generateWithRetry(prompt: string, diagnostic: DiagnosticContext, retries = 3) {
+  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+  if (!apiKey) throw new AiError("Missing server configuration: DEEPSEEK_API_KEY.");
   for (let attempt = 1; attempt <= retries; attempt++) {
     const startedAt = performance.now();
-    const metadata = { requestedModel: model, attempt };
+    const metadata = { requestedModel: MODEL, attempt };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
     let reason = "response";
     const logRetry = (retryReason: string, status?: number) => logDiagnostic("retry", diagnostic, {
       ...metadata, reason: retryReason, ...(status === undefined ? {} : { status }),
@@ -54,92 +49,96 @@ async function generateWithRetry(prompt: string, model: string, mode: string, se
     });
     logDiagnostic("attempt_start", diagnostic, metadata);
     try {
-      const response = await fetch(`${BASE_URL}/chat/completions`, {
+      const response = await fetch(API_URL, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${API_KEY}`,
-          "x-opencode-session": sessionId,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: model,
+          model: MODEL,
           messages: [{ role: "user", content: prompt }],
           max_tokens: 16384,
-          ...(BODY_OPTIONS_BY_MODE[mode] || {}),
+          thinking: { type: "disabled" },
+          stream: false,
         }),
       });
       logDiagnostic("headers", diagnostic, { ...metadata, status: response.status, headersMs: performance.now() - startedAt });
       if (!response.ok) {
         reason = "http";
-        let bodyReadFailed = false;
-        const errorBody = await response.text().catch(() => { bodyReadFailed = true; return ""; });
-        logDiagnostic(bodyReadFailed ? "body_failure" : "body_complete", diagnostic, { ...metadata, status: response.status, durationMs: performance.now() - startedAt });
+        // Do not read or expose upstream error bodies (they may contain secrets).
+        await response.body?.cancel().catch(() => {});
+        clearTimeout(timeout);
         if (RETRYABLE_STATUS.has(response.status) && attempt < retries) {
           logRetry("http", response.status);
           await delay(1000 * Math.pow(2, attempt - 1));
           continue;
         }
-        throw new Error(`API error: ${response.status} ${response.statusText} — ${errorBody}`);
+        throw new AiError(`DeepSeek request failed (HTTP ${response.status}). Please try again later.`);
       }
       const data = await response.json();
-      logDiagnostic("body_complete", diagnostic, { ...metadata, status: response.status, durationMs: performance.now() - startedAt });
-      const message = data.choices?.[0]?.message;
-      const raw = (message?.content || message?.reasoning_content || "").trim();
-      const content = stripThinking(raw);
+      const choice = data?.choices?.[0];
+      const message = choice?.message;
+      const hasContent = typeof message?.content === "string";
+      const raw = hasContent ? message.content : "";
+      const content = stripThinking(raw.trim());
+      // Allowlist provider enums; never log arbitrary response fields or text.
+      const finishReason = choice?.finish_reason;
+      logDiagnostic("body_complete", diagnostic, {
+        ...metadata, status: response.status, durationMs: performance.now() - startedAt,
+        finish_reason: ["stop", "length", "content_filter", "tool_calls", "insufficient_system_resource"].includes(finishReason)
+          ? finishReason : finishReason == null ? null : "unknown",
+        hasContent, contentLengthBeforeFilter: raw.length, contentLengthAfterFilter: content.length,
+        usage: tokenUsage(data?.usage),
+      });
+      if (choice?.finish_reason === "length") {
+        throw new AiError("DeepSeek response was truncated. Please shorten the input and try again.");
+      }
       if (content) {
         logDiagnostic("attempt_success", diagnostic, {
           ...metadata, durationMs: performance.now() - startedAt,
-          ...(typeof data.model === "string" ? { returnedModel: data.model } : {}),
+          ...(data.model === MODEL ? { returnedModel: MODEL } : {}),
           usage: tokenUsage(data.usage),
         });
         return content;
       }
       reason = "empty";
-      if (attempt < retries) {
-        logRetry("empty");
-        await delay(1000 * Math.pow(2, attempt - 1));
-        continue;
-      }
-      throw new Error("Model trả về nội dung rỗng sau " + retries + " lần thử");
+      throw new AiError("DeepSeek returned empty final content. Please try again.");
     } catch (error: any) {
-      const isNetworkErr = error?.name === "AbortError"
-        || error?.code === "ECONNRESET"
-        || error?.code === "ETIMEDOUT"
-        || error?.code === "ENOTFOUND"
-        || error?.cause?.code === "ECONNRESET";
+      clearTimeout(timeout);
+      const transientCodes = new Set(["ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ECONNREFUSED", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_SOCKET"]);
+      const isNetworkErr = !(error instanceof AiError) && (controller.signal.aborted || error?.name === "AbortError"
+        || transientCodes.has(error?.code) || transientCodes.has(error?.cause?.code));
       if (attempt < retries && isNetworkErr) {
         logRetry("network");
         await delay(1000 * Math.pow(2, attempt - 1));
         continue;
       }
       logDiagnostic("attempt_failure", diagnostic, { ...metadata, reason: isNetworkErr ? "network" : reason, durationMs: performance.now() - startedAt });
-      throw error;
+      throw error instanceof AiError ? error : new AiError(isNetworkErr
+        ? "DeepSeek request timed out or encountered a network error. Please try again later."
+        : "DeepSeek returned an invalid response. Please try again later.");
+    } finally {
+      clearTimeout(timeout);
     }
   }
-  throw new Error("Retry failed");
+  throw new AiError("DeepSeek request failed after retries.");
 }
 
-async function generateWithFallback(prompt: string, models: string[], mode: string, sessionId: string, requestId: string) {
+async function generate(prompt: string, mode: string, requestId: string) {
   const startedAt = performance.now();
   // Never log arbitrary client mode values or upstream error messages/bodies.
-  const diagnostic = { requestId, mode: Object.prototype.hasOwnProperty.call(MODELS, mode) ? mode : "unknown" };
-  logDiagnostic("pipeline_start", diagnostic, { requestedModel: models[0], models });
-  let lastError: unknown;
-  for (const [index, model] of models.entries()) {
-    try {
-      const content = await generateWithRetry(prompt, model, mode, sessionId, diagnostic);
-      logDiagnostic("pipeline_complete", diagnostic, { outcome: "success", requestedModel: model, durationMs: performance.now() - startedAt });
-      return content;
-    } catch (error) {
-      lastError = error;
-      const fallback = models[index + 1];
-      if (fallback) {
-        logDiagnostic("fallback", diagnostic, { requestedModel: model, fallbackModel: fallback });
-      }
-    }
+  const diagnostic = { requestId, mode: MODES.has(mode) ? mode : "unknown" };
+  logDiagnostic("pipeline_start", diagnostic, { requestedModel: MODEL });
+  try {
+    const content = await generateWithRetry(prompt, diagnostic);
+    logDiagnostic("pipeline_complete", diagnostic, { outcome: "success", requestedModel: MODEL, durationMs: performance.now() - startedAt });
+    return content;
+  } catch (error) {
+    logDiagnostic("pipeline_complete", diagnostic, { outcome: "failure", durationMs: performance.now() - startedAt });
+    throw error;
   }
-  logDiagnostic("pipeline_complete", diagnostic, { outcome: "failure", durationMs: performance.now() - startedAt });
-  throw lastError;
 }
 
 export async function POST(req: Request) {
@@ -153,8 +152,7 @@ export async function POST(req: Request) {
   try {
     const { text, mode, sessionId, dateContext, previousSummary, departments, teams, question, history, templateStructure, meetingObjectives, placeholders, context, duration, createdAt } = await req.json();
 
-    // Legacy clients have no reliable conversation key. Fail closed rather than
-    // merge unrelated users or invent a new provider conversation on every turn.
+    // Retain the app's conversation identity contract; never forward it upstream.
     if (!isValidAiSessionId(sessionId)) {
       return NextResponse.json({ error: "Invalid or missing sessionId. Refresh the page and try again." }, { status: 400 });
     }
@@ -162,11 +160,6 @@ export async function POST(req: Request) {
     if (mode !== "fill_placeholders" && mode !== "detect_fill" && !text) {
       return NextResponse.json({ error: "Thiếu nội dung text" }, { status: 400 });
     }
-
-    const primaryModel = MODELS[mode] || DEFAULT_MODEL;
-    const chosenModels = MODELS[mode]
-      ? [...new Set([primaryModel, ...FALLBACK_MODELS])]
-      : [primaryModel];
 
     let prompt = "";
 
@@ -213,7 +206,7 @@ export async function POST(req: Request) {
       ]
       QUAN TRỌNG: Chỉ trả về JSON Array thuần túy, không dùng Markdown \`\`\`json.
       `;
-      const rawText = await generateWithFallback(prompt, chosenModels, mode, sessionId, requestId);
+      const rawText = await generate(prompt, mode, requestId);
       const parsed = parseAiJson(rawText, "extract_json", "array");
       const cleanText = Array.isArray(parsed)
         ? JSON.stringify(parsed, (_k, v) => typeof v === "string" ? stripCjk(v) : v)
@@ -317,7 +310,7 @@ export async function POST(req: Request) {
       NGỮ CẢNH CUỘC HỌP (nếu có):
       ${contextBlock}
       `;
-      const rawText = await generateWithFallback(prompt, chosenModels, mode, sessionId, requestId);
+      const rawText = await generate(prompt, mode, requestId);
       const cleanText = stripCjk(rawText.replace(/```json|```/g, "").trim());
       return NextResponse.json({ summary: cleanText });
     } else if (mode === "qa") {
@@ -440,14 +433,12 @@ export async function POST(req: Request) {
       `;
     }
 
-    const summary = stripCjk(await generateWithFallback(prompt, chosenModels, mode, sessionId, requestId));
+    const summary = stripCjk(await generate(prompt, mode, requestId));
     return NextResponse.json({ summary });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[gemini]", { event: "route_failure", requestId });
-    const errorMessage = error.status === 503
-      ? "Hệ thống AI đang quá tải, vui lòng thử lại sau."
-      : (error.message || "Lỗi xử lý AI.");
-    return NextResponse.json({ error: errorMessage, detail: error.message }, { status: 500 });
+    const errorMessage = error instanceof AiError ? error.message : "Lỗi xử lý AI.";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

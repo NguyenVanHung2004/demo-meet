@@ -4,7 +4,7 @@ import { setEnv } from "../mock-env";
 setEnv();
 
 export const handlers = [
-  http.post("https://opencode.ai/zen/go/v1/chat/completions", () => {
+  http.post("https://api.deepseek.com/chat/completions", () => {
     return HttpResponse.json({
       choices: [
         {
@@ -15,6 +15,9 @@ export const handlers = [
       ],
     });
   }),
+
+  // Fail closed for unexpected provider paths, including the retired endpoint.
+  http.all(/^https:\/\/(api\.deepseek\.com|opencode\.ai)(\/|$)/, () => HttpResponse.error()),
 
   http.post("https://api.meetingbaas.com/v2/bots", () => {
     return HttpResponse.json({
